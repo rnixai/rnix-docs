@@ -27,7 +27,7 @@ features:
     title: Agent & Skill 分离
     details: Agent 定义"我是谁"，Skill 定义"如何做 X"。四层能力模型让智能体的身份与知识解耦。
   - icon: "\uD83D\uDD0D"
-    title: astrace 调试
+    title: strace 调试
     details: 类似 Unix strace，实时追踪智能体的每一个系统调用。跨终端 attach 任意进程。
   - icon: "\uD83D\uDCE6"
     title: Compose 编排
