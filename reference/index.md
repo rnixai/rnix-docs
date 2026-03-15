@@ -21,7 +21,7 @@ This manual is the authoritative technical reference for Rnix, intended for deve
    - [2.3 /dev/fs — Host Filesystem Device](#23-devfs--host-filesystem-device)
    - [2.4 /dev/shell — Shell Execution Device](#24-devshell--shell-execution-device)
    - [2.5 /proc/{pid}/ — Dynamic Process Information](#25-procpid--dynamic-process-information)
-   - [2.6 /lib/agents/ and /lib/skills/](#26-libagents-and-libskills)
+   - [2.6 Agent and Skill Definitions](#26-agent-and-skill-definitions)
    - [2.7 VFSFile Interface and OpenFlag Enum](#27-vfsfile-interface-and-openflag-enum)
    - [2.8 FD Allocation Rules](#28-fd-allocation-rules)
 3. [Agent and Skill Manifests](#3-agent-and-skill-manifests)
@@ -41,6 +41,28 @@ This manual is the authoritative technical reference for Rnix, intended for deve
    - [4.5 rnix strace — Syscall Tracing](#45-rnix-strace-pid--syscall-tracing)
    - [4.6 rnix version — Version Information](#46-rnix-version--version-information)
    - [4.7 JSON Response Format](#47-json-response-format)
+   - [4.8 rnix init — Initialize Configuration](#48-rnix-init--initialize-configuration)
+   - [4.9 rnix top — Real-time Process Monitor](#49-rnix-top--real-time-process-monitor)
+   - [4.10 rnix log — Reasoning Log Viewer](#410-rnix-log--reasoning-log-viewer)
+   - [4.11 rnix gdb — Interactive Debugger](#411-rnix-gdb--interactive-debugger)
+   - [4.12 rnix dashboard — Visual Debugging Dashboard](#412-rnix-dashboard--visual-debugging-dashboard)
+   - [4.13 rnix record — Execution Recording](#413-rnix-record--execution-recording)
+   - [4.14 rnix replay — Replay Recorded Trace](#414-rnix-replay--replay-recorded-trace)
+   - [4.15 rnix trace — Distributed Trace Viewer](#415-rnix-trace--distributed-trace-viewer)
+   - [4.16 rnix ctx-profile — Context Usage Analyzer](#416-rnix-ctx-profile--context-usage-analyzer)
+   - [4.17 rnix ctx-growth — Context Growth Predictor](#417-rnix-ctx-growth--context-growth-predictor)
+   - [4.18 rnix compose — Multi-Agent Orchestration](#418-rnix-compose--multi-agent-orchestration)
+   - [4.19 rnix apply — Declarative Intent Decomposition](#419-rnix-apply--declarative-intent-decomposition)
+   - [4.20 rnix intent — Intent Management](#420-rnix-intent--intent-management)
+   - [4.21 rnix skill — Skill Package Management](#421-rnix-skill--skill-package-management)
+   - [4.22 rnix run — AgentShell Script Runner](#422-rnix-run--agentshell-script-runner)
+   - [4.23 rnix serve — OpenAI-Compatible HTTP Gateway](#423-rnix-serve--openai-compatible-http-gateway)
+   - [4.24 rnix agtest — Agent Behavior Testing](#424-rnix-agtest--agent-behavior-testing)
+   - [4.25 rnix reputation — Agent Reputation Scores](#425-rnix-reputation--agent-reputation-scores)
+   - [4.26 rnix lineage — Stem Agent Differentiation Lineage](#426-rnix-lineage--stem-agent-differentiation-lineage)
+   - [4.27 rnix topology — Collaboration Topology](#427-rnix-topology--collaboration-topology)
+   - [4.28 rnix synergy — Skill Synergy Combinations](#428-rnix-synergy--skill-synergy-combinations)
+   - [4.29 rnix immune — Adaptive Immune Security](#429-rnix-immune--adaptive-immune-security)
 5. [IPC Architecture](#5-ipc-architecture)
    - [5.1 Daemon Lifecycle](#51-daemon-lifecycle)
    - [5.2 Socket Path Rules](#52-socket-path-rules)
@@ -70,7 +92,7 @@ This manual is the authoritative technical reference for Rnix, intended for deve
 
 ### 1.1 Overview
 
-The Rnix kernel interface is organized into 4 functional categories, defining a total of 15 syscalls:
+The Rnix kernel interface is organized into multiple functional categories, defining a total of 45 syscalls:
 
 | Category | Syscall Count | Responsibilities |
 |---------|-------------|------|
@@ -78,6 +100,9 @@ The Rnix kernel interface is organized into 4 functional categories, defining a 
 | Context Management (ContextManager) | 4 | Context space allocation, read/write, release |
 | File System (FileSystem) | 5 | VFS device open, read/write, close, metadata query |
 | Debugging (Debugger) | 1 | Automatic recording and tracing of syscall events |
+| IPC (Send, Recv, Pipe, etc.) | 10 | Inter-process message passing and pipes |
+| Signal & Capability | 10 | Signal handling, capability grant/revoke/check |
+| Supervisor & Init | 10 | Supervisor trees, init bootstrap |
 
 All syscalls return a structured `*SyscallError` on failure (see [6.2 SyscallError](#62-syscallerror)), containing the syscall name, PID, device path, underlying error, and categorized error code.
 
@@ -791,14 +816,14 @@ Device registration is completed during daemon startup via dependency injection 
 
 **Snapshot Semantics:** Content is generated as a snapshot at Open time; subsequent Read operations read the snapshot data.
 
-### 2.6 /lib/agents/ and /lib/skills/
+### 2.6 Agent and Skill Definitions
 
 These two paths are the filesystem storage locations for Agents and Skills, read directly by `AgentLoader` and `SkillLoader` (not through the VFS device mechanism).
 
 **Agent Directory Structure:**
 
 ```
-lib/agents/{agent-name}/
+agents/{agent-name}/
 ├── agent.yaml        # Agent configuration manifest
 └── instructions.md   # Agent role instructions (system prompt)
 ```
@@ -806,7 +831,7 @@ lib/agents/{agent-name}/
 **Skill Directory Structure:**
 
 ```
-lib/skills/{skill-name}/
+skills/{skill-name}/
 └── SKILL.md          # Skill definition (YAML frontmatter + Markdown body)
 ```
 
@@ -941,7 +966,7 @@ Rnix provides two levels of loading granularity for Skills:
 
 ### 3.8 Complete Example
 
-**agent.yaml Example (`lib/agents/code-analyst/agent.yaml`):**
+**agent.yaml Example (`agents/code-analyst/agent.yaml`):**
 
 ```yaml
 name: code-analyst
@@ -955,7 +980,7 @@ skills:
   - code-analysis
 ```
 
-**SKILL.md Example (`lib/skills/code-analysis/SKILL.md`):**
+**SKILL.md Example (`skills/code-analysis/SKILL.md`):**
 
 ```markdown
 ---
@@ -1217,6 +1242,657 @@ type jsonErrorData struct {
     Syscall string `json:"syscall,omitempty"`
     Device  string `json:"device,omitempty"`
 }
+```
+
+### 4.8 rnix init — Initialize Configuration
+
+Initialize global configuration (`~/.config/rnix/`) and project configuration (`.rnix/`) directories.
+
+```
+Usage: rnix init
+Arguments: None
+```
+
+**Behavior:**
+
+1. **Global init** — Creates `~/.config/rnix/` with subdirectories `agents/`, `skills/`, extracts embedded agents and skills, generates default `providers.yaml` and `config.yaml`
+2. **Project init** — Creates `.rnix/` in the current working directory with subdirectories `agents/`, `skills/`, `data/`, and a stub `config.yaml`
+
+If the directories already exist, the corresponding step is skipped with a message.
+
+**Example:**
+
+```
+$ rnix init
+initialized global config: /home/user/.config/rnix
+initialized project config: /path/to/project/.rnix
+```
+
+### 4.9 rnix top — Real-time Process Monitor
+
+Interactive TUI showing process tree, status, and resource consumption in real-time.
+
+```
+Usage: rnix top
+Arguments: None (cobra.NoArgs)
+```
+
+**Display:** Full-screen alternate-screen TUI with a summary bar (active count, total tokens, uptime) and a process table showing PID, PPID, STATE, AGENT, TOKENS, and ELAPSED columns. Processes are displayed as a tree hierarchy based on parent-child relationships.
+
+**Keybindings:**
+
+| Key | Action |
+|-----|--------|
+| `q` / `Ctrl+C` | Quit |
+| `j` / `Down` | Move cursor down |
+| `k` / `Up` | Move cursor up |
+| `Enter` | Show process detail panel |
+| `K` | Kill selected process (SIGTERM) |
+| `Esc` | Back to list view (from detail) |
+
+**Refresh Rate:** 500ms polling interval.
+
+### 4.10 rnix log \<pid\> — Reasoning Log Viewer
+
+Stream reasoning logs from a running agent, categorized as `[think]`, `[tool]`, and `[output]`.
+
+```
+Usage: rnix log <pid>
+Arguments: <pid> — Process ID (exactly 1 argument)
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--filter` | `string` | `""` | Filter by log category (`think`, `tool`, `output`) |
+
+**Example:**
+
+```
+$ rnix log 5
+[rnix log] attached to PID 5
+
+[  0.123] [think]  Analyzing the project structure...
+[  1.456] [tool]   /dev/fs/./src/main.go → reading file
+[  3.789] [output] The project has 3 modules...
+```
+
+Press `Ctrl+C` to detach without affecting the traced process.
+
+### 4.11 rnix gdb \<pid\> — Interactive Debugger
+
+Attach to a running agent process and enter an interactive debugging session. Receives both syscall events and reasoning logs in real-time.
+
+```
+Usage: rnix gdb <pid>
+Arguments: <pid> — Process ID (exactly 1 argument)
+```
+
+**Interactive Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `break syscall <name>` | Break on a specific syscall |
+| `break reasoning` | Break before each reasoning step |
+| `break quality --pattern <pat>` | Break when LLM output matches pattern |
+| `break budget <tokens>` | Break when token usage reaches threshold |
+| `delete <bp_id>` | Delete breakpoint by ID |
+| `info breakpoints` | List all breakpoints |
+| `continue` / `c` | Resume execution after breakpoint |
+| `step [syscall\|reasoning]` | Execute next step |
+| `inspect context` | Show context info with token estimates |
+| `set model <name>` | Override LLM model |
+| `set context append <text>` | Append text to context |
+| `set skills add <name>` | Add a skill to the agent |
+| `record start` / `record stop` | Start/stop recording within session |
+| `detach` / `quit` / `q` | Disconnect from debug session |
+
+**Example:**
+
+```
+$ rnix gdb 1
+[gdb] attached to PID 1 (state=running, intent="Analyze code")
+gdb> break syscall Write
+[gdb] breakpoint 1 set: syscall Write
+gdb> continue
+```
+
+### 4.12 rnix dashboard — Visual Debugging Dashboard
+
+Interactive TUI dashboard showing agent tree, timeline, and heatmap in a multi-pane layout.
+
+```
+Usage: rnix dashboard
+Arguments: None (cobra.NoArgs)
+```
+
+**Panes:**
+
+- **Tree pane** — Process tree with status and token usage
+- **Timeline pane** — Scrollable event timeline with categorized syscall events (LLM, Tool, IPC, VFS, Error)
+- **Heatmap pane** — Context budget visualization with segment classification (system, skill, tool, user, assistant, leaked)
+
+**Navigation:** Use tab to switch panes, arrow keys to scroll within panes, `q` to quit.
+
+### 4.13 rnix record — Execution Recording
+
+Record execution events (syscalls, LLM responses, context changes, state transitions) for offline analysis and time-travel debugging.
+
+```
+Usage: rnix record <start|stop|list> [pid]
+Subcommands:
+  start <pid>   Start recording events for the given process
+  stop <pid>    Stop recording and persist to disk
+  list          List all recorded sessions
+```
+
+**Examples:**
+
+```
+$ rnix record start 1
+Recording started for PID 1 (record-id: 1-1709856000)
+
+$ rnix record stop 1
+Recording stopped for PID 1 (42 events captured)
+
+$ rnix record list
+RECORD-ID            PID    STATUS       EVENTS   START                INTENT
+1-1709856000         1      completed    42       2026-03-15 10:00:00  Analyze code
+```
+
+### 4.14 rnix replay \<record-id\> — Replay Recorded Trace
+
+Load a recorded execution trace and enter an interactive replay session. Reads local recording files and does not require a running daemon.
+
+```
+Usage: rnix replay <record-id>
+Arguments: <record-id> — Recording identifier (exactly 1 argument)
+```
+
+**Interactive Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `next` / `n` | Forward one event |
+| `prev` / `p` | Backward one event |
+| `goto <seq_num>` | Jump to event by sequence number |
+| `list` / `l` | Show events around current position |
+| `diff <seq1> <seq2>` | Compare context at two time points |
+| `fork` | Fork from current position for re-execution |
+| `info` / `i` | Show recording summary |
+| `quit` / `q` | Exit replay |
+
+**Example:**
+
+```
+$ rnix replay 42-1709856000
+[replay] Loading record 42-1709856000...
+[replay] PID: 42 | Intent: "Analyze code" | Events: 15 | Status: completed
+replay> next
+```
+
+### 4.15 rnix trace — Distributed Trace Viewer
+
+View distributed trace data from completed Compose orchestrations. Trace data is read from local `.rnix/traces/` directory (no daemon required).
+
+```
+Usage: rnix trace [trace-id]
+Arguments: [trace-id] — Optional trace identifier (0 or 1 argument)
+```
+
+Without arguments, lists all available traces. With a trace-id, shows the full span tree with timing and token usage.
+
+**Subcommand: `rnix trace blame <trace-id>`**
+
+Analyze a distributed trace to identify performance bottlenecks and error root causes. Shows critical path analysis, duration/token hotspots, and error propagation chains.
+
+```
+Usage: rnix trace blame <trace-id>
+Arguments: <trace-id> — Trace identifier (exactly 1 argument)
+```
+
+**Examples:**
+
+```
+$ rnix trace
+TRACE-ID             SPANS  DURATION  STATUS
+abcdef1234567890     5      12.3s     completed
+
+$ rnix trace abcdef1234567890 --verbose
+$ rnix trace blame abcdef1234567890
+```
+
+### 4.16 rnix ctx-profile \<pid\> — Context Usage Analyzer
+
+Analyze the context of a running or zombie agent process. Shows context classification (active/warm/cold/leaked), identifies top token consumers, and provides optimization suggestions.
+
+```
+Usage: rnix ctx-profile <pid>
+Arguments: <pid> — Process ID (exactly 1 argument)
+```
+
+Requires a running daemon (context data lives in the daemon's memory).
+
+**Example:**
+
+```
+$ rnix ctx-profile 1
+$ rnix ctx-profile 1 --json
+```
+
+### 4.17 rnix ctx-growth \<pid\> — Context Growth Predictor
+
+Predict token growth trend for a running agent process. Shows historical growth rate, predicts budget exhaustion timing, and displays alert status when remaining budget drops below 20%.
+
+```
+Usage: rnix ctx-growth <pid>
+Arguments: <pid> — Process ID (exactly 1 argument)
+```
+
+Requires a running daemon (token history lives in the daemon's memory).
+
+**Example:**
+
+```
+$ rnix ctx-growth 1
+$ rnix ctx-growth 1 --json
+```
+
+### 4.18 rnix compose — Multi-Agent Orchestration
+
+Manage multi-agent workflows defined in `compose.yaml`.
+
+**Subcommand: `rnix compose up`**
+
+Parse `compose.yaml`, resolve dependencies, and spawn all agents in DAG order.
+
+```
+Usage: rnix compose up
+```
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--file` | `-f` | `string` | `compose.yaml` | Compose file path |
+
+**Subcommand: `rnix compose down`**
+
+Stop all running agents from the compose orchestration and release resources.
+
+```
+Usage: rnix compose down
+```
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--file` | `-f` | `string` | `compose.yaml` | Compose file path |
+
+**Examples:**
+
+```
+$ rnix compose up
+$ rnix compose up -f my-workflow.yaml
+$ rnix compose down
+$ rnix compose down -f my-workflow.yaml --json
+```
+
+### 4.19 rnix apply \<intent\> — Declarative Intent Decomposition
+
+Declare a high-level intent. The system decomposes it into a sub-intent tree (Intent Tree), each sub-intent maps to one or more agent processes.
+
+```
+Usage: rnix apply <intent>
+Arguments: <intent> — Intent string (exactly 1 argument)
+```
+
+**Flags:**
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--yes` | `-y` | `bool` | `false` | Skip confirmation and start execution immediately |
+| `--update` | `-u` | `string` | `""` | Incremental update an existing intent |
+
+With `--update`, performs incremental merge of new sub-intents into an existing intent tree without re-decomposing completed nodes.
+
+**Examples:**
+
+```
+$ rnix apply "build a REST API for user management"
+$ rnix apply "build a REST API" --yes
+$ rnix apply "add comments feature" --update intent-1
+```
+
+### 4.20 rnix intent — Intent Management
+
+Commands for managing declarative intent trees.
+
+**Subcommand: `rnix intent status [intent-id]`**
+
+Display the current state of an intent tree: overall progress, per-node completion, and active agents. Without an argument, shows all active intents.
+
+```
+Usage: rnix intent status [intent-id]
+Arguments: [intent-id] — Optional intent identifier (0 or 1 argument)
+```
+
+**Subcommand: `rnix intent list`**
+
+Display a table of all intents (active + completed).
+
+```
+Usage: rnix intent list
+Arguments: None
+```
+
+**Examples:**
+
+```
+$ rnix intent status
+$ rnix intent status intent-1
+$ rnix intent list --json
+```
+
+### 4.21 rnix skill — Skill Package Management
+
+Install, update, and manage skills from the community registry.
+
+**Subcommand: `rnix skill install <name> [name...]`**
+
+Download and install one or more skills from the community skill registry.
+
+```
+Usage: rnix skill install <name> [name...]
+Arguments: One or more skill names (minimum 1)
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--force` | `bool` | `false` | Force install even if already installed |
+
+**Subcommand: `rnix skill search [keyword]`**
+
+Search for skills in the community registry by keyword. Without arguments, browses all available skills.
+
+```
+Usage: rnix skill search [keyword]
+Arguments: [keyword] — Optional search keyword (0 or 1 argument)
+```
+
+**Subcommand: `rnix skill update [name...]`**
+
+Check for updates and update installed skills from the community registry. Without arguments, updates all installed community skills.
+
+```
+Usage: rnix skill update [name...]
+Arguments: Zero or more skill names
+```
+
+**Subcommand: `rnix skill list`**
+
+List all locally available skills, including system built-in skills and community-installed skills.
+
+```
+Usage: rnix skill list
+Arguments: None (cobra.NoArgs)
+```
+
+**Examples:**
+
+```
+$ rnix skill install code-analysis
+$ rnix skill search code
+$ rnix skill update
+$ rnix skill list
+```
+
+### 4.22 rnix run \<script.ash\> — AgentShell Script Runner
+
+Read and execute an AgentShell script file. Supports shebang (`#!/usr/bin/env rnix run`) for direct execution.
+
+```
+Usage: rnix run <script.ash> [args...]
+Arguments: <script.ash> — Script file path (minimum 1 argument); additional arguments passed to the script
+```
+
+**Environment Variables Set:**
+
+| Variable | Description |
+|----------|-------------|
+| `RNIX_SCRIPT_FILE` | Absolute path to the script file |
+| `RNIX_SCRIPT_DIR` | Directory containing the script |
+| `RNIX_ARGS` | All script arguments joined with spaces |
+| `RNIX_ARG_N` | Individual argument by index (0-based) |
+
+**Example:**
+
+```
+$ rnix run deploy.ash
+$ rnix run deploy.ash --env staging
+$ ./deploy.ash  # with shebang and chmod +x
+```
+
+### 4.23 rnix serve — OpenAI-Compatible HTTP Gateway
+
+Start an OpenAI-compatible HTTP server that exposes registered LLM providers as standard API endpoints.
+
+```
+Usage: rnix serve
+Arguments: None
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--port` | `int` | `8080` | HTTP listen port |
+
+The server binds to `127.0.0.1` (localhost only). Loads providers from the global `providers.yaml` configuration, runs health checks, and serves until interrupted by SIGINT/SIGTERM with a 5-second graceful shutdown period.
+
+**Example:**
+
+```
+$ rnix serve --port 3000
+Serving 2 providers on http://127.0.0.1:3000
+```
+
+### 4.24 rnix agtest \[file-or-dir\] — Agent Behavior Testing
+
+Run declarative agent behavior regression tests defined in YAML files.
+
+```
+Usage: rnix agtest [file-or-dir]
+Arguments: <file-or-dir> — Single YAML file or directory containing *.yaml files (exactly 1 argument)
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | `false` | Parse and validate only, do not execute tests |
+| `--timeout` | `int64` | `60000` | Global timeout per test case in milliseconds |
+
+**Output (text mode):**
+
+```
+[agtest] running 3 test case(s)...
+
+  + test-greeting (1.2s)
+  x test-analysis (3.5s)
+    exit_code: expected 0, got 1
+  - test-skip (skipped)
+
+[agtest] 3 total, 1 passed, 1 failed, 1 skipped, 0 errors (4.7s)
+```
+
+**Example:**
+
+```
+$ rnix agtest tests/
+$ rnix agtest test.yaml --dry-run
+$ rnix agtest tests/ --timeout 120000 --json
+```
+
+### 4.25 rnix reputation \[agent\] — Agent Reputation Scores
+
+Show reputation scores based on historical SLA evaluation results. Without arguments, lists all agents in a table. With an agent name, shows detailed information.
+
+```
+Usage: rnix reputation [agent]
+Arguments: [agent] — Optional agent name (0 or 1 argument)
+```
+
+**Table Output (listing mode):**
+
+```
+AGENT                SCORE  SUCCESS  AVG TOKENS  AVG DURATION  RECORDS  TREND
+code-reviewer         0.85   92.0%       1,234        3200ms       15  improving
+```
+
+**Detail Output (single agent):**
+
+```
+Agent: code-reviewer
+Score: 0.85
+Success Rate: 92.0%
+Avg Token Usage: 1,234
+Avg Duration: 3200ms
+Total Records: 15
+Trend: improving
+```
+
+### 4.26 rnix lineage \<pid\> — Stem Agent Differentiation Lineage
+
+Show the complete differentiation path from stem agent to current specialized form. Displays each skill loading step with timestamp and trigger reason.
+
+```
+Usage: rnix lineage <pid>
+Arguments: <pid> — Process ID (exactly 1 argument)
+```
+
+**Example:**
+
+```
+$ rnix lineage 42
+Lineage for PID 42
+
+[1] 2026-03-15 10:00:00  initial differentiation
+    Skills: code-analysis
+    Trigger: "Analyze the code"
+    Source: keyword-match
+
+[2] 2026-03-15 10:01:30  progressive specialization
+    Skills: code-analysis, testing
+    Trigger: "Also write tests"
+    Source: ooda-specialize
+```
+
+### 4.27 rnix topology — Collaboration Topology
+
+Show agent collaboration topology and reinforced paths.
+
+```
+Usage: rnix topology
+Arguments: None (cobra.NoArgs)
+```
+
+**Output Sections:**
+
+- **NODES** — Agent name, reputation score, connection count
+- **EDGES** — From/to agent, spawn count, message count, total interactions, reinforced marker
+- **REINFORCED PATHS** — High-frequency collaboration paths identified by the system
+
+**Example:**
+
+```
+$ rnix topology
+Collaboration Topology (3 agents, 4 edges)
+
+NODES:
+AGENT                REPUTATION  CONNECTIONS
+code-analyst               0.85            3
+
+EDGES:
+FROM                 TO                   SPAWN  MSG  TOTAL  REINFORCED
+code-analyst         test-writer              5    2      7  *
+```
+
+### 4.28 rnix synergy — Skill Synergy Combinations
+
+Skill synergy combination management.
+
+**Subcommand: `rnix synergy list`**
+
+Show historical performance data for skill combinations. Displays success rates, token usage, and recommendations.
+
+```
+Usage: rnix synergy list
+Arguments: None
+```
+
+**Output Columns:**
+
+| Column | Description |
+|--------|-------------|
+| SKILLS | Comma-separated skill combination |
+| SUCCESS | Success rate percentage |
+| AVG TOKENS | Average token usage |
+| EXECUTIONS | Total execution count |
+| VS SOLO | Success rate difference vs individual skills |
+| TOKEN GAIN | Token usage improvement percentage |
+| STATUS | `recommended` if the combination is recommended |
+
+**Example:**
+
+```
+$ rnix synergy list
+$ rnix synergy list --json
+```
+
+### 4.29 rnix immune — Adaptive Immune Security
+
+Adaptive immune security management.
+
+**Subcommand: `rnix immune status`**
+
+Show immune daemon status, behavior profiles, alerts, and suspended processes.
+
+```
+Usage: rnix immune status
+Arguments: None (cobra.NoArgs)
+```
+
+**Output:** Running status, profile count, active monitors, threat memory, behavior profile table (agent template, samples, token rate, duration, last updated), alerts with remediation actions, and suspended process list.
+
+**Subcommand: `rnix immune resume <pid>`**
+
+Resume a previously suspended process.
+
+```
+Usage: rnix immune resume <pid>
+Arguments: <pid> — Process ID (exactly 1 argument)
+```
+
+**Subcommand: `rnix immune similarity [agent-name]`**
+
+Show capability similarity for an agent, listing other agents with similar skill profiles.
+
+```
+Usage: rnix immune similarity [agent-name]
+Arguments: [agent-name] — Optional agent name (0 or 1 argument)
+```
+
+**Examples:**
+
+```
+$ rnix immune status
+Immune Daemon: running (uptime: 5m30s)
+Security: OK
+Profiles: 3
+Active Monitors: 2
+Threat Memory: 0 signatures
+
+$ rnix immune resume 42
+$ rnix immune similarity code-analyst
 ```
 
 ---

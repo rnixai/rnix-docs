@@ -7,7 +7,7 @@ Define multi-agent DAG workflows in YAML. The Compose engine handles dependency 
 ## Quick Start
 
 ```yaml
-# rnix-compose.yaml
+# compose.yaml
 version: "1.0"
 intent: "Code review workflow"
 model: "haiku"

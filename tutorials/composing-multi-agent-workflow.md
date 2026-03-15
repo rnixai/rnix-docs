@@ -15,7 +15,7 @@ This tutorial walks you through using Rnix Compose to orchestrate multiple agent
 ## What You Will Learn
 
 1. How to design multi-agent DAG workflows
-2. How to write `rnix-compose.yaml` to define agent dependencies
+2. How to write `compose.yaml` to define agent dependencies
 3. How to launch workflows with `rnix compose up`
 4. How to monitor execution in real-time with `rnix top`
 5. How to use pipe syntax and AgentShell scripts for more flexible orchestration
@@ -48,9 +48,9 @@ You can reuse the Agent from Tutorial 1 or use the existing `code-analyst`. This
 
 ---
 
-## Step 2: Write rnix-compose.yaml
+## Step 2: Write compose.yaml
 
-Create `rnix-compose.yaml` in the project root:
+Create `compose.yaml` in the project root:
 
 ```yaml
 version: "1.0"
@@ -84,7 +84,7 @@ agents:
 
 ### How the DAG Scheduling Engine Works
 
-After reading `rnix-compose.yaml`, the Compose engine:
+After reading `compose.yaml`, the Compose engine:
 
 1. **Parses the dependency graph** — builds a directed acyclic graph (DAG) from all agents and `depends_on` relationships
 2. **Topological sort** — determines execution layers (agents with no dependencies go in layer 1, those depending on them in layer 2, etc.)
@@ -230,7 +230,7 @@ spawn "Analyze $TARGET code quality" --agent=code-analyst | spawn "Generate impr
 '
 ```
 
-Or use environment in `rnix-compose.yaml`:
+Or use environment in `compose.yaml`:
 
 ```yaml
 agents:

@@ -69,7 +69,7 @@ Set per-agent or per-workflow token limits:
 context_budget: 8192
 ```
 
-**Compose level** (`rnix-compose.yaml`):
+**Compose level** (`compose.yaml`):
 ```yaml
 budget_pool:
   total: 50000
@@ -100,7 +100,7 @@ Supervisor processes monitor child agents and automatically restart them on fail
 ### Configuration
 
 ```yaml
-# rnix-init.yaml
+# init.yaml
 version: "1.0"
 services:
   monitor:
@@ -137,7 +137,7 @@ The daemon bootstrap sequence on startup:
 4. Start MCP service management
 5. Begin idle timeout monitoring
 
-Services defined in `rnix-init.yaml` start in dependency order, with supervisors monitoring their children.
+Services defined in `init.yaml` start in dependency order, with supervisors monitoring their children.
 
 ---
 
@@ -164,5 +164,5 @@ daemon stopped
 
 - [Token Economy](/guide/token-economy) — Budget pools, SLA, reputation
 - [Security](/guide/security) — Immune daemon and anomaly detection
-- [Configuration](/guide/configuration) — rnix-init.yaml reference
+- [Configuration](/guide/configuration) — init.yaml reference
 - [Debugging](/guide/debugging) — strace and gdb

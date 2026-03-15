@@ -14,7 +14,7 @@ hero:
       link: /guide/concepts
     - theme: alt
       text: GitHub
-      link: https://github.com/rnixai/rnix
+      link: https://github.com/rnixai/rnix?utm_source=docs&utm_medium=cta&utm_campaign=rnix_homepage&utm_content=github_hero
 
 features:
   - icon: "\u2699\uFE0F"
@@ -29,10 +29,8 @@ features:
   - icon: "\uD83D\uDD0D"
     title: Deep Debugging Toolkit
     details: "strace, gdb-style interactive debugger (attach/breakpoint/step/inspect), time-travel replay with fork-continue, distributed causal tracing, visual TUI dashboard, and agtest regression testing."
-  - icon: "\uD83D\uDCE6"
-    title: Compose & AgentShell
-    details: "DAG orchestration via YAML with budget pools and SLA contracts. Full scripting language: pipes, variables, if/else, loops, functions, parallel blocks, and source imports."
-  - icon: "\uD83D\uDEE1\uFE0F"
-    title: Token Economy & Security
-    details: Budget pools with priority allocation, contract SLA evaluation, agent reputation system, and Skill synergy emergence. Adaptive immune security with anomaly detection and self-healing.
+  - icon: "\uD83D\uDECD\uFE0F"
+    title: More in the Guide
+    details: "Compose & AgentShell, Token Economy & Security, MCP integration, and the full platform — start with [Quick Start](/guide/quick-start) or [Core Concepts](/guide/concepts)."
+    link: /guide/quick-start
 ---

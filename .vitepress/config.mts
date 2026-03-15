@@ -1,4 +1,8 @@
 import { defineConfig } from 'vitepress'
+import { withUtm } from '../utils/utm'
+
+const LANDING_URL = 'https://rnix.ai'
+const GITHUB_URL = 'https://github.com/rnixai/rnix'
 
 const guideSidebar = [
   {
@@ -53,12 +57,36 @@ const zhGuideSidebar = [
     ],
   },
   {
-    text: '深入',
+    text: '智能体开发',
+    items: [
+      { text: 'Agent 与 Skill', link: '/zh/guide/agents-and-skills' },
+      { text: 'AgentShell 脚本', link: '/zh/guide/agentshell' },
+      { text: 'Compose 编排', link: '/zh/guide/compose' },
+      { text: '意图系统', link: '/zh/guide/intent-system' },
+      { text: '自主智能体 (OODA)', link: '/zh/guide/autonomous-agents' },
+    ],
+  },
+  {
+    text: '调试与测试',
+    items: [
+      { text: '调试 (strace & gdb)', link: '/zh/guide/debugging' },
+      { text: '时间旅行调试', link: '/zh/guide/time-travel' },
+      { text: '分布式追踪', link: '/zh/guide/distributed-tracing' },
+      { text: '可视化仪表盘', link: '/zh/guide/dashboard' },
+      { text: '回归测试 (agtest)', link: '/zh/guide/testing' },
+    ],
+  },
+  {
+    text: '平台',
     items: [
       { text: '架构设计', link: '/zh/guide/architecture' },
-      { text: '意图系统', link: '/zh/guide/intent-system' },
+      { text: 'IPC 与并发', link: '/zh/guide/ipc-and-concurrency' },
+      { text: 'LLM 提供商与 Serve', link: '/zh/guide/llm-providers' },
       { text: 'MCP 集成', link: '/zh/guide/mcp-integration' },
-      { text: '系统监控', link: '/zh/guide/monitoring' },
+      { text: 'Skill 包管理', link: '/zh/guide/skill-packages' },
+      { text: '监控与 Supervisor', link: '/zh/guide/monitoring' },
+      { text: 'Token 经济与声誉', link: '/zh/guide/token-economy' },
+      { text: '安全与自愈', link: '/zh/guide/security' },
       { text: '配置指南', link: '/zh/guide/configuration' },
     ],
   },
@@ -70,6 +98,10 @@ export default defineConfig({
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
+    ['link', { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32.png' }],
+    ['link', { rel: 'icon', type: 'image/png', sizes: '16x16', href: '/favicon-16.png' }],
+    ['link', { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }],
+    ['meta', { property: 'og:image', content: '/og-image.png' }],
   ],
 
   locales: {
@@ -78,6 +110,7 @@ export default defineConfig({
       lang: 'en-US',
       themeConfig: {
         nav: [
+          { text: 'Home', link: withUtm(LANDING_URL, 'nav_home', 'nav'), target: '_blank', rel: 'noopener noreferrer' },
           { text: 'Guide', link: '/guide/quick-start', activeMatch: '/guide/' },
           { text: 'Tutorials', link: '/tutorials/', activeMatch: '/tutorials/' },
           { text: 'Reference', link: '/reference/', activeMatch: '/reference/' },
@@ -108,7 +141,7 @@ export default defineConfig({
         docFooter: { prev: 'Previous', next: 'Next' },
         lastUpdated: { text: 'Last updated' },
         editLink: {
-          pattern: 'https://github.com/rnixai/rnix/edit/main/docs/:path',
+          pattern: withUtm('https://github.com/rnixai/rnix/edit/main/docs/:path', 'edit_page', 'link'),
           text: 'Edit this page on GitHub',
         },
       },
@@ -119,6 +152,7 @@ export default defineConfig({
       link: '/zh/',
       themeConfig: {
         nav: [
+          { text: '首页', link: withUtm(LANDING_URL, 'nav_home_zh', 'nav'), target: '_blank', rel: 'noopener noreferrer' },
           { text: '指南', link: '/zh/guide/quick-start', activeMatch: '/zh/guide/' },
           { text: '教程', link: '/zh/tutorials/', activeMatch: '/zh/tutorials/' },
           { text: '参考', link: '/zh/reference/', activeMatch: '/zh/reference/' },
@@ -149,7 +183,7 @@ export default defineConfig({
         docFooter: { prev: '上一页', next: '下一页' },
         lastUpdated: { text: '最后更新' },
         editLink: {
-          pattern: 'https://github.com/rnixai/rnix/edit/main/docs/:path',
+          pattern: withUtm('https://github.com/rnixai/rnix/edit/main/docs/:path', 'edit_page_zh', 'link'),
           text: '在 GitHub 上编辑此页',
         },
       },
@@ -157,9 +191,9 @@ export default defineConfig({
   },
 
   themeConfig: {
-    logo: '/logo.svg',
+    logo: { light: '/logo.svg', dark: '/logo-dark.svg', alt: 'Rnix' },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/rnixai/rnix' },
+      { icon: 'github', link: withUtm(GITHUB_URL, 'github_footer', 'footer') },
     ],
     search: { provider: 'local' },
     footer: {

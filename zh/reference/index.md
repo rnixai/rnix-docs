@@ -21,7 +21,7 @@
    - [2.3 /dev/fs — 宿主文件系统设备](#23-devfs--宿主文件系统设备)
    - [2.4 /dev/shell — Shell 执行设备](#24-devshell--shell-执行设备)
    - [2.5 /proc/{pid}/ — 动态进程信息](#25-procpid--动态进程信息)
-   - [2.6 /lib/agents/ 和 /lib/skills/](#26-libagents-和-libskills)
+   - [2.6 Agent 和 Skill 定义](#26-agent-和-skill-定义)
    - [2.7 VFSFile 接口和 OpenFlag 枚举](#27-vfsfile-接口和-openflag-枚举)
    - [2.8 FD 分配规则](#28-fd-分配规则)
 3. [Agent 和 Skill 清单](#3-agent-和-skill-清单)
@@ -70,7 +70,7 @@
 
 ### 1.1 概述
 
-Rnix 的内核接口按 4 个功能分类组织，共定义 15 个 syscall：
+Rnix 的内核接口按多个功能分类组织，共定义 45 个 syscall：
 
 | 功能分类 | Syscall 数量 | 职责 |
 |---------|-------------|------|
@@ -78,6 +78,9 @@ Rnix 的内核接口按 4 个功能分类组织，共定义 15 个 syscall：
 | 上下文管理（ContextManager） | 4 | 上下文空间分配、读写、释放 |
 | 文件系统（FileSystem） | 5 | VFS 设备的打开、读写、关闭、元数据查询 |
 | 调试（Debugger） | 1 | Syscall 事件的自动记录与追踪 |
+| IPC（Send、Recv、Pipe 等） | 10 | 进程间消息传递与管道 |
+| 信号与能力（Signal & Capability） | 10 | 信号处理、能力授予/撤销/检查 |
+| 监督者与初始化（Supervisor & Init） | 10 | 监督者树、init 引导 |
 
 所有 syscall 在出错时返回结构化的 `*SyscallError`（见 [6.2 SyscallError](#62-syscallerror)），包含 syscall 名称、PID、设备路径、底层错误和分类错误码。
 
@@ -791,14 +794,14 @@ VFS（虚拟文件系统）是 Rnix 的统一资源抽象层，遵循 Unix "一�
 
 **快照语义：** 内容在 Open 时生成快照，后续 Read 读取快照数据。
 
-### 2.6 /lib/agents/ 和 /lib/skills/
+### 2.6 Agent 和 Skill 定义
 
 这两个路径是 Agent 和 Skill 的文件系统存储位置，由 `AgentLoader` 和 `SkillLoader` 直接读取（不通过 VFS 设备机制）。
 
 **Agent 目录结构：**
 
 ```
-lib/agents/{agent-name}/
+agents/{agent-name}/
 ├── agent.yaml        # Agent 配置清单
 └── instructions.md   # Agent 角色指令（系统提示词）
 ```
@@ -806,7 +809,7 @@ lib/agents/{agent-name}/
 **Skill 目录结构：**
 
 ```
-lib/skills/{skill-name}/
+skills/{skill-name}/
 └── SKILL.md          # Skill 定义（YAML frontmatter + Markdown body）
 ```
 
@@ -941,7 +944,7 @@ Rnix 对 Skill 提供两级加载粒度：
 
 ### 3.8 完整示例
 
-**agent.yaml 示例（`lib/agents/code-analyst/agent.yaml`）：**
+**agent.yaml 示例（`agents/code-analyst/agent.yaml`）：**
 
 ```yaml
 name: code-analyst
@@ -955,7 +958,7 @@ skills:
   - code-analysis
 ```
 
-**SKILL.md 示例（`lib/skills/code-analysis/SKILL.md`）：**
+**SKILL.md 示例（`skills/code-analysis/SKILL.md`）：**
 
 ```markdown
 ---
@@ -1217,6 +1220,657 @@ type jsonErrorData struct {
     Syscall string `json:"syscall,omitempty"`
     Device  string `json:"device,omitempty"`
 }
+```
+
+### 4.8 rnix init — 配置初始化
+
+初始化全局配置（`~/.config/rnix/`）和项目配置（`.rnix/`）目录。
+
+```
+用法: rnix init
+参数: 无
+```
+
+**行为：**
+
+1. **全局初始化** — 创建 `~/.config/rnix/` 及子目录 `agents/`、`skills/`，解压内嵌的智能体和技能，生成默认 `providers.yaml` 和 `config.yaml`
+2. **项目初始化** — 在当前工作目录创建 `.rnix/` 及子目录 `agents/`、`skills/`、`data/`，以及初始 `config.yaml`
+
+如果目录已存在，则跳过对应步骤并输出提示信息。
+
+**示例：**
+
+```
+$ rnix init
+initialized global config: /home/user/.config/rnix
+initialized project config: /path/to/project/.rnix
+```
+
+### 4.9 rnix top — 实时进程监控
+
+交互式 TUI，实时显示进程树、状态和资源消耗。
+
+```
+用法: rnix top
+参数: 无 (cobra.NoArgs)
+```
+
+**显示内容：** 全屏交替屏 TUI，包含摘要栏（活跃数量、总 token、运行时间）和进程表，显示 PID、PPID、STATE、AGENT、TOKENS、ELAPSED 列。进程根据父子关系以树形层级展示。
+
+**快捷键：**
+
+| 按键 | 操作 |
+|-----|------|
+| `q` / `Ctrl+C` | 退出 |
+| `j` / `Down` | 光标下移 |
+| `k` / `Up` | 光标上移 |
+| `Enter` | 显示进程详情面板 |
+| `K` | 终止选中进程 (SIGTERM) |
+| `Esc` | 返回列表视图（从详情视图） |
+
+**刷新频率：** 500ms 轮询间隔。
+
+### 4.10 rnix log \<pid\> — 推理日志查看器
+
+流式查看运行中智能体的推理日志，按类别分为 `[think]`、`[tool]` 和 `[output]`。
+
+```
+用法: rnix log <pid>
+参数: <pid> — 进程 ID（恰好 1 个参数）
+```
+
+**标志：**
+
+| 标志 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `--filter` | `string` | `""` | 按日志类别过滤（`think`、`tool`、`output`） |
+
+**示例：**
+
+```
+$ rnix log 5
+[rnix log] attached to PID 5
+
+[  0.123] [think]  Analyzing the project structure...
+[  1.456] [tool]   /dev/fs/./src/main.go → reading file
+[  3.789] [output] The project has 3 modules...
+```
+
+按 `Ctrl+C` 可断开连接，不影响被追踪的进程。
+
+### 4.11 rnix gdb \<pid\> — 交互式调试器
+
+附加到运行中的智能体进程，进入交互式调试会话。实时接收系统调用事件和推理日志。
+
+```
+用法: rnix gdb <pid>
+参数: <pid> — 进程 ID（恰好 1 个参数）
+```
+
+**交互命令：**
+
+| 命令 | 描述 |
+|------|------|
+| `break syscall <name>` | 在特定系统调用处设置断点 |
+| `break reasoning` | 在每次推理步骤前中断 |
+| `break quality --pattern <pat>` | 当 LLM 输出匹配模式时中断 |
+| `break budget <tokens>` | 当 token 用量达到阈值时中断 |
+| `delete <bp_id>` | 按 ID 删除断点 |
+| `info breakpoints` | 列出所有断点 |
+| `continue` / `c` | 断点后继续执行 |
+| `step [syscall\|reasoning]` | 执行下一步 |
+| `inspect context` | 显示上下文信息及 token 估计 |
+| `set model <name>` | 覆盖 LLM 模型 |
+| `set context append <text>` | 向上下文追加文本 |
+| `set skills add <name>` | 为智能体添加技能 |
+| `record start` / `record stop` | 在会话中开始/停止录制 |
+| `detach` / `quit` / `q` | 断开调试会话 |
+
+**示例：**
+
+```
+$ rnix gdb 1
+[gdb] attached to PID 1 (state=running, intent="Analyze code")
+gdb> break syscall Write
+[gdb] breakpoint 1 set: syscall Write
+gdb> continue
+```
+
+### 4.12 rnix dashboard — 可视化调试仪表盘
+
+交互式 TUI 仪表盘，在多窗格布局中显示智能体树、时间线和热力图。
+
+```
+用法: rnix dashboard
+参数: 无 (cobra.NoArgs)
+```
+
+**窗格：**
+
+- **树形窗格** — 带有状态和 token 用量的进程树
+- **时间线窗格** — 可滚动的事件时间线，按系统调用事件分类（LLM、Tool、IPC、VFS、Error）
+- **热力图窗格** — 上下文预算可视化，含段分类（system、skill、tool、user、assistant、leaked）
+
+**导航：** 使用 Tab 切换窗格，方向键在窗格内滚动，`q` 退出。
+
+### 4.13 rnix record — 执行录制
+
+录制执行事件（系统调用、LLM 响应、上下文变更、状态转换），用于离线分析和时间旅行调试。
+
+```
+用法: rnix record <start|stop|list> [pid]
+子命令:
+  start <pid>   开始录制指定进程的事件
+  stop <pid>    停止录制并持久化到磁盘
+  list          列出所有录制会话
+```
+
+**示例：**
+
+```
+$ rnix record start 1
+Recording started for PID 1 (record-id: 1-1709856000)
+
+$ rnix record stop 1
+Recording stopped for PID 1 (42 events captured)
+
+$ rnix record list
+RECORD-ID            PID    STATUS       EVENTS   START                INTENT
+1-1709856000         1      completed    42       2026-03-15 10:00:00  Analyze code
+```
+
+### 4.14 rnix replay \<record-id\> — 录制回放
+
+加载已录制的执行轨迹并进入交互式回放会话。读取本地录制文件，无需运行中的 daemon。
+
+```
+用法: rnix replay <record-id>
+参数: <record-id> — 录制标识符（恰好 1 个参数）
+```
+
+**交互命令：**
+
+| 命令 | 描述 |
+|------|------|
+| `next` / `n` | 前进一个事件 |
+| `prev` / `p` | 后退一个事件 |
+| `goto <seq_num>` | 按序列号跳转到事件 |
+| `list` / `l` | 显示当前位置附近的事件 |
+| `diff <seq1> <seq2>` | 比较两个时间点的上下文 |
+| `fork` | 从当前位置分叉以重新执行 |
+| `info` / `i` | 显示录制摘要 |
+| `quit` / `q` | 退出回放 |
+
+**示例：**
+
+```
+$ rnix replay 42-1709856000
+[replay] Loading record 42-1709856000...
+[replay] PID: 42 | Intent: "Analyze code" | Events: 15 | Status: completed
+replay> next
+```
+
+### 4.15 rnix trace — 分布式追踪查看器
+
+查看已完成 Compose 编排的分布式追踪数据。追踪数据从本地 `.rnix/traces/` 目录读取（无需 daemon）。
+
+```
+用法: rnix trace [trace-id]
+参数: [trace-id] — 可选的追踪标识符（0 或 1 个参数）
+```
+
+不带参数时列出所有可用追踪。带 trace-id 时显示完整的 span 树及时间和 token 用量。
+
+**子命令：`rnix trace blame <trace-id>`**
+
+分析分布式追踪以识别性能瓶颈和错误根因。显示关键路径分析、耗时/token 热点和错误传播链。
+
+```
+用法: rnix trace blame <trace-id>
+参数: <trace-id> — 追踪标识符（恰好 1 个参数）
+```
+
+**示例：**
+
+```
+$ rnix trace
+TRACE-ID             SPANS  DURATION  STATUS
+abcdef1234567890     5      12.3s     completed
+
+$ rnix trace abcdef1234567890 --verbose
+$ rnix trace blame abcdef1234567890
+```
+
+### 4.16 rnix ctx-profile \<pid\> — 上下文用量分析器
+
+分析运行中或僵尸态智能体进程的上下文。显示上下文分类（活跃/温热/冷/泄漏）、识别 token 消耗大户，并提供优化建议。
+
+```
+用法: rnix ctx-profile <pid>
+参数: <pid> — 进程 ID（恰好 1 个参数）
+```
+
+需要运行中的 daemon（上下文数据存储在 daemon 内存中）。
+
+**示例：**
+
+```
+$ rnix ctx-profile 1
+$ rnix ctx-profile 1 --json
+```
+
+### 4.17 rnix ctx-growth \<pid\> — 上下文增长预测器
+
+预测运行中智能体进程的 token 增长趋势。显示历史增长率、预测预算耗尽时间，并在剩余预算低于 20% 时显示告警状态。
+
+```
+用法: rnix ctx-growth <pid>
+参数: <pid> — 进程 ID（恰好 1 个参数）
+```
+
+需要运行中的 daemon（token 历史记录存储在 daemon 内存中）。
+
+**示例：**
+
+```
+$ rnix ctx-growth 1
+$ rnix ctx-growth 1 --json
+```
+
+### 4.18 rnix compose — 多智能体编排
+
+管理在 `compose.yaml` 中定义的多智能体工作流。
+
+**子命令：`rnix compose up`**
+
+解析 `compose.yaml`，解析依赖关系，按 DAG 顺序启动所有智能体。
+
+```
+用法: rnix compose up
+```
+
+| 标志 | 简写 | 类型 | 默认值 | 描述 |
+|------|------|------|--------|------|
+| `--file` | `-f` | `string` | `compose.yaml` | Compose 文件路径 |
+
+**子命令：`rnix compose down`**
+
+停止 Compose 编排中所有运行中的智能体并释放资源。
+
+```
+用法: rnix compose down
+```
+
+| 标志 | 简写 | 类型 | 默认值 | 描述 |
+|------|------|------|--------|------|
+| `--file` | `-f` | `string` | `compose.yaml` | Compose 文件路径 |
+
+**示例：**
+
+```
+$ rnix compose up
+$ rnix compose up -f my-workflow.yaml
+$ rnix compose down
+$ rnix compose down -f my-workflow.yaml --json
+```
+
+### 4.19 rnix apply \<intent\> — 声明式意图分解
+
+声明一个高层意图。系统将其分解为子意图树（Intent Tree），每个子意图映射到一个或多个智能体进程。
+
+```
+用法: rnix apply <intent>
+参数: <intent> — 意图字符串（恰好 1 个参数）
+```
+
+**标志：**
+
+| 标志 | 简写 | 类型 | 默认值 | 描述 |
+|------|------|------|--------|------|
+| `--yes` | `-y` | `bool` | `false` | 跳过确认，立即开始执行 |
+| `--update` | `-u` | `string` | `""` | 增量更新现有意图 |
+
+使用 `--update` 时，将新子意图增量合并到现有意图树中，不会重新分解已完成的节点。
+
+**示例：**
+
+```
+$ rnix apply "build a REST API for user management"
+$ rnix apply "build a REST API" --yes
+$ rnix apply "add comments feature" --update intent-1
+```
+
+### 4.20 rnix intent — 意图管理
+
+用于管理声明式意图树的命令。
+
+**子命令：`rnix intent status [intent-id]`**
+
+显示意图树的当前状态：总体进度、每个节点的完成情况和活跃的智能体。不带参数时显示所有活跃意图。
+
+```
+用法: rnix intent status [intent-id]
+参数: [intent-id] — 可选的意图标识符（0 或 1 个参数）
+```
+
+**子命令：`rnix intent list`**
+
+以表格形式显示所有意图（活跃 + 已完成）。
+
+```
+用法: rnix intent list
+参数: 无
+```
+
+**示例：**
+
+```
+$ rnix intent status
+$ rnix intent status intent-1
+$ rnix intent list --json
+```
+
+### 4.21 rnix skill — 技能包管理
+
+从社区注册中心安装、更新和管理技能。
+
+**子命令：`rnix skill install <name> [name...]`**
+
+从社区技能注册中心下载并安装一个或多个技能。
+
+```
+用法: rnix skill install <name> [name...]
+参数: 一个或多个技能名称（至少 1 个）
+```
+
+| 标志 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `--force` | `bool` | `false` | 即使已安装也强制安装 |
+
+**子命令：`rnix skill search [keyword]`**
+
+在社区注册中心中按关键词搜索技能。不带参数时浏览所有可用技能。
+
+```
+用法: rnix skill search [keyword]
+参数: [keyword] — 可选的搜索关键词（0 或 1 个参数）
+```
+
+**子命令：`rnix skill update [name...]`**
+
+检查更新并从社区注册中心更新已安装的技能。不带参数时更新所有已安装的社区技能。
+
+```
+用法: rnix skill update [name...]
+参数: 零个或多个技能名称
+```
+
+**子命令：`rnix skill list`**
+
+列出所有本地可用的技能，包括系统内置技能和社区安装的技能。
+
+```
+用法: rnix skill list
+参数: 无 (cobra.NoArgs)
+```
+
+**示例：**
+
+```
+$ rnix skill install code-analysis
+$ rnix skill search code
+$ rnix skill update
+$ rnix skill list
+```
+
+### 4.22 rnix run \<script.ash\> — AgentShell 脚本运行器
+
+读取并执行 AgentShell 脚本文件。支持 shebang（`#!/usr/bin/env rnix run`）直接执行。
+
+```
+用法: rnix run <script.ash> [args...]
+参数: <script.ash> — 脚本文件路径（至少 1 个参数）；额外参数传递给脚本
+```
+
+**设置的环境变量：**
+
+| 变量 | 描述 |
+|------|------|
+| `RNIX_SCRIPT_FILE` | 脚本文件的绝对路径 |
+| `RNIX_SCRIPT_DIR` | 包含脚本的目录 |
+| `RNIX_ARGS` | 所有脚本参数以空格连接 |
+| `RNIX_ARG_N` | 按索引获取单个参数（从 0 开始） |
+
+**示例：**
+
+```
+$ rnix run deploy.ash
+$ rnix run deploy.ash --env staging
+$ ./deploy.ash  # 配合 shebang 和 chmod +x
+```
+
+### 4.23 rnix serve — OpenAI 兼容 HTTP 网关
+
+启动 OpenAI 兼容的 HTTP 服务器，将已注册的 LLM 提供商公开为标准 API 端点。
+
+```
+用法: rnix serve
+参数: 无
+```
+
+**标志：**
+
+| 标志 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `--port` | `int` | `8080` | HTTP 监听端口 |
+
+服务器绑定到 `127.0.0.1`（仅本地访问）。从全局 `providers.yaml` 配置加载提供商，执行健康检查，并在收到 SIGINT/SIGTERM 时进行 5 秒优雅关闭。
+
+**示例：**
+
+```
+$ rnix serve --port 3000
+Serving 2 providers on http://127.0.0.1:3000
+```
+
+### 4.24 rnix agtest \[file-or-dir\] — 智能体行为测试
+
+运行以 YAML 文件定义的声明式智能体行为回归测试。
+
+```
+用法: rnix agtest [file-or-dir]
+参数: <file-or-dir> — 单个 YAML 文件或包含 *.yaml 文件的目录（恰好 1 个参数）
+```
+
+**标志：**
+
+| 标志 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `--dry-run` | `bool` | `false` | 仅解析和验证，不执行测试 |
+| `--timeout` | `int64` | `60000` | 每个测试用例的全局超时时间（毫秒） |
+
+**输出（文本模式）：**
+
+```
+[agtest] running 3 test case(s)...
+
+  + test-greeting (1.2s)
+  x test-analysis (3.5s)
+    exit_code: expected 0, got 1
+  - test-skip (skipped)
+
+[agtest] 3 total, 1 passed, 1 failed, 1 skipped, 0 errors (4.7s)
+```
+
+**示例：**
+
+```
+$ rnix agtest tests/
+$ rnix agtest test.yaml --dry-run
+$ rnix agtest tests/ --timeout 120000 --json
+```
+
+### 4.25 rnix reputation \[agent\] — 智能体信誉评分
+
+显示基于历史 SLA 评估结果的信誉评分。不带参数时以表格列出所有智能体。带智能体名称时显示详细信息。
+
+```
+用法: rnix reputation [agent]
+参数: [agent] — 可选的智能体名称（0 或 1 个参数）
+```
+
+**表格输出（列表模式）：**
+
+```
+AGENT                SCORE  SUCCESS  AVG TOKENS  AVG DURATION  RECORDS  TREND
+code-reviewer         0.85   92.0%       1,234        3200ms       15  improving
+```
+
+**详情输出（单个智能体）：**
+
+```
+Agent: code-reviewer
+Score: 0.85
+Success Rate: 92.0%
+Avg Token Usage: 1,234
+Avg Duration: 3200ms
+Total Records: 15
+Trend: improving
+```
+
+### 4.26 rnix lineage \<pid\> — 干细胞智能体分化谱系
+
+显示从干细胞智能体到当前特化形态的完整分化路径。显示每个技能加载步骤的时间戳和触发原因。
+
+```
+用法: rnix lineage <pid>
+参数: <pid> — 进程 ID（恰好 1 个参数）
+```
+
+**示例：**
+
+```
+$ rnix lineage 42
+Lineage for PID 42
+
+[1] 2026-03-15 10:00:00  initial differentiation
+    Skills: code-analysis
+    Trigger: "Analyze the code"
+    Source: keyword-match
+
+[2] 2026-03-15 10:01:30  progressive specialization
+    Skills: code-analysis, testing
+    Trigger: "Also write tests"
+    Source: ooda-specialize
+```
+
+### 4.27 rnix topology — 协作拓扑
+
+显示智能体协作拓扑和强化路径。
+
+```
+用法: rnix topology
+参数: 无 (cobra.NoArgs)
+```
+
+**输出部分：**
+
+- **NODES** — 智能体名称、信誉评分、连接数
+- **EDGES** — 源/目标智能体、spawn 次数、消息数、总交互次数、强化标记
+- **REINFORCED PATHS** — 系统识别的高频协作路径
+
+**示例：**
+
+```
+$ rnix topology
+Collaboration Topology (3 agents, 4 edges)
+
+NODES:
+AGENT                REPUTATION  CONNECTIONS
+code-analyst               0.85            3
+
+EDGES:
+FROM                 TO                   SPAWN  MSG  TOTAL  REINFORCED
+code-analyst         test-writer              5    2      7  *
+```
+
+### 4.28 rnix synergy — 技能协同组合
+
+技能协同组合管理。
+
+**子命令：`rnix synergy list`**
+
+显示技能组合的历史性能数据。显示成功率、token 用量和推荐信息。
+
+```
+用法: rnix synergy list
+参数: 无
+```
+
+**输出列：**
+
+| 列名 | 描述 |
+|------|------|
+| SKILLS | 逗号分隔的技能组合 |
+| SUCCESS | 成功率百分比 |
+| AVG TOKENS | 平均 token 用量 |
+| EXECUTIONS | 总执行次数 |
+| VS SOLO | 与单独技能相比的成功率差异 |
+| TOKEN GAIN | token 用量改进百分比 |
+| STATUS | 如果推荐该组合则显示 `recommended` |
+
+**示例：**
+
+```
+$ rnix synergy list
+$ rnix synergy list --json
+```
+
+### 4.29 rnix immune — 自适应免疫安全
+
+自适应免疫安全管理。
+
+**子命令：`rnix immune status`**
+
+显示免疫守护进程状态、行为档案、告警和被挂起的进程。
+
+```
+用法: rnix immune status
+参数: 无 (cobra.NoArgs)
+```
+
+**输出内容：** 运行状态、档案数量、活跃监控器、威胁记忆、行为档案表（智能体模板、样本数、token 速率、持续时间、最后更新时间）、告警及修复操作、被挂起的进程列表。
+
+**子命令：`rnix immune resume <pid>`**
+
+恢复之前被挂起的进程。
+
+```
+用法: rnix immune resume <pid>
+参数: <pid> — 进程 ID（恰好 1 个参数）
+```
+
+**子命令：`rnix immune similarity [agent-name]`**
+
+显示智能体的能力相似度，列出具有相似技能档案的其他智能体。
+
+```
+用法: rnix immune similarity [agent-name]
+参数: [agent-name] — 可选的智能体名称（0 或 1 个参数）
+```
+
+**示例：**
+
+```
+$ rnix immune status
+Immune Daemon: running (uptime: 5m30s)
+Security: OK
+Profiles: 3
+Active Monitors: 2
+Threat Memory: 0 signatures
+
+$ rnix immune resume 42
+$ rnix immune similarity code-analyst
 ```
 
 ---
@@ -1752,7 +2406,7 @@ TUI 实时显示进程树状关系、状态、token 消耗和执行进度。支�
       rnix compose down
 ```
 
-`up` 按 `rnix-compose.yaml` 启动 DAG 工作流。`down` 终止所有进程并清理资源。
+`up` 按 `compose.yaml` 启动 DAG 工作流。`down` 终止所有进程并清理资源。
 
 ### 9.4 rnix skill — Skill 包管理
 

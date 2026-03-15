@@ -6,10 +6,10 @@ Agents define "who I am" (identity, model preferences). Skills define "how to do
 
 ## Agent Definition
 
-Each agent lives in `lib/agents/<name>/` with two files:
+Each agent lives in `agents/<name>/` (global: `~/.config/rnix/agents/`, project: `.rnix/agents/`) with two files:
 
 ```
-lib/agents/code-analyst/
+agents/code-analyst/
 ├── agent.yaml        # Identity, model preferences, skill references
 └── instructions.md   # Role definition (system prompt)
 ```
@@ -57,7 +57,7 @@ Plain Markdown file with the agent's role definition, injected as part of the LL
 
 ## Skill Definition
 
-Each skill lives in `lib/skills/<name>/SKILL.md` using YAML frontmatter + Markdown body:
+Each skill lives in `skills/<name>/SKILL.md` (global: `~/.config/rnix/skills/`, project: `.rnix/skills/`) using YAML frontmatter + Markdown body:
 
 ```markdown
 ---

@@ -52,6 +52,20 @@ make build    # → ./rnix
 
 ---
 
+## Initialize Configuration
+
+Run `rnix init` to create the configuration environment:
+
+```bash
+$ rnix init
+[init] created ~/.config/rnix/
+[init] created .rnix/
+```
+
+This creates global configuration at `~/.config/rnix/` (providers, agents, skills) and project-level configuration at `.rnix/`. See [Configuration Guide](/guide/configuration) for details.
+
+---
+
 ## Run Your First Agent
 
 ```bash
@@ -78,7 +92,7 @@ The daemon starts automatically on first use and exits after 60s idle.
 $ rnix -i "Check for security vulnerabilities" --agent=code-analyst
 ```
 
-Agents are defined in `lib/agents/<name>/agent.yaml` with role instructions and skill references.
+Agents are defined in `agents/<name>/agent.yaml` (in `~/.config/rnix/` or `.rnix/`) with role instructions and skill references.
 
 ---
 
@@ -139,7 +153,7 @@ $ rnix daemon stop           # Stop daemon
 ### Compose (YAML workflow)
 
 ```yaml
-# rnix-compose.yaml
+# compose.yaml
 version: "1.0"
 intent: "Code review workflow"
 agents:

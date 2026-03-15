@@ -25,7 +25,7 @@
 
 ### 创建有 bug 的 Skill
 
-创建 `lib/skills/line-counter/SKILL.md`：
+创建 `.rnix/skills/line-counter/SKILL.md`：
 
 ```markdown
 ---
@@ -62,7 +62,7 @@ metadata:
 
 ### 创建引用该 Skill 的 Agent
 
-创建 `lib/agents/counter/agent.yaml`：
+创建 `.rnix/agents/counter/agent.yaml`：
 
 ```yaml
 name: counter
@@ -171,7 +171,7 @@ rnix strace 3
 
 ### 修复
 
-问题很明确：`SKILL.md` 的 `allowed-tools` 缺少 `/dev/shell`。修改 `lib/skills/line-counter/SKILL.md` 的 frontmatter：
+问题很明确：`SKILL.md` 的 `allowed-tools` 缺少 `/dev/shell`。修改 `.rnix/skills/line-counter/SKILL.md` 的 frontmatter：
 
 修复前：
 ```yaml

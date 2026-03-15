@@ -168,10 +168,10 @@ Device registration is completed via dependency injection when the daemon starts
 
 An Agent defines the identity and role of an intelligent agent. It answers the question "Who am I" — including name, description, model preferences, context budget, and which Skills it references.
 
-An Agent's configuration is in `agent.yaml`, paired with `instructions.md` for role instructions:
+An Agent's configuration is in `agent.yaml`, paired with `instructions.md` for role instructions. Agents are stored in `~/.config/rnix/agents/` (global) or `.rnix/agents/` (project):
 
 ```
-lib/agents/code-analyst/
+agents/code-analyst/
 ├── agent.yaml        # Agent config (identity, model preferences, skill references)
 └── instructions.md   # Agent role definition (system prompt)
 ```
@@ -192,10 +192,10 @@ skills:
 
 ### Skill: How to Do X
 
-A Skill defines a specific piece of procedural knowledge — it answers the question "How to do X". Skills follow the Agent Skills industry standard, represented as `SKILL.md` files containing YAML frontmatter (metadata + tool permissions) and a Markdown body (operational guide).
+A Skill defines a specific piece of procedural knowledge — it answers the question "How to do X". Skills follow the Agent Skills industry standard, represented as `SKILL.md` files containing YAML frontmatter (metadata + tool permissions) and a Markdown body (operational guide). Skills are stored in `~/.config/rnix/skills/` (global) or `.rnix/skills/` (project):
 
 ```
-lib/skills/code-analysis/
+skills/code-analysis/
 └── SKILL.md          # Skill definition (Agent Skills standard format)
 ```
 
@@ -296,7 +296,7 @@ System calls (syscalls) are the sole interface for agents to interact with the k
 
 ### MVP Syscall Classification Table
 
-Rnix's kernel interface is composed of 4 sub-interfaces, defining 15 syscalls total (13 implemented, 2 planned):
+Rnix's kernel interface is composed of multiple sub-interfaces, defining 45 syscalls total across process management, context, VFS, IPC, signal, capability, supervisor, and debugging:
 
 **Process Management (ProcessManager) — 5**
 
@@ -471,7 +471,7 @@ cmd/rnix/main.go (CLI Client)
 │    │                                     │
 │    ▼                                     │
 │  AgentLoader.Load("code-analyst")        │
-│    │  → Read lib/agents/code-analyst/    │
+│    │  → Read agents/code-analyst/        │
 │    │  → Parse skills → SkillLoader       │
 │    │  → Aggregate AllowedTools, Prompt   │
 │    ▼                                     │

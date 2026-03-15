@@ -166,10 +166,10 @@ VFSFile 接口：
 
 Agent 定义了一个智能体的身份和角色。它回答"我是谁"这个问题——包括名称、描述、模型偏好、上下文预算，以及引用了哪些 Skill。
 
-Agent 的配置文件为 `agent.yaml`，配合 `instructions.md` 提供角色指令：
+Agent 的配置文件为 `agent.yaml`，配合 `instructions.md` 提供角色指令。Agent 存储在 `~/.config/rnix/agents/`（全局）或 `.rnix/agents/`（项目）：
 
 ```
-lib/agents/code-analyst/
+agents/code-analyst/
 ├── agent.yaml        # Agent 配置（身份、模型偏好、Skill 引用）
 └── instructions.md   # Agent 角色定义（系统提示词）
 ```
@@ -190,10 +190,10 @@ skills:
 
 ### Skill：如何做 X
 
-Skill 定义了一项具体的程序性知识——它回答"如何做 X"这个问题。Skill 遵循 Agent Skills 行业标准，以 `SKILL.md` 文件表示，包含 YAML frontmatter（元数据 + 工具权限）和 Markdown 正文（操作指南）。
+Skill 定义了一项具体的程序性知识——它回答"如何做 X"这个问题。Skill 遵循 Agent Skills 行业标准，以 `SKILL.md` 文件表示，包含 YAML frontmatter（元数据 + 工具权限）和 Markdown 正文（操作指南）。Skill 存储在 `~/.config/rnix/skills/`（全局）或 `.rnix/skills/`（项目）：
 
 ```
-lib/skills/code-analysis/
+skills/code-analysis/
 └── SKILL.md          # Skill 定义（Agent Skills 标准格式）
 ```
 
@@ -293,7 +293,7 @@ Rnix 对 Skill 采用渐进式加载，优化资源消耗：
 
 ### MVP Syscall 分类表
 
-Rnix 的内核接口由 4 个子接口组合而成，共定义 15 个 syscall（其中 13 个已实现，2 个为规划中）：
+Rnix 的内核接口由多个子接口组合而成，共定义 45 个 syscall，涵盖进程管理、上下文、VFS、IPC、信号、能力、监督者和调试等域：
 
 **进程管理（ProcessManager）— 5 个**
 
@@ -468,7 +468,7 @@ cmd/rnix/main.go（CLI 客户端）
 │    │                                       │
 │    ▼                                       │
 │  AgentLoader.Load("code-analyst")          │
-│    │  → 读取 lib/agents/code-analyst/      │
+│    │  → 读取 agents/code-analyst/          │
 │    │  → 解析 skills → SkillLoader          │
 │    │  → 聚合 AllowedTools, SystemPrompt    │
 │    ▼                                       │

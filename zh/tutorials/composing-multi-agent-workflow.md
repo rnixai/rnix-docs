@@ -15,7 +15,7 @@
 ## 你将学到什么
 
 1. 如何设计多智能体 DAG 工作流
-2. 如何编写 `rnix-compose.yaml` 定义智能体依赖关系
+2. 如何编写 `compose.yaml` 定义智能体依赖关系
 3. 如何用 `rnix compose up` 启动工作流
 4. 如何用 `rnix top` 实时监控执行
 5. 如何用管道语法和 AgentShell 脚本实现更灵活的编排
@@ -48,9 +48,9 @@ Rnix Compose 的 DAG 调度引擎会自动解析依赖，按拓扑排序确定�
 
 ---
 
-## 步骤二：编写 rnix-compose.yaml
+## 步骤二：编写 compose.yaml
 
-在项目根目录创建 `rnix-compose.yaml`：
+在项目根目录创建 `compose.yaml`：
 
 ```yaml
 version: "1.0"
@@ -84,7 +84,7 @@ agents:
 
 ### DAG 调度引擎工作原理
 
-Compose 引擎读取 `rnix-compose.yaml` 后：
+Compose 引擎读取 `compose.yaml` 后：
 
 1. **解析依赖图** — 将所有 Agent 和 `depends_on` 关系构建为有向无环图（DAG）
 2. **拓扑排序** — 确定执行层级（无依赖的 Agent 在第一层，依赖它们的在第二层，以此类推）
@@ -230,7 +230,7 @@ spawn "分析 $TARGET 的代码质量" --agent=code-analyst | spawn "生成改�
 '
 ```
 
-或在 `rnix-compose.yaml` 中使用 environment：
+或在 `compose.yaml` 中使用 environment：
 
 ```yaml
 agents:

@@ -11,7 +11,7 @@ Each Compose workflow is assigned a total token budget pool. Agents request allo
 ### Configuration
 
 ```yaml
-# rnix-compose.yaml
+# compose.yaml
 version: "1.0"
 intent: "Code review workflow"
 budget_pool:
@@ -118,7 +118,7 @@ When certain Skills are loaded together, they can produce emergent capabilities 
 ### Declaring Synergy
 
 ```yaml
-# lib/skills/security-scan/SKILL.md frontmatter
+# skills/security-scan/SKILL.md frontmatter
 ---
 name: security-scan
 description: "Scan for security vulnerabilities"

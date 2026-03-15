@@ -33,7 +33,7 @@ MCP 服务器进程 (npx @anthropic/mcp-github)
 最常见的方式是在 `agent.yaml` 中声明 MCP 服务器：
 
 ```yaml
-# lib/agents/my-agent/agent.yaml
+# agents/my-agent/agent.yaml
 name: my-agent
 description: "带有 GitHub 和文件系统 MCP 工具的智能体"
 skills:

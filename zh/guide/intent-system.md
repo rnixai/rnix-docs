@@ -125,4 +125,4 @@ A (failed) → B (failed: 上游依赖失败) → C (failed: 上游依赖失败)
 - [组合多智能体工作流](/tutorials/composing-multi-agent-workflow) — 静态多智能体工作流
 - [核心概念](/guide/concepts) — 进程模型和 VFS
 - [架构设计](/guide/architecture) — 内核内部实现
-- [配置指南](/guide/configuration) — rnix-compose.yaml 参考
+- [配置指南](/guide/configuration) — compose.yaml 参考

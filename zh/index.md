@@ -14,7 +14,7 @@ hero:
       link: /zh/guide/concepts
     - theme: alt
       text: GitHub
-      link: https://github.com/rnixai/rnix
+      link: https://github.com/rnixai/rnix?utm_source=docs&utm_medium=cta&utm_campaign=rnix_homepage&utm_content=github_hero_zh
 
 features:
   - title: 一切皆进程
@@ -25,8 +25,7 @@ features:
     details: OODA 推理循环实现自主决策。干细胞分化让通用智能体根据意图自动特化。声明式意图系统配合 Reconciler 持续调和。
   - title: 深度调试工具链
     details: strace、GDB 风格交互式调试器、时间旅行回放与 fork-continue、分布式因果追踪、可视化 TUI 面板、agtest 回归测试。
-  - title: Compose 与 AgentShell
-    details: YAML DAG 编排（含预算池和 SLA 合约）。完整脚本语言：管道、变量、if/else、循环、函数、并行块和模块导入。
-  - title: Token 经济与安全
-    details: 预算池优先级分配、合约 SLA 评估、智能体声誉系统、Skill 协同涌现。适应性免疫安全，异常检测与自愈。
+  - title: 更多在指南中
+    details: "Compose 与 AgentShell、Token 经济与安全、MCP 集成与完整平台 — 从[快速上手](/zh/guide/quick-start)或[核心概念](/zh/guide/concepts)开始。"
+    link: /zh/guide/quick-start
 ---

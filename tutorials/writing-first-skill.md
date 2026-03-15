@@ -26,15 +26,15 @@ A Skill represents "procedural knowledge" in Rnix -- it tells an agent **how to 
 
 ### Create the Skill Directory
 
-Create a new Skill directory under your project's `lib/skills/` directory:
+Create a new Skill directory under your project's `.rnix/skills/` directory:
 
 ```bash
-mkdir -p lib/skills/code-summarizer
+mkdir -p .rnix/skills/code-summarizer
 ```
 
 ### Write the SKILL.md
 
-Create `lib/skills/code-summarizer/SKILL.md` with the following content:
+Create `.rnix/skills/code-summarizer/SKILL.md` with the following content:
 
 ```markdown
 ---
@@ -125,12 +125,12 @@ An Agent is an "identity definition" -- it defines the agent's role, preferred m
 ### Create the Agent Directory
 
 ```bash
-mkdir -p lib/agents/summarizer
+mkdir -p .rnix/agents/summarizer
 ```
 
 ### Write agent.yaml
 
-Create `lib/agents/summarizer/agent.yaml`:
+Create `.rnix/agents/summarizer/agent.yaml`:
 
 ```yaml
 name: summarizer
@@ -158,7 +158,7 @@ skills:
 
 ### Write instructions.md
 
-Create `lib/agents/summarizer/instructions.md` -- the Agent's system prompt:
+Create `.rnix/agents/summarizer/instructions.md` -- the Agent's system prompt:
 
 ```markdown
 # Summarizer Agent
@@ -279,7 +279,7 @@ From the strace output, you can clearly see:
 Create the following file structure:
 
 ```
-lib/
+.rnix/
 ├── agents/
 │   └── summarizer/
 │       ├── agent.yaml
@@ -289,7 +289,7 @@ lib/
         └── SKILL.md
 ```
 
-**`lib/skills/code-summarizer/SKILL.md`**:
+**`.rnix/skills/code-summarizer/SKILL.md`**:
 
 ```markdown
 ---
@@ -330,7 +330,7 @@ Used to read target source code files.
 - **Key Functions**: Important exported function signatures
 ```
 
-**`lib/agents/summarizer/agent.yaml`**:
+**`.rnix/agents/summarizer/agent.yaml`**:
 
 ```yaml
 name: summarizer
@@ -344,7 +344,7 @@ skills:
   - code-summarizer
 ```
 
-**`lib/agents/summarizer/instructions.md`**:
+**`.rnix/agents/summarizer/instructions.md`**:
 
 ```markdown
 # Summarizer Agent
@@ -376,7 +376,7 @@ The agent reads `kernel/kernel.go` and outputs a structured code summary report.
 
 **Cause:** The Skill directory name or the `name` field in SKILL.md does not match the Agent's `skills` list.
 
-**Solution:** Verify that the `name` field in `lib/skills/code-summarizer/SKILL.md` is set to `code-summarizer`, matching `skills: [code-summarizer]` in `agent.yaml`.
+**Solution:** Verify that the `name` field in `.rnix/skills/code-summarizer/SKILL.md` is set to `code-summarizer`, matching `skills: [code-summarizer]` in `agent.yaml`.
 
 ### Agent Loading Failure
 
@@ -384,7 +384,7 @@ The agent reads `kernel/kernel.go` and outputs a structured code summary report.
 
 **Cause:** The Agent directory name does not match the `--agent=summarizer` parameter.
 
-**Solution:** Verify that the directory is `lib/agents/summarizer/` and that it contains an `agent.yaml` file.
+**Solution:** Verify that the directory is `.rnix/agents/summarizer/` and that it contains an `agent.yaml` file.
 
 ### Permission Error (PERMISSION)
 

@@ -120,7 +120,7 @@ $ rnix -i "分析代码" --provider=cursor
 $ rnix -i "分析代码" --agent=code-analyst --provider=cursor
 ```
 
-也可以在 Agent 定义中指定默认 provider（`lib/agents/*/agent.yaml`）：
+也可以在 Agent 定义中指定默认 provider（`agents/*/agent.yaml`）：
 
 ```yaml
 models:
@@ -278,7 +278,7 @@ $ rnix kill 1
 
 - **[核心概念文档](/zh/guide/concepts)** — 深入理解进程、VFS、Syscall、Agent 与 Skill 的设计哲学
 - **[参考手册](/zh/reference/)** — 完整的 CLI 命令参考、Syscall 签名和 Manifest 字段说明
-- **Agent 和 Skill 扩展** — 创建自定义 Agent（`lib/agents/`）和 Skill（`lib/skills/`），扩展 Rnix 的能力边界
+- **Agent 和 Skill 扩展** — 创建自定义 Agent（`~/.config/rnix/agents/` 或 `.rnix/agents/`）和 Skill（`~/.config/rnix/skills/` 或 `.rnix/skills/`），扩展 Rnix 的能力边界
 
 ### 实战教程
 

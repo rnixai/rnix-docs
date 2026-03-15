@@ -25,7 +25,7 @@ We will reuse the `code-summarizer` Skill from Tutorial 1, but intentionally int
 
 ### Create the Buggy Skill
 
-Create `lib/skills/line-counter/SKILL.md`:
+Create `.rnix/skills/line-counter/SKILL.md`:
 
 ```markdown
 ---
@@ -63,7 +63,7 @@ Notice where the bug is: the Skill body mentions that it needs `/dev/shell`, but
 
 ### Create an Agent That Uses This Skill
 
-Create `lib/agents/counter/agent.yaml`:
+Create `.rnix/agents/counter/agent.yaml`:
 
 ```yaml
 name: counter
@@ -172,7 +172,7 @@ Error lines are additionally marked with an `[ERR]` prefix (displayed in red in 
 
 ### The Fix
 
-The problem is clear: the `SKILL.md` frontmatter is missing `/dev/shell` in `allowed-tools`. Edit `lib/skills/line-counter/SKILL.md`:
+The problem is clear: the `SKILL.md` frontmatter is missing `/dev/shell` in `allowed-tools`. Edit `.rnix/skills/line-counter/SKILL.md`:
 
 Before:
 ```yaml

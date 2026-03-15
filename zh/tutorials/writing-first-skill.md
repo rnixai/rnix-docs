@@ -26,15 +26,15 @@ Skill 是 Rnix 中的"程序性知识"——它告诉智能体**如何做某件�
 
 ### 创建 Skill 目录
 
-在项目的 `lib/skills/` 目录下创建一个新的 Skill 目录：
+在项目的 `.rnix/skills/` 目录下创建一个新的 Skill 目录：
 
 ```bash
-mkdir -p lib/skills/code-summarizer
+mkdir -p .rnix/skills/code-summarizer
 ```
 
 ### 编写 SKILL.md
 
-创建 `lib/skills/code-summarizer/SKILL.md`，内容如下：
+创建 `.rnix/skills/code-summarizer/SKILL.md`，内容如下：
 
 ```markdown
 ---
@@ -125,12 +125,12 @@ Agent 是"身份定义"——它定义了智能体的角色、使用的模型和
 ### 创建 Agent 目录
 
 ```bash
-mkdir -p lib/agents/summarizer
+mkdir -p .rnix/agents/summarizer
 ```
 
 ### 编写 agent.yaml
 
-创建 `lib/agents/summarizer/agent.yaml`：
+创建 `.rnix/agents/summarizer/agent.yaml`：
 
 ```yaml
 name: summarizer
@@ -158,7 +158,7 @@ skills:
 
 ### 编写 instructions.md
 
-创建 `lib/agents/summarizer/instructions.md`——Agent 的系统提示词：
+创建 `.rnix/agents/summarizer/instructions.md`——Agent 的系统提示词：
 
 ```markdown
 # Summarizer Agent
@@ -279,7 +279,7 @@ rnix strace 1
 创建以下文件结构：
 
 ```
-lib/
+.rnix/
 ├── agents/
 │   └── summarizer/
 │       ├── agent.yaml
@@ -289,7 +289,7 @@ lib/
         └── SKILL.md
 ```
 
-**`lib/skills/code-summarizer/SKILL.md`**：
+**`.rnix/skills/code-summarizer/SKILL.md`**：
 
 ```markdown
 ---
@@ -330,7 +330,7 @@ metadata:
 - **关键函数**：重要的导出函数签名
 ```
 
-**`lib/agents/summarizer/agent.yaml`**：
+**`.rnix/agents/summarizer/agent.yaml`**：
 
 ```yaml
 name: summarizer
@@ -344,7 +344,7 @@ skills:
   - code-summarizer
 ```
 
-**`lib/agents/summarizer/instructions.md`**：
+**`.rnix/agents/summarizer/instructions.md`**：
 
 ```markdown
 # Summarizer Agent
@@ -376,7 +376,7 @@ rnix -i "总结 kernel/kernel.go 的代码结构" --agent=summarizer
 
 **原因：** Skill 目录名或 SKILL.md 中的 `name` 字段与 Agent 的 `skills` 列表不匹配。
 
-**解决：** 确认 `lib/skills/code-summarizer/SKILL.md` 的 `name` 字段值为 `code-summarizer`，与 `agent.yaml` 中 `skills: [code-summarizer]` 一致。
+**解决：** 确认 `.rnix/skills/code-summarizer/SKILL.md` 的 `name` 字段值为 `code-summarizer`，与 `agent.yaml` 中 `skills: [code-summarizer]` 一致。
 
 ### Agent 加载失败
 
@@ -384,7 +384,7 @@ rnix -i "总结 kernel/kernel.go 的代码结构" --agent=summarizer
 
 **原因：** Agent 目录名与 `--agent=summarizer` 参数不匹配。
 
-**解决：** 确认目录为 `lib/agents/summarizer/`，且包含 `agent.yaml` 文件。
+**解决：** 确认目录为 `.rnix/agents/summarizer/`，且包含 `agent.yaml` 文件。
 
 ### 权限错误（PERMISSION）
 

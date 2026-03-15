@@ -33,7 +33,7 @@ MCP Server Process (npx @anthropic/mcp-github)
 The most common way to use MCP is through agent manifests. Declare MCP servers in `agent.yaml`:
 
 ```yaml
-# lib/agents/my-agent/agent.yaml
+# agents/my-agent/agent.yaml
 name: my-agent
 description: "Agent with GitHub and filesystem MCP tools"
 skills:

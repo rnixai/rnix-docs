@@ -1,0 +1,73 @@
+/**
+ * Normalize: design tokens & theme alignment
+ * Optimize: reduced-motion, font-display
+ * Adapt: touch targets 44px, spacing
+ */
+
+/* --- Design tokens & Optimize: system font only, no Inter --- */
+:root {
+  --vp-font-family-base: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Force app-wide use of system font stack so default theme never applies Inter */
+body,
+#app,
+.Layout,
+.VPNavBar,
+.VPContent,
+.VPHome .VPHero,
+.VPHome .VPFeatures,
+.vp-doc:not(.vp-code) {
+  font-family: var(--vp-font-family-base);
+}
+
+/* --- Adapt: touch targets ≥44px for nav and interactive elements --- */
+@media (max-width: 768px) {
+  .VPNavBarMenuLink,
+  .VPNavBar .VPLink,
+  .VPNavBarSearch .DocSearch-Button,
+  .VPNavBarTranslations .button,
+  .VPNavBarAppearance .VPSwitchAppearance,
+  .VPNavBarExtra .button,
+  .VPNavBarHamburger {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .VPNavBarSocialLinks .VPSocialLink {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.5rem;
+  }
+}
+
+/* Doc page: code block copy button touch target */
+button.copy {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.5rem;
+}
+
+/* Sidebar and outline links: comfortable tap size on narrow viewports */
+@media (max-width: 960px) {
+  .VPSidebar .VPSidebarItem .link,
+  .VPDocOutlineItem .outline-link {
+    min-height: 44px;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+}
+
+/* --- Optimize: respect prefers-reduced-motion --- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

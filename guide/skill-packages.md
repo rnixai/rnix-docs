@@ -14,11 +14,11 @@ Download and install a Skill from the community registry:
 $ rnix skill install code-analysis
 Installing code-analysis@1.2.0...
   ✓ Downloaded from registry
-  ✓ Installed to lib/skills/code-analysis/
+  ✓ Installed to ~/.config/rnix/skills/code-analysis/
   ✓ Registry updated
 ```
 
-Skills are installed to the local `lib/skills/` directory with their `SKILL.md` file and any associated resources.
+Skills are installed to `~/.config/rnix/skills/` (global) with their `SKILL.md` file and any associated resources.
 
 ### skill search
 
@@ -78,10 +78,10 @@ The system maintains a local registry tracking installed Skills:
 You can create Skills locally without publishing to the registry:
 
 ```bash
-mkdir -p lib/skills/my-skill
+mkdir -p .rnix/skills/my-skill
 ```
 
-Create `lib/skills/my-skill/SKILL.md`:
+Create `.rnix/skills/my-skill/SKILL.md`:
 
 ```markdown
 ---
