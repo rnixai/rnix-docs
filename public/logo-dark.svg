@@ -1,40 +1,40 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
   <title>Rnix - Emergence Lattice</title>
-  <desc>Hexagonal lattice bloom  4 semi-activated gradient, growth frontier on the left</desc>
+  <desc>Hexagonal lattice bloom — 4 semi-activated gradient, growth frontier on the left (dark theme)</desc>
 
-  <!-- Second ring context (faint, infinite lattice) - light for dark bg -->
-  <g fill="none" stroke="#94A3B8" stroke-width="1" opacity="0.2">
+  <!-- Same structure as logo/v2-lattice, light strokes on transparent for dark mode -->
+  <g fill="none" stroke="#E2E8F0" stroke-width="1" opacity="0.12">
     <polygon points="178,27 202,41 202,69 178,83 154,69 154,41"/>
     <polygon points="22,27 46,41 46,69 22,83 -2,69 -2,41"/>
     <polygon points="22,117 46,131 46,159 22,173 -2,159 -2,131"/>
   </g>
 
   <polyline points="24,24 48,38 72,24"
-            fill="none" stroke="#94A3B8" stroke-width="1" opacity="0.15"
+            fill="none" stroke="#E2E8F0" stroke-width="1" opacity="0.1"
             stroke-linecap="round"/>
 
   <polygon points="74,27 98,41 98,69 74,83 50,69 50,41"
-           fill="none" stroke="#94A3B8" stroke-width="1" opacity="0.12"/>
+           fill="none" stroke="#E2E8F0" stroke-width="1" opacity="0.08"/>
   <polyline points="98,41 98,69 74,83 50,69"
-            fill="none" stroke="#94A3B8" stroke-width="1.5" opacity="0.35"
+            fill="none" stroke="#E2E8F0" stroke-width="1.5" opacity="0.25"
             stroke-linecap="round"/>
 
   <polygon points="48,72 72,86 72,114 48,128 24,114 24,86"
-           fill="#94A3B8" opacity="0.14"/>
+           fill="#E2E8F0" opacity="0.10"/>
 
   <polygon points="74,117 98,131 98,159 74,173 50,159 50,131"
-           fill="#94A3B8" opacity="0.28"/>
+           fill="#E2E8F0" opacity="0.22"/>
   <polygon points="126,117 150,131 150,159 126,173 102,159 102,131"
-           fill="#94A3B8" opacity="0.42"/>
+           fill="#E2E8F0" opacity="0.38"/>
   <polygon points="126,27 150,41 150,69 126,83 102,69 102,41"
-           fill="#94A3B8" opacity="0.55"/>
+           fill="#E2E8F0" opacity="0.50"/>
   <polygon points="152,72 176,86 176,114 152,128 128,114 128,86"
-           fill="#94A3B8" opacity="0.78"/>
+           fill="#E2E8F0" opacity="0.75"/>
 
-  <circle cx="100" cy="100" r="34" fill="#7DD3FC" opacity="0.08"/>
-  <circle cx="100" cy="100" r="22" fill="#7DD3FC" opacity="0.12"/>
+  <circle cx="100" cy="100" r="34" fill="#4A9EFF" opacity="0.06"/>
+  <circle cx="100" cy="100" r="22" fill="#4A9EFF" opacity="0.1"/>
 
   <polygon points="100,72 124,86 124,114 100,128 76,114 76,86"
-           fill="#7DD3FC"/>
+           fill="#4A9EFF"/>
 </svg>
