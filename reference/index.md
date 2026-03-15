@@ -1,141 +1,141 @@
-# Rnix 参考手册
+# Rnix Reference Manual
 
-本手册是 Rnix 的权威技术参考，面向使用 Rnix 编写 Agent/Skill 或调试问题的开发者。文档中所有签名、参数、返回值、路径和协议均精确匹配当前代码实现。
+This manual is the authoritative technical reference for Rnix, intended for developers who write Agents/Skills using Rnix or debug issues. All signatures, parameters, return values, paths, and protocols in this document precisely match the current code implementation.
 
-> 如需了解 Rnix 的设计哲学和核心概念，请参阅 [核心概念文档](/guide/concepts)。
-> 如需快速安装和首次运行指引，请参阅 [快速上手指南](/guide/quick-start)。
+> For an introduction to Rnix's design philosophy and core concepts, see the [Core Concepts documentation](/guide/concepts).
+> For quick installation and first-run guidance, see the [Quick Start Guide](/guide/quick-start).
 
 ---
 
-## 目录
+## Table of Contents
 
-1. [Syscall 参考](#1-syscall-参考)
-   - [1.1 概述](#11-概述)
-   - [1.2 进程管理（ProcessManager）](#12-进程管理processmanager)
-   - [1.3 上下文管理（ContextManager）](#13-上下文管理contextmanager)
-   - [1.4 文件系统（FileSystem）](#14-文件系统filesystem)
-   - [1.5 调试（Debugger）](#15-调试debugger)
-2. [VFS 路径规范](#2-vfs-路径规范)
-   - [2.1 概述](#21-概述)
-   - [2.2 /dev/llm/claude — LLM 驱动设备](#22-devllmclaude--llm-驱动设备)
-   - [2.3 /dev/fs — 宿主文件系统设备](#23-devfs--宿主文件系统设备)
-   - [2.4 /dev/shell — Shell 执行设备](#24-devshell--shell-执行设备)
-   - [2.5 /proc/{pid}/ — 动态进程信息](#25-procpid--动态进程信息)
-   - [2.6 /lib/agents/ 和 /lib/skills/](#26-libagents-和-libskills)
-   - [2.7 VFSFile 接口和 OpenFlag 枚举](#27-vfsfile-接口和-openflag-枚举)
-   - [2.8 FD 分配规则](#28-fd-分配规则)
-3. [Agent 和 Skill 清单](#3-agent-和-skill-清单)
-   - [3.1 agent.yaml 字段说明](#31-agentyaml-字段说明)
-   - [3.2 AgentModels 子结构](#32-agentmodels-子结构)
-   - [3.3 instructions.md 格式](#33-instructionsmd-格式)
-   - [3.4 Agent 加载流程](#34-agent-加载流程)
-   - [3.5 SKILL.md 格式](#35-skillmd-格式)
-   - [3.6 SkillManifest 字段](#36-skillmanifest-字段)
-   - [3.7 渐进式加载策略](#37-渐进式加载策略)
-   - [3.8 完整示例](#38-完整示例)
-4. [CLI 命令参考](#4-cli-命令参考)
-   - [4.1 全局 Flags](#41-全局-flags)
-   - [4.2 rnix \[intent\] — 根命令](#42-rnix-intent--根命令)
-   - [4.3 rnix ps — 进程列表](#43-rnix-ps--进程列表)
-   - [4.4 rnix kill — 进程终止](#44-rnix-kill-pid--进程终止)
-   - [4.5 rnix strace — Syscall 追踪](#45-rnix-strace-pid--syscall-追踪)
-   - [4.6 rnix version — 版本信息](#46-rnix-version--版本信息)
-   - [4.7 JSON 响应格式](#47-json-响应格式)
-5. [IPC 架构](#5-ipc-架构)
-   - [5.1 Daemon 生命周期](#51-daemon-生命周期)
-   - [5.2 Socket 路径规则](#52-socket-路径规则)
-   - [5.3 NDJSON 协议](#53-ndjson-协议)
-   - [5.4 Method 枚举](#54-method-枚举)
-   - [5.5 StreamEvent 流式协议](#55-streamevent-流式协议)
-   - [5.6 连接复用语义](#56-连接复用语义)
-   - [5.7 Spawn 流式协议示例](#57-spawn-流式协议示例)
-   - [5.8 AttachDebug 流式协议示例](#58-attachdebug-流式协议示例)
-6. [错误处理与类型参考](#6-错误处理与类型参考)
-   - [6.1 ErrCode 枚举](#61-errcode-枚举)
+1. [Syscall Reference](#1-syscall-reference)
+   - [1.1 Overview](#11-overview)
+   - [1.2 Process Management (ProcessManager)](#12-process-management-processmanager)
+   - [1.3 Context Management (ContextManager)](#13-context-management-contextmanager)
+   - [1.4 File System (FileSystem)](#14-file-system-filesystem)
+   - [1.5 Debugging (Debugger)](#15-debugging-debugger)
+2. [VFS Path Specification](#2-vfs-path-specification)
+   - [2.1 Overview](#21-overview)
+   - [2.2 /dev/llm/claude — LLM Driver Device](#22-devllmclaude--llm-driver-device)
+   - [2.3 /dev/fs — Host Filesystem Device](#23-devfs--host-filesystem-device)
+   - [2.4 /dev/shell — Shell Execution Device](#24-devshell--shell-execution-device)
+   - [2.5 /proc/{pid}/ — Dynamic Process Information](#25-procpid--dynamic-process-information)
+   - [2.6 /lib/agents/ and /lib/skills/](#26-libagents-and-libskills)
+   - [2.7 VFSFile Interface and OpenFlag Enum](#27-vfsfile-interface-and-openflag-enum)
+   - [2.8 FD Allocation Rules](#28-fd-allocation-rules)
+3. [Agent and Skill Manifests](#3-agent-and-skill-manifests)
+   - [3.1 agent.yaml Field Descriptions](#31-agentyaml-field-descriptions)
+   - [3.2 AgentModels Sub-structure](#32-agentmodels-sub-structure)
+   - [3.3 instructions.md Format](#33-instructionsmd-format)
+   - [3.4 Agent Loading Process](#34-agent-loading-process)
+   - [3.5 SKILL.md Format](#35-skillmd-format)
+   - [3.6 SkillManifest Fields](#36-skillmanifest-fields)
+   - [3.7 Progressive Loading Strategy](#37-progressive-loading-strategy)
+   - [3.8 Complete Example](#38-complete-example)
+4. [CLI Command Reference](#4-cli-command-reference)
+   - [4.1 Global Flags](#41-global-flags)
+   - [4.2 rnix \[intent\] — Root Command](#42-rnix-intent--root-command)
+   - [4.3 rnix ps — Process List](#43-rnix-ps--process-list)
+   - [4.4 rnix kill — Process Termination](#44-rnix-kill-pid--process-termination)
+   - [4.5 rnix strace — Syscall Tracing](#45-rnix-strace-pid--syscall-tracing)
+   - [4.6 rnix version — Version Information](#46-rnix-version--version-information)
+   - [4.7 JSON Response Format](#47-json-response-format)
+5. [IPC Architecture](#5-ipc-architecture)
+   - [5.1 Daemon Lifecycle](#51-daemon-lifecycle)
+   - [5.2 Socket Path Rules](#52-socket-path-rules)
+   - [5.3 NDJSON Protocol](#53-ndjson-protocol)
+   - [5.4 Method Enum](#54-method-enum)
+   - [5.5 StreamEvent Streaming Protocol](#55-streamevent-streaming-protocol)
+   - [5.6 Connection Reuse Semantics](#56-connection-reuse-semantics)
+   - [5.7 Spawn Streaming Protocol Example](#57-spawn-streaming-protocol-example)
+   - [5.8 AttachDebug Streaming Protocol Example](#58-attachdebug-streaming-protocol-example)
+6. [Error Handling and Type Reference](#6-error-handling-and-type-reference)
+   - [6.1 ErrCode Enum](#61-errcode-enum)
    - [6.2 SyscallError](#62-syscallerror)
    - [6.3 VFSError](#63-vfserror)
    - [6.4 DriverError](#64-drivererror)
    - [6.5 ContextError](#65-contexterror)
-   - [6.6 基础类型](#66-基础类型)
-7. [进程模型参考](#7-进程模型参考)
-   - [7.1 ProcessState 状态机](#71-processstate-状态机)
-   - [7.2 状态转移规则](#72-状态转移规则)
-   - [7.3 ExitStatus 结构](#73-exitstatus-结构)
-   - [7.4 资源释放顺序](#74-资源释放顺序)
-   - [7.5 Signal 定义](#75-signal-定义)
+   - [6.6 Basic Types](#66-basic-types)
+7. [Process Model Reference](#7-process-model-reference)
+   - [7.1 ProcessState State Machine](#71-processstate-state-machine)
+   - [7.2 State Transition Rules](#72-state-transition-rules)
+   - [7.3 ExitStatus Structure](#73-exitstatus-structure)
+   - [7.4 Resource Release Order](#74-resource-release-order)
+   - [7.5 Signal Definitions](#75-signal-definitions)
 
 ---
 
-## 1. Syscall 参考
+## 1. Syscall Reference
 
-### 1.1 概述
+### 1.1 Overview
 
-Rnix 的内核接口按 4 个功能分类组织，共定义 15 个 syscall：
+The Rnix kernel interface is organized into 4 functional categories, defining a total of 15 syscalls:
 
-| 功能分类 | Syscall 数量 | 职责 |
+| Category | Syscall Count | Responsibilities |
 |---------|-------------|------|
-| 进程管理（ProcessManager） | 5 | 进程创建、终止、等待、查询 |
-| 上下文管理（ContextManager） | 4 | 上下文空间分配、读写、释放 |
-| 文件系统（FileSystem） | 5 | VFS 设备的打开、读写、关闭、元数据查询 |
-| 调试（Debugger） | 1 | Syscall 事件的自动记录与追踪 |
+| Process Management (ProcessManager) | 5 | Process creation, termination, waiting, querying |
+| Context Management (ContextManager) | 4 | Context space allocation, read/write, release |
+| File System (FileSystem) | 5 | VFS device open, read/write, close, metadata query |
+| Debugging (Debugger) | 1 | Automatic recording and tracing of syscall events |
 
-所有 syscall 在出错时返回结构化的 `*SyscallError`（见 [6.2 SyscallError](#62-syscallerror)），包含 syscall 名称、PID、设备路径、底层错误和分类错误码。
+All syscalls return a structured `*SyscallError` on failure (see [6.2 SyscallError](#62-syscallerror)), containing the syscall name, PID, device path, underlying error, and categorized error code.
 
-所有 syscall 的入口和出口会自动记录 `SyscallEvent` 到进程的 `DebugChan`（见 [1.5 调试](#15-调试debugger)）。
+All syscall entries and exits are automatically recorded as `SyscallEvent` to the process's `DebugChan` (see [1.5 Debugging](#15-debugging-debugger)).
 
-### 1.2 进程管理（ProcessManager）
+### 1.2 Process Management (ProcessManager)
 
 #### Spawn
 
-创建并启动一个智能体进程，自动进入推理循环。
+Creates and starts an agent process, which automatically enters the reasoning loop.
 
 ```
-签名: Spawn(intent string, agent *agents.AgentInfo, opts SpawnOpts) (PID, error)
+Signature: Spawn(intent string, agent *agents.AgentInfo, opts SpawnOpts) (PID, error)
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `intent` | `string` | 用户意图字符串 |
-| `agent` | `*agents.AgentInfo` | Agent 定义（可选，`nil` 表示通用模式） |
-| `opts` | `SpawnOpts` | 配置选项（见下表） |
+| `intent` | `string` | User intent string |
+| `agent` | `*agents.AgentInfo` | Agent definition (optional, `nil` means generic mode) |
+| `opts` | `SpawnOpts` | Configuration options (see table below) |
 
-**SpawnOpts 字段：**
+**SpawnOpts Fields:**
 
-| 字段 | 类型 | 默认值 | 说明 |
+| Field | Type | Default | Description |
 |------|------|--------|------|
-| `Model` | `string` | `""` | LLM 模型名称（优先级：CLI > Agent manifest > 驱动默认） |
-| `SystemPrompt` | `string` | `""` | 系统提示词（非空时追加到 Agent instructions 之后） |
-| `MaxTurns` | `int` | `0` | 最大推理步数（`0` = 使用默认值 `DefaultMaxSteps=10`） |
-| `TimeoutMs` | `int64` | `0` | 超时毫秒数 |
-| `ParentPID` | `PID` | `0` | 父进程 PID（`0` = 顶层 CLI 级 spawn） |
+| `Model` | `string` | `""` | LLM model name (priority: CLI > Agent manifest > driver default) |
+| `SystemPrompt` | `string` | `""` | System prompt (when non-empty, appended after Agent instructions) |
+| `MaxTurns` | `int` | `0` | Maximum reasoning steps (`0` = use default `DefaultMaxSteps=10`) |
+| `TimeoutMs` | `int64` | `0` | Timeout in milliseconds |
+| `ParentPID` | `PID` | `0` | Parent process PID (`0` = top-level CLI spawn) |
 
-**返回值：** `(PID, error)`
+**Return Value:** `(PID, error)`
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
-| `NOT_FOUND` | 父进程不存在（`ParentPID > 0` 但查找失败） |
-| `INTERNAL` | 上下文分配失败或系统提示词设置失败 |
-| `DRIVER` | LLM 设备 `/dev/llm/claude` 打开失败 |
+| `NOT_FOUND` | Parent process does not exist (`ParentPID > 0` but lookup failed) |
+| `INTERNAL` | Context allocation failed or system prompt setup failed |
+| `DRIVER` | LLM device `/dev/llm/claude` open failed |
 
-**行为：**
+**Behavior:**
 
-1. 创建 `Process`（分配 PID，记录 Skills、AllowedDevices）
-2. 维护父子关系（`ParentPID > 0` 时注册到父进程 Children 列表）
-3. 聚合 Agent 的 `SystemPrompt()` 和 `AllowedTools()`
-4. `CtxAlloc(64)` → 分配上下文空间
-5. `SetSystemPrompt` + `AppendMessage(user, intent)` → 初始化上下文
-6. `Open("/dev/llm/claude", O_RDWR)` → 获取 LLM 设备 FD
-7. 启动 goroutine → `Created → Running` → 进入 `reasonStep` 循环
-8. 触发 `OnSpawn` 回调通知
+1. Creates a `Process` (allocates PID, records Skills, AllowedDevices)
+2. Maintains parent-child relationship (registers to parent's Children list when `ParentPID > 0`)
+3. Aggregates the Agent's `SystemPrompt()` and `AllowedTools()`
+4. `CtxAlloc(64)` — allocates context space
+5. `SetSystemPrompt` + `AppendMessage(user, intent)` — initializes context
+6. `Open("/dev/llm/claude", O_RDWR)` — obtains LLM device FD
+7. Starts goroutine — `Created -> Running` — enters `reasonStep` loop
+8. Triggers `OnSpawn` callback notification
 
-**示例：**
+**Example:**
 
 ```go
-pid, err := kern.Spawn("分析代码", agentInfo, kernel.SpawnOpts{
+pid, err := kern.Spawn("Analyze code", agentInfo, kernel.SpawnOpts{
     Model:    "sonnet",
     MaxTurns: 5,
 })
@@ -145,33 +145,33 @@ pid, err := kern.Spawn("分析代码", agentInfo, kernel.SpawnOpts{
 
 #### Kill
 
-向目标进程发送终止信号。
+Sends a termination signal to the target process.
 
 ```
-签名: Kill(pid PID, signal Signal) error
+Signature: Kill(pid PID, signal Signal) error
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `pid` | `PID` | 目标进程 ID |
-| `signal` | `Signal` | `SIGTERM(1)` 或 `SIGKILL(2)` |
+| `pid` | `PID` | Target process ID |
+| `signal` | `Signal` | `SIGTERM(1)` or `SIGKILL(2)` |
 
-**返回值：** `error`
+**Return Value:** `error`
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
-| `NOT_FOUND` | 进程不存在 |
-| `INVALID` | 无效信号值（非 SIGTERM 或 SIGKILL） |
+| `NOT_FOUND` | Process does not exist |
+| `INVALID` | Invalid signal value (not SIGTERM or SIGKILL) |
 
-**幂等性：** Kill 已处于 Zombie 或 Dead 状态的进程为 no-op，不返回错误。
+**Idempotency:** Killing a process already in Zombie or Dead state is a no-op and does not return an error.
 
-**行为：** 调用进程的 `Cancel()` 取消 context，导致推理 goroutine 中的 LLM 调用被中断。
+**Behavior:** Calls the process's `Cancel()` to cancel the context, causing LLM calls in the reasoning goroutine to be interrupted.
 
-**示例：**
+**Example:**
 
 ```go
 err := kern.Kill(1, types.SIGTERM)
@@ -181,37 +181,37 @@ err := kern.Kill(1, types.SIGTERM)
 
 #### Wait
 
-阻塞等待目标进程进入 Zombie 状态，然后执行完整的资源释放序列。
+Blocks until the target process enters Zombie state, then performs the full resource release sequence.
 
 ```
-签名: Wait(pid PID) (ExitStatus, error)
+Signature: Wait(pid PID) (ExitStatus, error)
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `pid` | `PID` | 目标进程 ID |
+| `pid` | `PID` | Target process ID |
 
-**返回值：** `(ExitStatus, error)`
+**Return Value:** `(ExitStatus, error)`
 
-`ExitStatus` 结构：
+`ExitStatus` structure:
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |------|------|------|
-| `Code` | `int` | 退出码（`0` = 正常，非零 = 异常） |
-| `Reason` | `string` | 人类可读的退出原因 |
-| `Err` | `error` | 底层错误（正常退出时为 `nil`） |
+| `Code` | `int` | Exit code (`0` = normal, non-zero = abnormal) |
+| `Reason` | `string` | Human-readable exit reason |
+| `Err` | `error` | Underlying error (`nil` on normal exit) |
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
-| `NOT_FOUND` | 进程不存在 |
+| `NOT_FOUND` | Process does not exist |
 
-**行为：** 阻塞读取 `proc.Done` 通道，收到退出状态后触发 `reapProcess`（资源释放序列，见 [7.4 资源释放顺序](#74-资源释放顺序)）。`reapProcess` 通过 `sync.Once` 保证幂等——即使 Wait 和后台 reaper 并发调用也只执行一次。
+**Behavior:** Blocks reading from the `proc.Done` channel. After receiving the exit status, triggers `reapProcess` (resource release sequence, see [7.4 Resource Release Order](#74-resource-release-order)). `reapProcess` guarantees idempotency via `sync.Once` — even if Wait and the background reaper are called concurrently, it executes only once.
 
-**示例：**
+**Example:**
 
 ```go
 exit, err := kern.Wait(1)
@@ -222,34 +222,34 @@ fmt.Printf("exit code: %d, reason: %s\n", exit.Code, exit.Reason)
 
 #### ListProcs
 
-返回所有进程的快照列表。
+Returns a snapshot list of all processes.
 
 ```
-签名: ListProcs() []ProcInfo
+Signature: ListProcs() []ProcInfo
 ```
 
-**参数：** 无
+**Parameters:** None
 
-**返回值：** `[]ProcInfo`
+**Return Value:** `[]ProcInfo`
 
-**ProcInfo 结构：**
+**ProcInfo Structure:**
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |------|------|------|
-| `PID` | `PID` | 进程 ID |
-| `PPID` | `PID` | 父进程 ID |
-| `State` | `ProcessState` | 进程状态 |
-| `Intent` | `string` | 用户意图 |
-| `Skills` | `[]string` | Skill 名称列表 |
-| `TokensUsed` | `int` | 累计 token 消耗 |
-| `CreatedAt` | `time.Time` | 创建时间 |
-| `CtxID` | `CtxID` | 上下文 ID |
-| `Result` | `string` | 最终输出结果 |
-| `AllowedDevices` | `[]string` | 设备权限白名单 |
+| `PID` | `PID` | Process ID |
+| `PPID` | `PID` | Parent process ID |
+| `State` | `ProcessState` | Process state |
+| `Intent` | `string` | User intent |
+| `Skills` | `[]string` | Skill name list |
+| `TokensUsed` | `int` | Cumulative token consumption |
+| `CreatedAt` | `time.Time` | Creation time |
+| `CtxID` | `CtxID` | Context ID |
+| `Result` | `string` | Final output result |
+| `AllowedDevices` | `[]string` | Device permission whitelist |
 
-**行为：** 遍历进程表，对每个进程加锁读取快照。返回值是值拷贝，不包含对进程对象的引用。
+**Behavior:** Iterates the process table, acquires a lock on each process to read a snapshot. The return value is a value copy with no references to the process objects.
 
-**示例：**
+**Example:**
 
 ```go
 procs := kern.ListProcs()
@@ -262,47 +262,47 @@ for _, p := range procs {
 
 #### GetPID
 
-获取当前进程 PID，类似 Unix 的 `getpid(2)` 系统调用。
+Gets the current process PID, similar to Unix's `getpid(2)` system call.
 
 ```
-签名: Process.GetPID() PID
+Signature: Process.GetPID() PID
 ```
 
-**返回值：** 调用者自身的进程 PID（`types.PID`）。
+**Return Value:** The caller's own process PID (`types.PID`).
 
-**行为：** 作为 `Process` 的方法实现（而非 `ProcessManager` 接口方法），因为 PID 是进程自身的不可变属性。PID 在创建后不会改变，因此无需加锁。
+**Behavior:** Implemented as a method on `Process` (rather than a `ProcessManager` interface method), because PID is an immutable property of the process itself. PID does not change after creation, so no locking is required.
 
 ---
 
-### 1.3 上下文管理（ContextManager）
+### 1.3 Context Management (ContextManager)
 
 #### CtxAlloc
 
-分配一个新的上下文空间。
+Allocates a new context space.
 
 ```
-签名: CtxAlloc(size int) (CtxID, error)
+Signature: CtxAlloc(size int) (CtxID, error)
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `size` | `int` | 最大消息数量 |
+| `size` | `int` | Maximum number of messages |
 
-**返回值：** `(CtxID, error)`
+**Return Value:** `(CtxID, error)`
 
-**默认值：** `DefaultCtxSize = 64`
+**Default Value:** `DefaultCtxSize = 64`
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
 | `INTERNAL` | `size <= 0` |
 
-**行为：** 分配全局递增的 `CtxID`，创建空的 `Context` 对象（`Messages` 为空切片，`MaxSize` 为指定值）。
+**Behavior:** Allocates a globally incrementing `CtxID`, creates an empty `Context` object (`Messages` is an empty slice, `MaxSize` is the specified value).
 
-**示例：**
+**Example:**
 
 ```go
 cid, err := ctxMgr.CtxAlloc(64)
@@ -312,25 +312,25 @@ cid, err := ctxMgr.CtxAlloc(64)
 
 #### CtxRead
 
-读取上下文内容。
+Reads context content.
 
 ```
-签名: CtxRead(cid CtxID, offset int, length int) ([]byte, error)
+Signature: CtxRead(cid CtxID, offset int, length int) ([]byte, error)
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `cid` | `CtxID` | 上下文 ID |
-| `offset` | `int` | 消息起始索引（0-based） |
-| `length` | `int` | 读取消息数量 |
+| `cid` | `CtxID` | Context ID |
+| `offset` | `int` | Message start index (0-based) |
+| `length` | `int` | Number of messages to read |
 
-**特殊用法：** `offset=0, length=0` 读取全部内容。
+**Special Usage:** `offset=0, length=0` reads all content.
 
-**返回值：** `([]byte, error)` — JSON 序列化的上下文
+**Return Value:** `([]byte, error)` — JSON-serialized context
 
-**返回格式：**
+**Return Format:**
 
 ```json
 {
@@ -342,86 +342,86 @@ cid, err := ctxMgr.CtxAlloc(64)
 }
 ```
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
-| `NOT_FOUND` | 上下文不存在 |
-| `INTERNAL` | JSON 序列化失败 |
+| `NOT_FOUND` | Context does not exist |
+| `INTERNAL` | JSON serialization failed |
 
-**示例：**
+**Example:**
 
 ```go
-data, err := ctxMgr.CtxRead(cid, 0, 0) // 读取全部
+data, err := ctxMgr.CtxRead(cid, 0, 0) // Read all
 ```
 
 ---
 
 #### CtxWrite
 
-向上下文写入消息。
+Writes a message to the context.
 
 ```
-签名: CtxWrite(cid CtxID, offset int, data []byte) error
+Signature: CtxWrite(cid CtxID, offset int, data []byte) error
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `cid` | `CtxID` | 上下文 ID |
-| `offset` | `int` | `0` = 追加新消息；`1..N` = 覆写第 `offset` 个消息（1-based 索引，对应 `Messages[offset-1]`） |
-| `data` | `[]byte` | JSON 序列化的 `Message` |
+| `cid` | `CtxID` | Context ID |
+| `offset` | `int` | `0` = append new message; `1..N` = overwrite the `offset`-th message (1-based index, corresponds to `Messages[offset-1]`) |
+| `data` | `[]byte` | JSON-serialized `Message` |
 
-**Message 格式：**
+**Message Format:**
 
 ```json
 {"role": "system|user|assistant|tool", "content": "...", "tool_call_id": "..."}
 ```
 
-**Role 枚举：** `system`、`user`、`assistant`、`tool`
+**Role Enum:** `system`, `user`, `assistant`, `tool`
 
-**返回值：** `error`
+**Return Value:** `error`
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
-| `NOT_FOUND` | 上下文不存在 |
-| `INTERNAL` | JSON 解析失败、容量已满（`offset=0` 时）、offset 越界（`offset < 1` 或 `offset > len(Messages)`） |
+| `NOT_FOUND` | Context does not exist |
+| `INTERNAL` | JSON parsing failed, capacity full (when `offset=0`), offset out of bounds (`offset < 1` or `offset > len(Messages)`) |
 
-**示例：**
+**Example:**
 
 ```go
-msg := `{"role": "user", "content": "分析代码"}`
-err := ctxMgr.CtxWrite(cid, 0, []byte(msg)) // 追加消息
+msg := `{"role": "user", "content": "Analyze code"}`
+err := ctxMgr.CtxWrite(cid, 0, []byte(msg)) // Append message
 ```
 
 ---
 
 #### CtxFree
 
-释放上下文空间。
+Releases context space.
 
 ```
-签名: CtxFree(cid CtxID) error
+Signature: CtxFree(cid CtxID) error
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `cid` | `CtxID` | 上下文 ID |
+| `cid` | `CtxID` | Context ID |
 
-**返回值：** `error`
+**Return Value:** `error`
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
-| `NOT_FOUND` | 上下文不存在 |
+| `NOT_FOUND` | Context does not exist |
 
-**示例：**
+**Example:**
 
 ```go
 err := ctxMgr.CtxFree(cid)
@@ -429,40 +429,40 @@ err := ctxMgr.CtxFree(cid)
 
 ---
 
-### 1.4 文件系统（FileSystem）
+### 1.4 File System (FileSystem)
 
 #### Open
 
-打开 VFS 设备路径，返回文件描述符。
+Opens a VFS device path and returns a file descriptor.
 
 ```
-签名: Open(pid PID, path string, flags OpenFlag) (FD, error)
+Signature: Open(pid PID, path string, flags OpenFlag) (FD, error)
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `pid` | `PID` | 进程 ID |
-| `path` | `string` | VFS 路径（如 `/dev/llm/claude`） |
-| `flags` | `OpenFlag` | `O_RDONLY(0)`、`O_WRONLY(1)`、`O_RDWR(2)` |
+| `pid` | `PID` | Process ID |
+| `path` | `string` | VFS path (e.g., `/dev/llm/claude`) |
+| `flags` | `OpenFlag` | `O_RDONLY(0)`, `O_WRONLY(1)`, `O_RDWR(2)` |
 
-**返回值：** `(FD, error)` — FD 从 3 开始递增
+**Return Value:** `(FD, error)` — FD starts from 3 and increments
 
-**路径匹配规则：**
+**Path Matching Rules:**
 
-1. **精确匹配** — 路径完全一致（如 `/dev/shell`）
-2. **最长前缀匹配** — 选择最长前缀，剩余部分作为 subpath 传给设备工厂
-   - 例：`/dev/fs/path/to/file` → 匹配 `/dev/fs`，subpath = `/path/to/file`
+1. **Exact match** — path matches exactly (e.g., `/dev/shell`)
+2. **Longest prefix match** — selects the longest prefix, remaining part is passed as subpath to the device factory
+   - Example: `/dev/fs/path/to/file` -> matches `/dev/fs`, subpath = `/path/to/file`
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
-| `NOT_FOUND` | 设备不存在 |
-| `DRIVER` | 设备工厂创建文件失败 |
+| `NOT_FOUND` | Device does not exist |
+| `DRIVER` | Device factory failed to create file |
 
-**示例：**
+**Example:**
 
 ```go
 fd, err := v.Open(pid, "/dev/llm/claude", vfs.O_RDWR)
@@ -472,30 +472,30 @@ fd, err := v.Open(pid, "/dev/llm/claude", vfs.O_RDWR)
 
 #### Read
 
-从文件描述符读取数据。
+Reads data from a file descriptor.
 
 ```
-签名: Read(pid PID, fd FD, length int) ([]byte, error)
+Signature: Read(pid PID, fd FD, length int) ([]byte, error)
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `pid` | `PID` | 进程 ID |
-| `fd` | `FD` | 文件描述符 |
-| `length` | `int` | 最大读取字节数 |
+| `pid` | `PID` | Process ID |
+| `fd` | `FD` | File descriptor |
+| `length` | `int` | Maximum number of bytes to read |
 
-**返回值：** `([]byte, error)`
+**Return Value:** `([]byte, error)`
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
-| `NOT_FOUND` | FD 无效（进程无 FDTable 或 FD 不存在） |
-| `DRIVER` | 驱动读取失败 |
+| `NOT_FOUND` | FD is invalid (process has no FDTable or FD does not exist) |
+| `DRIVER` | Driver read failed |
 
-**示例：**
+**Example:**
 
 ```go
 data, err := v.Read(pid, fd, 65536)
@@ -505,67 +505,67 @@ data, err := v.Read(pid, fd, 65536)
 
 #### Write
 
-向文件描述符写入数据。
+Writes data to a file descriptor.
 
 ```
-签名: Write(ctx context.Context, pid PID, fd FD, data []byte) error
+Signature: Write(ctx context.Context, pid PID, fd FD, data []byte) error
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `ctx` | `context.Context` | 支持取消（Kill 信号中断 LLM 调用） |
-| `pid` | `PID` | 进程 ID |
-| `fd` | `FD` | 文件描述符 |
-| `data` | `[]byte` | 写入数据 |
+| `ctx` | `context.Context` | Supports cancellation (Kill signal interrupts LLM calls) |
+| `pid` | `PID` | Process ID |
+| `fd` | `FD` | File descriptor |
+| `data` | `[]byte` | Data to write |
 
-**返回值：** `error`
+**Return Value:** `error`
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
-| `NOT_FOUND` | FD 无效 |
-| `DRIVER` | 驱动写入失败 |
+| `NOT_FOUND` | FD is invalid |
+| `DRIVER` | Driver write failed |
 
-> `Write` 接受 `context.Context` 参数以支持 Kill 时中断正在进行的 LLM 调用。这是 VFS 中唯一需要 `ctx` 参数的操作。
+> `Write` accepts a `context.Context` parameter to support interrupting in-progress LLM calls during Kill. This is the only VFS operation that requires a `ctx` parameter.
 
-**示例：**
+**Example:**
 
 ```go
-err := v.Write(ctx, pid, fd, []byte(`{"intent":"分析代码"}`))
+err := v.Write(ctx, pid, fd, []byte(`{"intent":"Analyze code"}`))
 ```
 
 ---
 
 #### Close
 
-关闭文件描述符。
+Closes a file descriptor.
 
 ```
-签名: Close(pid PID, fd FD) error
+Signature: Close(pid PID, fd FD) error
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `pid` | `PID` | 进程 ID |
-| `fd` | `FD` | 文件描述符 |
+| `pid` | `PID` | Process ID |
+| `fd` | `FD` | File descriptor |
 
-**返回值：** `error`
+**Return Value:** `error`
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
-| `NOT_FOUND` | FD 无效 |
-| `DRIVER` | 驱动关闭失败 |
+| `NOT_FOUND` | FD is invalid |
+| `DRIVER` | Driver close failed |
 
-**行为：** 调用设备的 `Close()` 方法并从 FDTable 中原子移除 FD。
+**Behavior:** Calls the device's `Close()` method and atomically removes the FD from the FDTable.
 
-**示例：**
+**Example:**
 
 ```go
 err := v.Close(pid, fd)
@@ -575,37 +575,37 @@ err := v.Close(pid, fd)
 
 #### Stat
 
-查询路径元数据。
+Queries path metadata.
 
 ```
-签名: Stat(path string) (FileStat, error)
+Signature: Stat(path string) (FileStat, error)
 ```
 
-**参数：**
+**Parameters:**
 
-| 参数 | 类型 | 说明 |
+| Parameter | Type | Description |
 |------|------|------|
-| `path` | `string` | VFS 路径 |
+| `path` | `string` | VFS path |
 
-**返回值：** `(FileStat, error)`
+**Return Value:** `(FileStat, error)`
 
-**FileStat 结构：**
+**FileStat Structure:**
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |------|------|------|
-| `Name` | `string` | 路径名称 |
-| `Size` | `int64` | 文件大小 |
-| `IsDevice` | `bool` | 是否为设备 |
-| `DevicePath` | `string` | 匹配的设备注册路径 |
+| `Name` | `string` | Path name |
+| `Size` | `int64` | File size |
+| `IsDevice` | `bool` | Whether it is a device |
+| `DevicePath` | `string` | Matched device registration path |
 
-**错误码：**
+**Error Codes:**
 
-| 错误码 | 触发条件 |
+| Error Code | Trigger Condition |
 |--------|---------|
-| `NOT_FOUND` | 设备不存在 |
-| `DRIVER` | 元数据获取失败 |
+| `NOT_FOUND` | Device does not exist |
+| `DRIVER` | Metadata retrieval failed |
 
-**示例：**
+**Example:**
 
 ```go
 stat, err := v.Stat("/dev/llm/claude")
@@ -613,82 +613,83 @@ stat, err := v.Stat("/dev/llm/claude")
 
 ---
 
-### 1.5 调试（Debugger）
+### 1.5 Debugging (Debugger)
 
-#### SyscallEvent 自动记录
+#### SyscallEvent Automatic Recording
 
-所有 syscall 的入口和出口会自动记录为 `SyscallEvent`，通过进程的 `DebugChan`（缓冲 256）传递。
+All syscall entries and exits are automatically recorded as `SyscallEvent`, delivered through the process's `DebugChan` (buffer size 256).
 
-**事件创建：**
+**Event Creation:**
 
 ```go
 event := debug.NewEvent(pid, createdAt, syscall, args)
 ```
 
-**事件完成：**
+**Event Completion:**
 
 ```go
 debug.CompleteEvent(&event, result, err, duration)
 ```
 
-**SyscallEvent 结构：**
+**SyscallEvent Structure:**
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |------|------|------|
-| `Timestamp` | `time.Duration` | 相对于进程创建时间的偏移量 |
-| `PID` | `PID` | 进程 ID |
-| `Syscall` | `string` | 与接口方法名一致（`"Spawn"`、`"Open"`、`"CtxWrite"` 等） |
-| `Args` | `map[string]any` | 调用参数快照 |
-| `Result` | `any` | 返回值 |
-| `Err` | `error` | 错误信息 |
-| `Duration` | `time.Duration` | 执行耗时 |
+| `Timestamp` | `time.Duration` | Offset relative to process creation time |
+| `PID` | `PID` | Process ID |
+| `Syscall` | `string` | Matches the interface method name (`"Spawn"`, `"Open"`, `"CtxWrite"`, etc.) |
+| `Args` | `map[string]any` | Call parameter snapshot |
+| `Result` | `any` | Return value |
+| `Err` | `error` | Error information |
+| `Duration` | `time.Duration` | Execution duration |
 
-**传递机制：**
+**Delivery Mechanism:**
 
-- 通过 `debug.EmitEvent(ch, event)` 非阻塞写入 `DebugChan`
-- 缓冲满时静默丢弃（不阻塞 syscall 执行）
-- `DebugChan` 为 `nil` 时跳过（零开销）
-- 关闭前先将 `proc.DebugChan` 置 `nil`（持锁操作），防止并发写入
+- Written non-blockingly to `DebugChan` via `debug.EmitEvent(ch, event)`
+- Silently dropped when the buffer is full (does not block syscall execution)
+- Skipped when `DebugChan` is `nil` (zero overhead)
+- Before closing, `proc.DebugChan` is set to `nil` first (under lock) to prevent concurrent writes
 
-**消费方式：** 通过 IPC `attach_debug` 方法流式获取（见 [5.8 AttachDebug 流式协议示例](#58-attachdebug-流式协议示例)）。
+**Consumption:** Retrieved via streaming through the IPC `attach_debug` method (see [5.8 AttachDebug Streaming Protocol Example](#58-attachdebug-streaming-protocol-example)).
 
 ---
 
-## 2. VFS 路径规范
+## 2. VFS Path Specification
 
-### 2.1 概述
+### 2.1 Overview
 
-VFS（虚拟文件系统）是 Rnix 的统一资源抽象层，遵循 Unix "一切皆文件"的哲学。所有外部资源通过 VFS 设备路径访问。
+VFS (Virtual File System) is Rnix's unified resource abstraction layer, following the Unix "everything is a file" philosophy. All external resources are accessed through VFS device paths.
 
-**设备模型：** 每个 VFS 路径映射到一个 `VFSFileFactory`，由 `DeviceRegistry` 管理注册和查找。
+**Device Model:** Each VFS path maps to a `VFSFileFactory`, managed by `DeviceRegistry` for registration and lookup.
 
-**路径匹配机制：**
+**Path Matching Mechanism:**
 
-1. **精确匹配** — 路径与注册路径完全一致
-2. **最长前缀匹配** — 路径以注册路径开头，选择最长前缀；剩余部分作为 `subpath` 传递给设备工厂
+1. **Exact match** — path matches the registered path exactly
+2. **Longest prefix match** — path starts with a registered path, the longest prefix is selected; the remaining part is passed as `subpath` to the device factory
 
-**已注册设备路径：**
+**Registered Device Paths:**
 
-| VFS 路径 | 驱动模块 | 匹配方式 | 说明 |
+| VFS Path | Driver Module | Match Type | Description |
 |---------|---------|---------|------|
-| `/dev/llm/claude` | `drivers/llm` | 精确匹配 | Claude Code CLI 调用 |
-| `/dev/fs` | `drivers/fs` | 前缀匹配 | 宿主文件系统（subpath 作为文件路径） |
-| `/dev/shell` | `drivers/shell` | 精确匹配 | Shell 命令执行 |
-| `/proc` | `vfs/proc.go` | 前缀匹配 | 动态进程信息 |
+| `/dev/llm/claude` | `drivers/llm` | Exact match | Claude Code CLI invocation |
+| `/dev/llm/cursor` | `drivers/llm` | Exact match | Cursor CLI invocation |
+| `/dev/fs` | `drivers/fs` | Prefix match | Host filesystem (subpath used as file path) |
+| `/dev/shell` | `drivers/shell` | Exact match | Shell command execution |
+| `/proc` | `vfs/proc.go` | Prefix match | Dynamic process information |
 
-设备注册在 daemon 启动时通过依赖注入完成（`cmd/rnix/main.go`）。
+Device registration is completed during daemon startup via dependency injection (`cmd/rnix/main.go`).
 
-### 2.2 /dev/llm/claude — LLM 驱动设备
+### 2.2 /dev/llm/claude — LLM Driver Device
 
-**路径：** `/dev/llm/claude`
-**驱动：** `drivers/llm.ClaudeCliDriver`
-**匹配：** 精确匹配
+**Path:** `/dev/llm/claude`
+**Driver:** `drivers/llm.ClaudeCliDriver`
+**Match:** Exact match
 
-**Write 请求格式（JSON）：**
+**Write Request Format (JSON):**
 
 ```json
 {
-  "intent": "分析代码",
+  "intent": "Analyze code",
   "system_prompt": "...",
   "model": "sonnet",
   "max_turns": 1,
@@ -697,69 +698,86 @@ VFS（虚拟文件系统）是 Rnix 的统一资源抽象层，遵循 Unix "一�
 }
 ```
 
-**Read 响应格式（JSON）：**
+**Read Response Format (JSON):**
 
 ```json
 {
-  "content": "LLM 响应内容",
+  "content": "LLM response content",
   "tokens_used": 1234
 }
 ```
 
-**底层实现：** 每次 Write 调用 = 一次 `exec.CommandContext` 执行 `claude -p` CLI。支持 context 取消（Kill 信号中断）。
+**Underlying Implementation:** Each Write call = one `exec.CommandContext` execution of the `claude -p` CLI. Supports context cancellation (Kill signal interruption).
 
-### 2.3 /dev/fs — 宿主文件系统设备
+### 2.3 /dev/llm/cursor — Cursor CLI Driver Device
 
-**路径：** `/dev/fs`
-**驱动：** `drivers/fs.HostFSDriver`
-**匹配：** 前缀匹配
+**Path:** `/dev/llm/cursor`
+**Driver:** `drivers/llm.CursorCliDriver`
+**Match:** Exact match
 
-**路径解析：** `/dev/fs/path/to/file` → subpath = `/path/to/file` → 映射到宿主文件系统路径
+**Write Request Format (JSON):** Same as `/dev/llm/claude`.
 
-**操作：**
+**Differences:**
+- Underlying call uses `agent --print` CLI (Cursor CLI)
+- No `--system-prompt` parameter; system prompt is concatenated into the prompt with a `[System Instructions]` marker
+- No `--max-turns` parameter (silently ignored)
+- stream-json event format includes four types: `system` (init), `assistant`, `tool_call`, `result`
+- Requires `CURSOR_API_KEY` environment variable
 
-- **Write** — 写入操作参数（文件路径、读取请求等）
-- **Read** — 读取文件内容
-- **Close** — 释放资源
+**Provider Selection:** Specified via `--provider` CLI flag or agent.yaml `models.provider` field. See section 4.2 for details.
 
-### 2.4 /dev/shell — Shell 执行设备
+### 2.3 /dev/fs — Host Filesystem Device
 
-**路径：** `/dev/shell`
-**驱动：** `drivers/shell.ShellDriver`
-**匹配：** 精确匹配
+**Path:** `/dev/fs`
+**Driver:** `drivers/fs.HostFSDriver`
+**Match:** Prefix match
 
-**操作：**
+**Path Resolution:** `/dev/fs/path/to/file` -> subpath = `/path/to/file` -> maps to host filesystem path
 
-- **Write** — 写入 Shell 命令
-- **Read** — 读取命令执行结果
-- **Close** — 释放资源
+**Operations:**
 
-**底层实现：** 通过 `exec.CommandContext` 执行 Shell 命令，继承当前用户权限。
+- **Write** — Write operation parameters (file path, read requests, etc.)
+- **Read** — Read file content
+- **Close** — Release resources
 
-### 2.5 /proc/{pid}/ — 动态进程信息
+### 2.4 /dev/shell — Shell Execution Device
 
-**路径：** `/proc`
-**驱动：** `vfs.ProcFS`
-**匹配：** 前缀匹配
+**Path:** `/dev/shell`
+**Driver:** `drivers/shell.ShellDriver`
+**Match:** Exact match
 
-**只读文件系统** — Write 操作返回 `PERMISSION` 错误。
+**Operations:**
 
-**子路径：**
+- **Write** — Write shell commands
+- **Read** — Read command execution results
+- **Close** — Release resources
 
-| 子路径 | 格式 | 内容 |
+**Underlying Implementation:** Executes shell commands via `exec.CommandContext`, inheriting the current user's permissions.
+
+### 2.5 /proc/{pid}/ — Dynamic Process Information
+
+**Path:** `/proc`
+**Driver:** `vfs.ProcFS`
+**Match:** Prefix match
+
+**Read-only filesystem** — Write operations return a `PERMISSION` error.
+
+**Sub-paths:**
+
+| Sub-path | Format | Content |
 |--------|------|------|
-| `/proc/{pid}/status` | JSON | 进程状态快照 |
-| `/proc/{pid}/intent` | 纯文本 | 原始意图字符串 |
-| `/proc/{pid}/context` | 纯文本 | 上下文摘要 |
+| `/proc/{pid}/status` | JSON | Process status snapshot |
+| `/proc/{pid}/intent` | Plain text | Original intent string |
+| `/proc/{pid}/context` | Plain text | Context summary |
 
-**`/proc/{pid}/status` JSON 格式：**
+**`/proc/{pid}/status` JSON Format:**
 
 ```json
 {
     "pid": 1,
     "ppid": 0,
     "state": "running",
-    "intent": "分析代码",
+    "intent": "Analyze code",
     "skills": ["code-analysis"],
     "tokens_used": 456,
     "elapsed_ms": 3200,
@@ -767,32 +785,32 @@ VFS（虚拟文件系统）是 Rnix 的统一资源抽象层，遵循 Unix "一�
 }
 ```
 
-**路径解析规则：** subpath 格式为 `/{pid}/{file}`，其中 `{file}` 必须是 `status`、`intent` 或 `context` 之一。
+**Path Parsing Rules:** The subpath format is `/{pid}/{file}`, where `{file}` must be one of `status`, `intent`, or `context`.
 
-**快照语义：** 内容在 Open 时生成快照，后续 Read 读取快照数据。
+**Snapshot Semantics:** Content is generated as a snapshot at Open time; subsequent Read operations read the snapshot data.
 
-### 2.6 /lib/agents/ 和 /lib/skills/
+### 2.6 /lib/agents/ and /lib/skills/
 
-这两个路径是 Agent 和 Skill 的文件系统存储位置，由 `AgentLoader` 和 `SkillLoader` 直接读取（不通过 VFS 设备机制）。
+These two paths are the filesystem storage locations for Agents and Skills, read directly by `AgentLoader` and `SkillLoader` (not through the VFS device mechanism).
 
-**Agent 目录结构：**
+**Agent Directory Structure:**
 
 ```
 lib/agents/{agent-name}/
-├── agent.yaml        # Agent 配置清单
-└── instructions.md   # Agent 角色指令（系统提示词）
+├── agent.yaml        # Agent configuration manifest
+└── instructions.md   # Agent role instructions (system prompt)
 ```
 
-**Skill 目录结构：**
+**Skill Directory Structure:**
 
 ```
 lib/skills/{skill-name}/
-└── SKILL.md          # Skill 定义（YAML frontmatter + Markdown body）
+└── SKILL.md          # Skill definition (YAML frontmatter + Markdown body)
 ```
 
-### 2.7 VFSFile 接口和 OpenFlag 枚举
+### 2.7 VFSFile Interface and OpenFlag Enum
 
-所有设备驱动必须实现 `VFSFile` 接口：
+All device drivers must implement the `VFSFile` interface:
 
 ```go
 type VFSFile interface {
@@ -803,127 +821,129 @@ type VFSFile interface {
 }
 ```
 
-**VFSFileFactory 签名：**
+**VFSFileFactory Signature:**
 
 ```go
 type VFSFileFactory func(subpath string, flags OpenFlag) (VFSFile, error)
 ```
 
-**OpenFlag 枚举：**
+**OpenFlag Enum:**
 
-| 常量 | 值 | 说明 |
+| Constant | Value | Description |
 |------|-----|------|
-| `O_RDONLY` | `0` | 只读 |
-| `O_WRONLY` | `1` | 只写 |
-| `O_RDWR` | `2` | 读写 |
+| `O_RDONLY` | `0` | Read-only |
+| `O_WRONLY` | `1` | Write-only |
+| `O_RDWR` | `2` | Read-write |
 
-### 2.8 FD 分配规则
+### 2.8 FD Allocation Rules
 
-- **起始值：** 3（0/1/2 预留给 stdin/stdout/stderr）
-- **分配方式：** 每进程独立 `fdTable`，内部 `nextFD` 计数器单调递增
-- **作用域：** 每个 `Process` 拥有独立的 `FDTable`
-- **释放：** `Close` 从 `fdTable` 中原子移除 FD；进程退出时 `CloseAll` 关闭所有打开的 FD
+- **Starting value:** 3 (0/1/2 reserved for stdin/stdout/stderr)
+- **Allocation method:** Per-process independent `fdTable` with an internal `nextFD` counter that increments monotonically
+- **Scope:** Each `Process` has its own independent `FDTable`
+- **Release:** `Close` atomically removes the FD from `fdTable`; on process exit, `CloseAll` closes all open FDs
 
 ---
 
-## 3. Agent 和 Skill 清单
+## 3. Agent and Skill Manifests
 
-### 3.1 agent.yaml 字段说明
+### 3.1 agent.yaml Field Descriptions
 
-`AgentManifest` 结构定义了 Agent 的配置清单：
+The `AgentManifest` structure defines the Agent's configuration manifest:
 
-| 字段 | 类型 | 是否必需 | 说明 |
+| Field | Type | Required | Description |
 |------|------|---------|------|
-| `name` | `string` | 必需 | Agent 名称（唯一标识符） |
-| `description` | `string` | 可选 | Agent 描述 |
-| `models` | `AgentModels` | 可选 | LLM 模型偏好 |
-| `context_budget` | `int` | 可选 | 上下文预算（token 数） |
-| `skills` | `[]string` | 可选 | 引用的 Skill 名称列表 |
+| `name` | `string` | Required | Agent name (unique identifier) |
+| `description` | `string` | Optional | Agent description |
+| `models` | `AgentModels` | Optional | LLM model preferences |
+| `context_budget` | `int` | Optional | Context budget (token count) |
+| `skills` | `[]string` | Optional | Referenced Skill name list |
 
-### 3.2 AgentModels 子结构
+### 3.2 AgentModels Sub-structure
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |------|------|------|
-| `provider` | `string` | LLM 提供商（如 `claude`） |
-| `preferred` | `string` | 首选模型（如 `sonnet`） |
-| `fallback` | `string` | 备用模型（如 `haiku`） |
+| `provider` | `string` | LLM provider (`claude` (default) or `cursor`) |
+| `preferred` | `string` | Preferred model (e.g., `sonnet`) |
+| `fallback` | `string` | Fallback model (e.g., `haiku`) |
 
-**模型选择优先级：** CLI `--model` flag > Agent manifest `preferred` > 驱动默认值
+**Model Selection Priority:** CLI `--model` flag > Agent manifest `preferred` > driver default
 
-### 3.3 instructions.md 格式
+**Provider Selection Priority:** CLI `--provider` flag > Agent manifest `models.provider` > default `claude`
 
-纯 Markdown 文件，包含 Agent 的角色定义和系统提示词。内容将作为 LLM 系统提示词的一部分。
+### 3.3 instructions.md Format
 
-**拼接规则：** `SystemPrompt() = Agent instructions.md + "\n\n" + Skill A body + "\n\n" + Skill B body + ...`
+A plain Markdown file containing the Agent's role definition and system prompt. The content becomes part of the LLM system prompt.
 
-### 3.4 Agent 加载流程
+**Concatenation Rule:** `SystemPrompt() = Agent instructions.md + "\n\n" + Skill A body + "\n\n" + Skill B body + ...`
 
-`AgentLoader.Load(agentName)` 执行以下步骤：
+### 3.4 Agent Loading Process
 
-1. **路径安全检查** — 防止目录遍历攻击（检查路径不逃逸出基目录）
-2. **读取 agent.yaml** — 解析为 `AgentManifest`
-3. **验证必需字段** — `name` 字段必须非空
-4. **读取 instructions.md** — 作为系统提示词文本
-5. **加载引用的 Skills** — 遍历 `manifest.Skills`，对每个调用 `skillLoader.LoadFull(skillName)`
-6. **返回 AgentInfo** — 包含 `Manifest`、`Instructions`、`Skills` 三部分
+`AgentLoader.Load(agentName)` performs the following steps:
 
-### 3.5 SKILL.md 格式
+1. **Path safety check** — Prevents directory traversal attacks (verifies the path does not escape the base directory)
+2. **Read agent.yaml** — Parses into `AgentManifest`
+3. **Validate required fields** — `name` field must be non-empty
+4. **Read instructions.md** — Used as system prompt text
+5. **Load referenced Skills** — Iterates `manifest.Skills`, calling `skillLoader.LoadFull(skillName)` for each
+6. **Return AgentInfo** — Contains three parts: `Manifest`, `Instructions`, `Skills`
 
-SKILL.md 采用 Agent Skills 行业标准格式：YAML frontmatter + Markdown body。
+### 3.5 SKILL.md Format
+
+SKILL.md follows the Agent Skills industry standard format: YAML frontmatter + Markdown body.
 
 ```markdown
 ---
 name: skill-name
 description: >
-  多行描述文本
+  Multi-line description text
 allowed-tools: /dev/fs /dev/shell
 metadata:
   key: value
 ---
 
-# Markdown Body（程序性知识）
+# Markdown Body (Procedural Knowledge)
 
-操作指南、工作流描述等内容...
+Operation guides, workflow descriptions, etc.
 ```
 
-**解析规则：**
+**Parsing Rules:**
 
-1. 文件必须以 `---` 开头
-2. 两个 `---` 之间为 YAML frontmatter
-3. 第二个 `---` 之后为 Markdown body
-4. 不以 `---` 开头 → 错误 `"SKILL.md must start with ---"`
-5. 缺少结束 `---` → 错误 `"SKILL.md missing closing ---"`
+1. File must start with `---`
+2. Content between the two `---` markers is the YAML frontmatter
+3. Content after the second `---` is the Markdown body
+4. Not starting with `---` -> error `"SKILL.md must start with ---"`
+5. Missing closing `---` -> error `"SKILL.md missing closing ---"`
 
-### 3.6 SkillManifest 字段
+### 3.6 SkillManifest Fields
 
-| 字段 | YAML 键 | 类型 | 是否必需 | 说明 |
+| Field | YAML Key | Type | Required | Description |
 |------|---------|------|---------|------|
-| `Name` | `name` | `string` | 必需 | Skill 名称 |
-| `Description` | `description` | `string` | 可选 | Skill 描述 |
-| `AllowedToolsRaw` | `allowed-tools` | `string` | 关键字段 | 空格分隔的 VFS 设备路径 |
-| `Metadata` | `metadata` | `map[string]string` | 可选 | 任意键值对 |
+| `Name` | `name` | `string` | Required | Skill name |
+| `Description` | `description` | `string` | Optional | Skill description |
+| `AllowedToolsRaw` | `allowed-tools` | `string` | Key field | Space-separated VFS device paths |
+| `Metadata` | `metadata` | `map[string]string` | Optional | Arbitrary key-value pairs |
 
-**AllowedTools() 解析：**
+**AllowedTools() Parsing:**
 
-- `"/dev/fs /dev/shell"` → `["/dev/fs", "/dev/shell"]`
-- 空字符串 → `nil`（无限制，可访问所有设备）
+- `"/dev/fs /dev/shell"` -> `["/dev/fs", "/dev/shell"]`
+- Empty string -> `nil` (no restriction, can access all devices)
 
-### 3.7 渐进式加载策略
+### 3.7 Progressive Loading Strategy
 
-Rnix 对 Skill 提供两级加载粒度：
+Rnix provides two levels of loading granularity for Skills:
 
-| 方法 | 加载内容 | 估算 Token | 用途 |
+| Method | Loaded Content | Estimated Tokens | Use Case |
 |------|---------|-----------|------|
-| `LoadMetadata(skillName)` | 仅 YAML frontmatter | ~100 | 发现阶段（枚举名称、描述、权限） |
-| `LoadFull(skillName)` | frontmatter + Markdown body | < 5000 | 激活阶段（注入系统提示词） |
+| `LoadMetadata(skillName)` | YAML frontmatter only | ~100 | Discovery phase (enumerate names, descriptions, permissions) |
+| `LoadFull(skillName)` | frontmatter + Markdown body | < 5000 | Activation phase (inject into system prompt) |
 
-### 3.8 完整示例
+### 3.8 Complete Example
 
-**agent.yaml 示例（`lib/agents/code-analyst/agent.yaml`）：**
+**agent.yaml Example (`lib/agents/code-analyst/agent.yaml`):**
 
 ```yaml
 name: code-analyst
-description: "分析代码质量、识别潜在问题并提供改进建议的智能体"
+description: "Agent that analyzes code quality, identifies issues, and provides improvement suggestions"
 models:
   provider: claude
   preferred: sonnet
@@ -933,7 +953,7 @@ skills:
   - code-analysis
 ```
 
-**SKILL.md 示例（`lib/skills/code-analysis/SKILL.md`）：**
+**SKILL.md Example (`lib/skills/code-analysis/SKILL.md`):**
 
 ```markdown
 ---
@@ -955,69 +975,101 @@ metadata:
 
 ---
 
-## 4. CLI 命令参考
+## 4. CLI Command Reference
 
-### 4.1 全局 Flags
+### 4.1 Global Flags
 
-| Flag | 短选项 | 类型 | 说明 |
+| Flag | Short | Type | Description |
 |------|--------|------|------|
-| `--json` | — | `bool` | JSON 格式输出 |
-| `--verbose` | `-v` | `bool` | 详细输出 |
-| `--quiet` | `-q` | `bool` | 静默输出 |
+| `--json` | — | `bool` | JSON format output |
+| `--verbose` | `-v` | `bool` | Verbose output |
+| `--quiet` | `-q` | `bool` | Quiet output |
 
-**输出模式优先级：** `--json` > `--quiet` > `--verbose` > 默认
+**Output Mode Priority:** `--json` > `--quiet` > `--verbose` > default
 
-这三个 flag 通过 `PersistentFlags` 注册，对所有子命令生效。
+These three flags are registered via `PersistentFlags` and apply to all subcommands.
 
-### 4.2 rnix [intent] — 根命令
+### 4.2 rnix [intent] — Root Command
 
 ```
-用法: rnix [intent]
-参数: [intent] — 任意长度意图字符串（多个参数以空格拼接）
+Usage: rnix [intent]
+Arguments: [intent] — arbitrary-length intent string (multiple arguments joined with spaces)
 ```
 
-**私有 Flags：**
+**Private Flags:**
 
-| Flag | 短选项 | 类型 | 默认值 | 说明 |
+| Flag | Short | Type | Default | Description |
 |------|--------|------|--------|------|
-| `--model` | `-m` | `string` | `""` | LLM 模型（`sonnet`/`opus`/`haiku`） |
-| `--max-steps` | — | `int` | `0` | 最大推理步数（`0` = 默认 10） |
-| `--agent` | — | `string` | `""` | Agent 定义名称 |
+| `--model` | `-m` | `string` | `""` | LLM model (`sonnet`/`opus`/`haiku`) |
+| `--max-steps` | — | `int` | `0` | Maximum reasoning steps (`0` = default 10) |
+| `--agent` | — | `string` | `""` | Agent definition name |
+| `--provider` | — | `string` | `""` | LLM provider (`claude`/`cursor`) |
 
-**默认输出示例：**
+**Default Output Example:**
 
 ```
 [kernel] spawning PID 1...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 ══ Result ══════════════════════════════════════════════════════════════════════
-  分析结果内容...
+  Analysis result content...
 ════════════════════════════════════════════════════════════════════════════════
 [kernel] PID 1 exited(0) | tokens: 1234 | elapsed: 6.2s
 ```
 
-**JSON 成功响应：**
+**JSON Success Response:**
 
 ```json
 {"ok": true, "data": {"pid": 1, "result": "...", "tokens_used": 1234, "elapsed_ms": 6200, "exit_code": 0}}
 ```
 
-**JSON 错误响应：**
+**JSON Error Response:**
 
 ```json
-{"ok": false, "error": {"code": "TIMEOUT", "message": "...", "syscall": "Write", "device": "/dev/llm/claude"}}
+{"ok": false, "error": {"code": "TIMEOUT", "message": "...", "syscall": "Write", "device": "/dev/llm"}}
 ```
 
-### 4.3 rnix ps — 进程列表
+### 4.3 rnix daemon — Daemon Management
 
 ```
-用法: rnix ps
-参数: 无 (cobra.NoArgs)
+Usage: rnix daemon [command]
+Subcommands:
+  status    Show daemon status (running state, version, socket path, process count)
+  stop      Stop the running daemon
 ```
 
-**四种输出模式：**
+**`rnix daemon status` Output Example:**
 
-**默认模式 — 表格格式：**
+```
+status:  running
+version: 0.5.0
+socket:  /run/user/1000/rnix/rnix.sock
+procs:   1 active / 3 total
+```
+
+**`rnix daemon stop` Output Example:**
+
+```
+daemon stopped
+```
+
+When the daemon is not running:
+
+```
+daemon is not running
+```
+```
+
+### 4.3 rnix ps — Process List
+
+```
+Usage: rnix ps
+Arguments: None (cobra.NoArgs)
+```
+
+**Four Output Modes:**
+
+**Default Mode — Table Format:**
 
 ```
   PID   STATE     SKILL              TOKENS   ELAPSED
@@ -1028,18 +1080,18 @@ metadata:
 1 active, 1 zombie, 2 total
 ```
 
-**--verbose — 含额外字段：**
+**--verbose — With Extra Fields:**
 
-含 PPID、Intent 列。
+Includes PPID and Intent columns.
 
-**--quiet — 逐行 PID：**
+**--quiet — One PID Per Line:**
 
 ```
 1
 2
 ```
 
-**--json — 结构化 JSON：**
+**--json — Structured JSON:**
 
 ```json
 {
@@ -1050,7 +1102,7 @@ metadata:
         "pid": 1,
         "ppid": 0,
         "state": "running",
-        "intent": "分析代码",
+        "intent": "Analyze code",
         "skills": ["code-analysis"],
         "tokens_used": 456,
         "elapsed_ms": 3200
@@ -1060,37 +1112,37 @@ metadata:
 }
 ```
 
-**无活跃进程时：** `No active processes.`
+**When No Active Processes:** `No active processes.`
 
-### 4.4 rnix kill \<pid\> — 进程终止
+### 4.4 rnix kill \<pid\> — Process Termination
 
 ```
-用法: rnix kill <pid>
-参数: <pid> — 进程 ID（十进制数字，恰好 1 个参数）
-信号: 固定发送 SIGTERM(1)
+Usage: rnix kill <pid>
+Arguments: <pid> — Process ID (decimal number, exactly 1 argument)
+Signal: Always sends SIGTERM(1)
 ```
 
-**成功输出：**
+**Success Output:**
 
 ```
 [kernel] PID 1: signal sent (SIGTERM)
 ```
 
-### 4.5 rnix strace \<pid\> — Syscall 追踪
+### 4.5 rnix strace \<pid\> — Syscall Tracing
 
 ```
-用法: rnix strace <pid>
-参数: <pid> — 进程 ID（恰好 1 个参数）
+Usage: rnix strace <pid>
+Arguments: <pid> — Process ID (exactly 1 argument)
 ```
 
-**三种输出模式：**
+**Three Output Modes:**
 
-**默认模式 — 格式化追踪行：**
+**Default Mode — Formatted Trace Lines:**
 
 ```
 [strace] attached to PID 1 (state: running)
 [  0.013s] Open(flags=2, path="/dev/llm/claude") → 3    1ms
-[  0.014s] Write(fd=3, size=1234) → <nil>    5.20s  ← LLM 调用
+[  0.014s] Write(fd=3, size=1234) → <nil>    5.20s  ← LLM call
 [  5.214s] Read(fd=3, length=65536) → 892B      2ms
 [  5.216s] Open(flags=2, path="/dev/fs/./src/main.go") → 4    1ms
 [  5.217s] Write(fd=4, size=56) → <nil>    0µs
@@ -1099,51 +1151,51 @@ metadata:
 [strace] detached from PID 1 (process exited)
 ```
 
-**注解标记：**
+**Annotation Markers:**
 
-- `← LLM 调用` — 涉及 `/dev/llm/` 设备的操作
-- `← 慢操作` — 耗时超过 1 秒的操作
+- `← LLM call` — operations involving `/dev/llm/` devices
+- `← slow op` — operations taking more than 1 second
 
-**--verbose — 完整参数和结果**
+**--verbose — Full Parameters and Results**
 
-**--json — 逐行 JSON（SyscallEventWire 结构）：**
+**--json — Per-line JSON (SyscallEventWire Structure):**
 
 ```json
 {"timestamp_ms": 13, "pid": 1, "syscall": "Open", "args": {"flags": 2, "path": "/dev/llm/claude"}, "result": 3, "duration_ms": 1.0}
 ```
 
-**SIGINT 行为：** 仅 detach 追踪，不影响被追踪进程。
+**SIGINT Behavior:** Only detaches the trace; does not affect the traced process.
 
-### 4.6 rnix version — 版本信息
+### 4.6 rnix version — Version Information
 
 ```
-用法: rnix version
+Usage: rnix version
 ```
 
-**默认输出：**
+**Default Output:**
 
 ```
 rnix v0.1.0
 claude-code: 2.1.69
 ```
 
-**Claude CLI 未安装时：**
+**When Claude CLI Is Not Installed:**
 
 ```
 rnix v0.1.0
 ✗ claude-code CLI not found
-  → 建议: npm install -g @anthropic-ai/claude-code
+  → Suggestion: npm install -g @anthropic-ai/claude-code
 ```
 
-**JSON 输出：**
+**JSON Output:**
 
 ```json
 {"ok": true, "data": {"version": "0.1.0", "claude_code_available": true, "claude_code": "2.1.69"}}
 ```
 
-### 4.7 JSON 响应格式
+### 4.7 JSON Response Format
 
-所有支持 `--json` 的命令使用统一的 `JSONResponse` 包装：
+All commands supporting `--json` use a unified `JSONResponse` wrapper:
 
 ```go
 type JSONResponse struct {
@@ -1153,9 +1205,9 @@ type JSONResponse struct {
 }
 ```
 
-**成功时：** `ok=true`，`data` 包含命令特定数据
+**On Success:** `ok=true`, `data` contains command-specific data
 
-**失败时：** `ok=false`，`error` 包含结构化错误信息：
+**On Failure:** `ok=false`, `error` contains structured error information:
 
 ```go
 type jsonErrorData struct {
@@ -1168,187 +1220,193 @@ type jsonErrorData struct {
 
 ---
 
-## 5. IPC 架构
+## 5. IPC Architecture
 
-### 5.1 Daemon 生命周期
+### 5.1 Daemon Lifecycle
 
-Rnix 采用 daemon 架构：一个后台 daemon 持有唯一的内核实例和进程表，所有 CLI 命令作为客户端通过 Unix domain socket 通信。
+Rnix uses a daemon architecture: a single background daemon holds the unique kernel instance and process table; all CLI commands act as clients communicating via Unix domain socket.
 
-**自动启动（`EnsureDaemon`）：**
+**Auto-start (`EnsureDaemon`):**
 
-1. CLI 命令调用 `EnsureDaemon()`
-2. 尝试连接现有 daemon 并发送 `ping`
-3. 连接失败 → 清除 stale socket 文件
-4. 启动新 daemon 进程（`rnix daemon --internal`，`setsid` 独立进程组）
-5. 轮询等待就绪（每 100ms 重试，最多 3 秒超时）
-6. 返回已连接的 `*Client`
+1. CLI command calls `EnsureDaemon()`
+2. Attempts to connect to the existing daemon and sends `ping`
+3. Connection failure -> clears stale socket file
+4. Starts a new daemon process (`rnix daemon --internal`, `setsid` independent process group)
+5. Polls for readiness (retries every 100ms, 3-second timeout)
+6. Returns the connected `*Client`
 
-**自动停止（空闲超时）：**
+**Auto-stop (Idle Timeout):**
 
-- 默认超时：60 秒（`DefaultIdleTimeout`）
-- 停止条件：无活跃进程 AND 无活跃连接
-- 检查周期：每 5 秒（`idleCheckEvery`）
-- 有进程运行或有连接时，暂停超时计时器
+- Default timeout: 60 seconds (`DefaultIdleTimeout`)
+- Stop condition: no active processes AND no active connections
+- Check interval: every 5 seconds (`idleCheckEvery`)
+- Timer is paused when processes are running or connections are active
 
-**Stale socket 清理：**
+**Manual Stop:**
 
-- ping 现有 socket 超时 → 删除旧 socket 文件 → 启动新 daemon
-- daemon 启动时将 PID 写入 `rnix.pid` 文件（诊断用途）
+```bash
+rnix daemon stop
+```
 
-### 5.2 Socket 路径规则
+**Stale Socket Cleanup:**
 
-Socket 路径按以下优先级确定：
+- Ping to existing socket times out -> delete old socket file -> start new daemon
+- Daemon writes PID to `rnix.pid` file at startup (for diagnostic purposes)
 
-1. **`$XDG_RUNTIME_DIR/rnix/rnix.sock`** — 如 `/run/user/1000/rnix/rnix.sock`
-2. **`/tmp/rnix-{uid}/rnix.sock`** — 降级方案（`$XDG_RUNTIME_DIR` 未设置时）
+### 5.2 Socket Path Rules
 
-目录权限：`0700`（仅当前用户可访问）。
+Socket path is determined by the following priority:
 
-测试可通过 `SocketPathOverride` 变量注入自定义路径。
+1. **`$XDG_RUNTIME_DIR/rnix/rnix.sock`** — e.g., `/run/user/1000/rnix/rnix.sock`
+2. **`/tmp/rnix-{uid}/rnix.sock`** — fallback (when `$XDG_RUNTIME_DIR` is not set)
 
-### 5.3 NDJSON 协议
+Directory permissions: `0700` (accessible only by the current user).
 
-IPC 通信使用 NDJSON（Newline Delimited JSON）格式，每行一个 JSON 对象。
+Tests can inject a custom path via the `SocketPathOverride` variable.
 
-**Request 格式：**
+### 5.3 NDJSON Protocol
+
+IPC communication uses the NDJSON (Newline Delimited JSON) format, one JSON object per line.
+
+**Request Format:**
 
 ```json
 {"method": "ping|spawn|list_procs|kill|attach_debug|shutdown", "payload": {...}}
 ```
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |------|------|------|
-| `method` | `string` | 请求方法（见 [5.4 Method 枚举](#54-method-枚举)） |
-| `payload` | `object` | 方法特定的请求参数（可选） |
+| `method` | `string` | Request method (see [5.4 Method Enum](#54-method-enum)) |
+| `payload` | `object` | Method-specific request parameters (optional) |
 
-**Response 格式：**
+**Response Format:**
 
 ```json
 {"ok": true, "payload": {...}}
 {"ok": false, "error": {"code": "...", "message": "..."}}
 ```
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |------|------|------|
-| `ok` | `bool` | 是否成功 |
-| `payload` | `object` | 方法特定的响应数据（成功时） |
-| `error` | `object` | 结构化错误信息（失败时） |
+| `ok` | `bool` | Whether the request succeeded |
+| `payload` | `object` | Method-specific response data (on success) |
+| `error` | `object` | Structured error information (on failure) |
 
-### 5.4 Method 枚举
+### 5.4 Method Enum
 
-| Method | 类型 | Payload 类型 | 说明 |
+| Method | Type | Payload Type | Description |
 |--------|------|-------------|------|
-| `ping` | 请求-响应 | — | 活性检查，返回版本号 |
-| `spawn` | 流式 | `SpawnRequest` | 创建进程，流式返回进度事件 |
-| `list_procs` | 请求-响应 | — | 获取所有进程列表 |
-| `kill` | 请求-响应 | `KillRequest` | 发送信号到进程 |
-| `attach_debug` | 流式 | `AttachDebugRequest` | 订阅 SyscallEvent 流 |
-| `shutdown` | 请求-响应 | — | 优雅关闭 daemon |
+| `ping` | Request-Response | — | Liveness check, returns version |
+| `spawn` | Streaming | `SpawnRequest` | Creates a process, streams progress events |
+| `list_procs` | Request-Response | — | Gets the list of all processes |
+| `kill` | Request-Response | `KillRequest` | Sends a signal to a process |
+| `attach_debug` | Streaming | `AttachDebugRequest` | Subscribes to a SyscallEvent stream |
+| `shutdown` | Request-Response | — | Gracefully shuts down the daemon |
 
-**SpawnRequest：**
+**SpawnRequest:**
 
 ```json
-{"intent": "分析代码", "agent": "code-analyst", "model": "sonnet", "max_steps": 10}
+{"intent": "Analyze code", "agent": "code-analyst", "model": "sonnet", "max_steps": 10}
 ```
 
-**KillRequest：**
+**KillRequest:**
 
 ```json
 {"pid": 1, "signal": 1}
 ```
 
-**AttachDebugRequest：**
+**AttachDebugRequest:**
 
 ```json
 {"pid": 1}
 ```
 
-**PingResponse：**
+**PingResponse:**
 
 ```json
 {"version": "0.1.0"}
 ```
 
-### 5.5 StreamEvent 流式协议
+### 5.5 StreamEvent Streaming Protocol
 
-流式方法（`spawn`、`attach_debug`）使用 `StreamEvent` 逐行推送事件：
+Streaming methods (`spawn`, `attach_debug`) push events line by line using `StreamEvent`:
 
 ```json
 {"type": "progress|complete|error|syscall_event|eof", "payload": {...}}
 ```
 
-**StreamEventType 枚举：**
+**StreamEventType Enum:**
 
-| 类型 | 说明 | 使用场景 |
+| Type | Description | Use Case |
 |------|------|---------|
-| `progress` | 推理步骤进度 | spawn 流 |
-| `complete` | 进程完成 | spawn 流 |
-| `error` | 错误 | spawn 流 |
-| `syscall_event` | SyscallEvent | attach_debug 流 |
-| `eof` | 流结束标记 | attach_debug 流 |
+| `progress` | Reasoning step progress | spawn stream |
+| `complete` | Process completed | spawn stream |
+| `error` | Error | spawn stream |
+| `syscall_event` | SyscallEvent | attach_debug stream |
+| `eof` | End-of-stream marker | attach_debug stream |
 
-**ProgressPayload 结构（spawn 流）：**
+**ProgressPayload Structure (spawn stream):**
 
-| 字段 | 类型 | 事件 | 说明 |
+| Field | Type | Event | Description |
 |------|------|------|------|
-| `event` | `string` | 所有 | `"spawn"`、`"step"`、`"complete"`、`"error"` |
-| `pid` | `PID` | 所有 | 进程 ID |
-| `intent` | `string` | spawn | 用户意图 |
-| `step` | `int` | step | 当前步数 |
-| `total` | `int` | step | 最大步数 |
-| `result` | `string` | complete | 最终结果 |
-| `exit_code` | `int` | complete | 退出码 |
-| `exit_reason` | `string` | complete | 退出原因 |
-| `tokens_used` | `int` | complete | token 消耗 |
-| `error_message` | `string` | error | 错误信息 |
+| `event` | `string` | All | `"spawn"`, `"step"`, `"complete"`, `"error"` |
+| `pid` | `PID` | All | Process ID |
+| `intent` | `string` | spawn | User intent |
+| `step` | `int` | step | Current step count |
+| `total` | `int` | step | Maximum step count |
+| `result` | `string` | complete | Final result |
+| `exit_code` | `int` | complete | Exit code |
+| `exit_reason` | `string` | complete | Exit reason |
+| `tokens_used` | `int` | complete | Token consumption |
+| `error_message` | `string` | error | Error message |
 
-**SyscallEventWire 结构（attach_debug 流）：**
+**SyscallEventWire Structure (attach_debug stream):**
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |------|------|------|
-| `timestamp_ms` | `int64` | 相对进程创建时间（毫秒） |
-| `pid` | `PID` | 进程 ID |
-| `syscall` | `string` | Syscall 名称 |
-| `args` | `map[string]any` | 调用参数 |
-| `result` | `any` | 返回值 |
-| `error` | `string` | 错误信息 |
-| `duration_ms` | `float64` | 执行耗时（毫秒） |
+| `timestamp_ms` | `int64` | Relative to process creation time (milliseconds) |
+| `pid` | `PID` | Process ID |
+| `syscall` | `string` | Syscall name |
+| `args` | `map[string]any` | Call parameters |
+| `result` | `any` | Return value |
+| `error` | `string` | Error message |
+| `duration_ms` | `float64` | Execution duration (milliseconds) |
 
-### 5.6 连接复用语义
+### 5.6 Connection Reuse Semantics
 
-IPC Server 采用请求循环连接模型：
+The IPC Server uses a request-loop connection model:
 
-**非流式方法（`ping`、`list_procs`、`kill`）：**
+**Non-streaming Methods (`ping`, `list_procs`, `kill`):**
 
-- 发送 Response 后，继续在同一连接上等待下一个 Request
-- 客户端可在单个连接上发送多次请求
-- 用途：`EnsureDaemon()` 的 `ping` 探活与后续操作共用连接
+- After sending the Response, continues waiting for the next Request on the same connection
+- Clients can send multiple requests on a single connection
+- Use case: `EnsureDaemon()`'s `ping` liveness check shares the connection with subsequent operations
 
-**流式方法（`spawn`、`attach_debug`）：**
+**Streaming Methods (`spawn`, `attach_debug`):**
 
-- handler 接管连接进行流式传输
-- 流结束后 handler 返回，连接关闭
-- 同一连接不再接受新请求
+- The handler takes over the connection for streaming transmission
+- After the stream ends, the handler returns and the connection is closed
+- No new requests are accepted on the same connection
 
-**`shutdown` 方法：**
+**`shutdown` Method:**
 
-- 发送 Response 后，异步触发 `Shutdown()`，handler 返回并关闭连接
+- After sending the Response, asynchronously triggers `Shutdown()`; the handler returns and closes the connection
 
-### 5.7 Spawn 流式协议示例
+### 5.7 Spawn Streaming Protocol Example
 
 ```
-Client → Server:  {"method":"spawn","payload":{"intent":"分析代码","agent":"code-analyst"}}
+Client → Server:  {"method":"spawn","payload":{"intent":"Analyze code","agent":"code-analyst"}}
 
 Server → Client:  {"ok":true,"payload":{"pid":1}}
-Server → Client:  {"type":"progress","payload":{"event":"spawn","pid":1,"intent":"分析代码"}}
+Server → Client:  {"type":"progress","payload":{"event":"spawn","pid":1,"intent":"Analyze code"}}
 Server → Client:  {"type":"progress","payload":{"event":"step","pid":1,"step":1,"total":10}}
 Server → Client:  {"type":"progress","payload":{"event":"step","pid":1,"step":2,"total":10}}
-Server → Client:  {"type":"complete","payload":{"event":"complete","pid":1,"result":"分析结果...","exit_code":0,"tokens_used":1234}}
+Server → Client:  {"type":"complete","payload":{"event":"complete","pid":1,"result":"Analysis results...","exit_code":0,"tokens_used":1234}}
 
-（连接关闭，IPC Server 自动调用 kern.Reap(pid) 清理 Zombie 进程）
+（Connection closed; IPC Server automatically calls kern.Reap(pid) to clean up the Zombie process）
 ```
 
-### 5.8 AttachDebug 流式协议示例
+### 5.8 AttachDebug Streaming Protocol Example
 
 ```
 Client → Server:  {"method":"attach_debug","payload":{"pid":1}}
@@ -1360,184 +1418,186 @@ Server → Client:  {"type":"syscall_event","payload":{"timestamp_ms":5214,"pid"
 ...
 Server → Client:  {"type":"eof"}
 
-（进程退出 → DebugChan 关闭 → range 循环结束 → 发送 eof → 连接关闭）
+（Process exits → DebugChan closed → range loop ends → sends eof → connection closed）
 ```
 
 ---
 
-## 6. 错误处理与类型参考
+## 6. Error Handling and Type Reference
 
-### 6.1 ErrCode 枚举
+### 6.1 ErrCode Enum
 
-所有错误类型共享统一的 `ErrCode` 分类码：
+All error types share a unified `ErrCode` classification code:
 
-| 错误码 | 值 | 含义 |
+| Error Code | Value | Meaning |
 |--------|-----|------|
-| `ErrTimeout` | `"TIMEOUT"` | 操作超时 |
-| `ErrNotFound` | `"NOT_FOUND"` | 资源不存在（进程、上下文、FD、设备） |
-| `ErrPermission` | `"PERMISSION"` | 权限拒绝（如写入只读 /proc） |
-| `ErrInternal` | `"INTERNAL"` | 内部错误（状态异常、序列化失败等） |
-| `ErrDriver` | `"DRIVER"` | 设备驱动错误（LLM 调用失败、文件读写失败等） |
-| `ErrInvalid` | `"INVALID"` | 无效参数（如无效信号值） |
+| `ErrTimeout` | `"TIMEOUT"` | Operation timed out |
+| `ErrNotFound` | `"NOT_FOUND"` | Resource does not exist (process, context, FD, device) |
+| `ErrPermission` | `"PERMISSION"` | Permission denied (e.g., writing to read-only /proc) |
+| `ErrInternal` | `"INTERNAL"` | Internal error (state anomaly, serialization failure, etc.) |
+| `ErrDriver` | `"DRIVER"` | Device driver error (LLM call failure, file read/write failure, etc.) |
+| `ErrInvalid` | `"INVALID"` | Invalid parameter (e.g., invalid signal value) |
 
 ### 6.2 SyscallError
 
-内核层错误，所有 syscall 出错时返回此类型。
+Kernel-layer error, returned by all syscalls on failure.
 
 ```go
 type SyscallError struct {
-    Syscall string        // 出错的 syscall 名称
-    PID     types.PID     // 发起 syscall 的进程 PID
-    Device  string        // 涉及的 VFS 路径
-    Err     error         // 底层错误
-    Code    types.ErrCode // 分类错误码
+    Syscall string        // Name of the failing syscall
+    PID     types.PID     // PID of the process that invoked the syscall
+    Device  string        // Related VFS path
+    Err     error         // Underlying error
+    Code    types.ErrCode // Categorized error code
 }
 ```
 
-**格式化输出：** `[TIMEOUT] PID 1 Spawn: /dev/llm/claude (context deadline exceeded)`
+**Formatted Output:** `[TIMEOUT] PID 1 Spawn: /dev/llm/claude (context deadline exceeded)`
 
-**`Unwrap()` 支持：** 实现 `errors.Unwrap` 接口，支持 `errors.Is` 和 `errors.As` 链式错误检查。
+**`Unwrap()` Support:** Implements the `errors.Unwrap` interface, supporting `errors.Is` and `errors.As` chained error checking.
 
 ### 6.3 VFSError
 
-VFS 层错误，VFS 操作出错时返回此类型。
+VFS-layer error, returned by VFS operations on failure.
 
 ```go
 type VFSError struct {
-    Op     string        // 操作名称（"Open"、"Read"、"Write"、"Close"、"Stat"）
-    PID    types.PID     // 进程 PID
-    Device string        // VFS 路径
-    Err    error         // 底层错误
-    Code   types.ErrCode // 分类错误码
+    Op     string        // Operation name ("Open", "Read", "Write", "Close", "Stat")
+    PID    types.PID     // Process PID
+    Device string        // VFS path
+    Err    error         // Underlying error
+    Code   types.ErrCode // Categorized error code
 }
 ```
 
-**格式化输出：** `[NOT_FOUND] PID 1 Open: /dev/unknown (device not found: /dev/unknown)`
+**Formatted Output:** `[NOT_FOUND] PID 1 Open: /dev/unknown (device not found: /dev/unknown)`
 
-**`Unwrap()` 支持：** 是
+**`Unwrap()` Support:** Yes
 
 ### 6.4 DriverError
 
-驱动层错误，设备驱动内部使用，避免 `drivers/` → `kernel/` 的循环依赖。
+Driver-layer error, used internally by device drivers to avoid circular dependency from `drivers/` to `kernel/`.
 
 ```go
 type DriverError struct {
-    Op     string        // 操作名称
-    Device string        // 设备路径
-    Err    error         // 底层错误
-    Code   types.ErrCode // 分类错误码
+    Op     string        // Operation name
+    Device string        // Device path
+    Err    error         // Underlying error
+    Code   types.ErrCode // Categorized error code
 }
 ```
 
-**格式化输出：** `[DRIVER] Write: /dev/llm/claude (exec: command not found)`
+**Formatted Output:** `[DRIVER] Write: /dev/llm/claude (exec: command not found)`
 
-**`Unwrap()` 支持：** 是
+**`Unwrap()` Support:** Yes
 
-**错误码传播：** VFS 层通过 `errors.As` 提取 `DriverError` 中的 `Code`，传播到 `VFSError`。
+**Error Code Propagation:** The VFS layer extracts the `Code` from `DriverError` via `errors.As` and propagates it to `VFSError`.
 
 ### 6.5 ContextError
 
-上下文层错误。
+Context-layer error.
 
 ```go
 type ContextError struct {
-    Op   string        // 操作名称（"CtxAlloc"、"CtxRead"、"CtxWrite"、"CtxFree"）
-    CID  types.CtxID   // 上下文 ID
-    Err  error         // 底层错误
-    Code types.ErrCode // 分类错误码
+    Op   string        // Operation name ("CtxAlloc", "CtxRead", "CtxWrite", "CtxFree")
+    CID  types.CtxID   // Context ID
+    Err  error         // Underlying error
+    Code types.ErrCode // Categorized error code
 }
 ```
 
-**格式化输出：** `[NOT_FOUND] CtxID 1 CtxFree: context not found`
+**Formatted Output:** `[NOT_FOUND] CtxID 1 CtxFree: context not found`
 
-**`Unwrap()` 支持：** 是
+**`Unwrap()` Support:** Yes
 
-### 6.6 基础类型
+### 6.6 Basic Types
 
-| 类型 | Go 定义 | 说明 |
+| Type | Go Definition | Description |
 |------|---------|------|
-| `PID` | `uint64` | 进程 ID（从 1 递增，不回收） |
-| `FD` | `int` | 文件描述符（从 3 递增） |
-| `CtxID` | `uint64` | 上下文 ID（从 1 递增） |
-| `ErrCode` | `string` | 错误分类码 |
-| `Signal` | `int` | 进程信号 |
-| `ProcessState` | `int` | 进程状态 |
+| `PID` | `uint64` | Process ID (increments from 1, never recycled) |
+| `FD` | `int` | File descriptor (increments from 3) |
+| `CtxID` | `uint64` | Context ID (increments from 1) |
+| `ErrCode` | `string` | Error classification code |
+| `Signal` | `int` | Process signal |
+| `ProcessState` | `int` | Process state |
 
 ---
 
-## 7. 进程模型参考
+## 7. Process Model Reference
 
-### 7.1 ProcessState 状态机
+### 7.1 ProcessState State Machine
 
 ```
 Created ──→ Running ──→ Zombie ──→ Dead
    │           │           │
    │  Start()  │ Terminate │  Reap()
-   │  开始推理  │ 完成/错误  │  Wait 回收
-   │           │ /超时/Kill │  资源释放
+   │  Begin    │ Complete/ │  Wait reaps
+   │  reasoning│ Error/    │  Resource
+   │           │ Timeout/  │  release
+   │           │ Kill      │
 ```
 
-| 常量 | 值 | 字符串表示 | 说明 |
+| Constant | Value | String Representation | Description |
 |------|-----|---------|------|
-| `StateCreated` | `0` | `"created"` | 进程对象已分配，推理未开始 |
-| `StateRunning` | `1` | `"running"` | 推理循环执行中 |
-| `StateZombie` | `2` | `"zombie"` | 推理已结束，等待资源回收 |
-| `StateDead` | `3` | `"dead"` | 所有资源已释放 |
+| `StateCreated` | `0` | `"created"` | Process object allocated, reasoning not started |
+| `StateRunning` | `1` | `"running"` | Reasoning loop executing |
+| `StateZombie` | `2` | `"zombie"` | Reasoning finished, awaiting resource reclamation |
+| `StateDead` | `3` | `"dead"` | All resources released |
 
-### 7.2 状态转移规则
+### 7.2 State Transition Rules
 
-**合法转移：**
+**Valid Transitions:**
 
-| 起始状态 | 目标状态 | 触发条件 |
+| Source State | Target State | Trigger Condition |
 |---------|---------|---------|
-| Created | Running | `Start()` — 推理 goroutine 启动 |
-| Running | Zombie | `Terminate()` — 完成/错误/超时/Kill |
-| Zombie | Dead | `Reap()` — Wait 回收 |
+| Created | Running | `Start()` — reasoning goroutine starts |
+| Running | Zombie | `Terminate()` — completed/error/timeout/Kill |
+| Zombie | Dead | `Reap()` — Wait reclaims |
 
-**非法转移：** 所有其他组合均为非法。尝试非法转移返回 `*SyscallError`（`INTERNAL`）。
+**Invalid Transitions:** All other combinations are invalid. Attempting an invalid transition returns `*SyscallError` (`INTERNAL`).
 
-`StateDead` 没有合法的后续状态。
+`StateDead` has no valid subsequent state.
 
-### 7.3 ExitStatus 结构
+### 7.3 ExitStatus Structure
 
 ```go
 type ExitStatus struct {
-    Code   int    // 0 = 正常退出，非零 = 异常
-    Reason string // 人类可读的退出原因
-    Err    error  // 底层错误（正常退出时为 nil）
+    Code   int    // 0 = normal exit, non-zero = abnormal
+    Reason string // Human-readable exit reason
+    Err    error  // Underlying error (nil on normal exit)
 }
 ```
 
-**常见退出原因：**
+**Common Exit Reasons:**
 
-| Code | Reason | 说明 |
+| Code | Reason | Description |
 |------|--------|------|
-| `0` | `"completed"` | 正常完成 |
-| `1` | `"unexpected exit"` | 意外退出 |
-| `1` | `"max steps exceeded"` | 超过最大推理步数 |
-| `1` | 错误描述 | 推理过程中出错 |
+| `0` | `"completed"` | Normal completion |
+| `1` | `"unexpected exit"` | Unexpected exit |
+| `1` | `"max steps exceeded"` | Exceeded maximum reasoning steps |
+| `1` | Error description | Error during reasoning |
 
-### 7.4 资源释放顺序
+### 7.4 Resource Release Order
 
-`reapProcess` 按以下严格顺序执行资源释放（通过 `sync.Once` 保证幂等）：
+`reapProcess` performs resource release in the following strict order (idempotency guaranteed via `sync.Once`):
 
-| 步骤 | 操作 | 说明 |
+| Step | Operation | Description |
 |------|------|------|
-| 0 | `handleOrphanChildren` | 处理孤儿子进程：Running 子进程 reparent 到 PID 0；Zombie 子进程推入 reapCh |
-| 1 | `Cancel()` | 取消进程 context（幂等） |
-| 2 | `wg.Wait()` | 等待推理 goroutine 完成（goroutine 内部 defer 执行 `CloseAll` 关闭所有 FD） |
-| 3 | `close(DebugChan)` | 先将 `proc.DebugChan` 置 `nil`（持锁），然后关闭 channel |
-| 4 | `CtxFree(CtxID)` | 释放上下文空间 |
-| 5 | `Reap()` | 状态转移 Zombie → Dead |
-| 6 | `RemoveProcess(pid)` | 从进程表中移除 |
+| 0 | `handleOrphanChildren` | Handle orphan child processes: Running children are reparented to PID 0; Zombie children are pushed to reapCh |
+| 1 | `Cancel()` | Cancel process context (idempotent) |
+| 2 | `wg.Wait()` | Wait for reasoning goroutine to complete (goroutine internally defers `CloseAll` to close all FDs) |
+| 3 | `close(DebugChan)` | Set `proc.DebugChan` to `nil` first (under lock), then close the channel |
+| 4 | `CtxFree(CtxID)` | Release context space |
+| 5 | `Reap()` | State transition Zombie -> Dead |
+| 6 | `RemoveProcess(pid)` | Remove from the process table |
 
-### 7.5 Signal 定义
+### 7.5 Signal Definitions
 
-| 常量 | 值 | 说明 |
+| Constant | Value | Description |
 |------|-----|------|
-| `SIGTERM` | `1` | 终止信号（优雅关闭） |
-| `SIGKILL` | `2` | 强制杀死 |
+| `SIGTERM` | `1` | Termination signal (graceful shutdown) |
+| `SIGKILL` | `2` | Force kill |
 
-**有效性检查：** `Signal.Valid()` 方法检查信号值是否为 SIGTERM 或 SIGKILL。
+**Validity Check:** The `Signal.Valid()` method checks whether the signal value is SIGTERM or SIGKILL.
 
-**Kill 行为：** 无论信号类型，当前实现均调用 `proc.Cancel()` 取消 context。未来版本可能区分 SIGTERM（优雅）和 SIGKILL（强制）的行为。
+**Kill Behavior:** Regardless of signal type, the current implementation calls `proc.Cancel()` to cancel the context. Future versions may differentiate between SIGTERM (graceful) and SIGKILL (forced) behavior.

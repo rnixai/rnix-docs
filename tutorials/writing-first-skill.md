@@ -1,46 +1,46 @@
-# 教程 1：编写第一个 Skill
+# Tutorial 1: Writing Your First Skill
 
-本教程带你从零创建一个 Rnix Skill 和引用它的 Agent，然后执行它观察完整的运行流程。
-
----
-
-## 前置条件
-
-- Rnix 已安装并可运行（参考 [快速上手指南](/guide/quick-start)）
-- Claude Code CLI 已安装且 API 密钥已配置
-- 对 Rnix 的进程、VFS、Skill 概念有基本了解（参考 [核心概念文档](/guide/concepts)）
+This tutorial walks you through creating a Rnix Skill and an Agent that references it from scratch, then running it to observe the complete execution flow.
 
 ---
 
-## 你将学到什么
+## Prerequisites
 
-1. Skill 的文件结构和 `SKILL.md` 编写规范
-2. Agent 如何引用 Skill 获得能力
-3. 如何运行 Agent 并观察 Skill 的执行过程
+- Rnix is installed and operational (see [Quick Start Guide](/guide/quick-start))
+- Claude Code CLI is installed and its API key is configured
+- Basic familiarity with Rnix concepts such as processes, VFS, and Skills (see [Core Concepts](/guide/concepts))
 
 ---
 
-## 步骤一：创建 SKILL.md
+## What You Will Learn
 
-Skill 是 Rnix 中的"程序性知识"——它告诉智能体**如何做某件事**。每个 Skill 是一个目录，核心文件是 `SKILL.md`。
+1. The file structure of a Skill and how to write a `SKILL.md`
+2. How an Agent references a Skill to gain capabilities
+3. How to run an Agent and observe the Skill execution process
 
-### 创建 Skill 目录
+---
 
-在项目的 `lib/skills/` 目录下创建一个新的 Skill 目录：
+## Step 1: Create a SKILL.md
+
+A Skill represents "procedural knowledge" in Rnix -- it tells an agent **how to do something**. Each Skill is a directory whose core file is `SKILL.md`.
+
+### Create the Skill Directory
+
+Create a new Skill directory under your project's `lib/skills/` directory:
 
 ```bash
 mkdir -p lib/skills/code-summarizer
 ```
 
-### 编写 SKILL.md
+### Write the SKILL.md
 
-创建 `lib/skills/code-summarizer/SKILL.md`，内容如下：
+Create `lib/skills/code-summarizer/SKILL.md` with the following content:
 
 ```markdown
 ---
 name: code-summarizer
 description: >
-  读取源代码文件并生成简明摘要。用于快速了解代码文件的功能和结构。
+  Reads source code files and generates concise summaries. Useful for quickly understanding the purpose and structure of a code file.
 allowed-tools: /dev/fs
 metadata:
   author: my-team
@@ -52,89 +52,89 @@ metadata:
 
 # Code Summarizer
 
-## 何时使用
+## When to Use
 
-当用户需要快速了解一个代码文件的功能、结构和关键接口时使用此 Skill。
+Use this Skill when a user needs to quickly understand the purpose, structure, and key interfaces of a code file.
 
-## 工作流程
+## Workflow
 
-1. 通过 /dev/fs 读取用户指定的源代码文件
-2. 分析代码结构：包名、导入、导出类型、函数签名
-3. 生成简明摘要，包含文件用途、核心类型和关键函数
+1. Read the user-specified source code file via /dev/fs
+2. Analyze the code structure: package name, imports, exported types, function signatures
+3. Generate a concise summary including file purpose, core types, and key functions
 
-## 工具使用指南
+## Tool Usage Guide
 
-### /dev/fs — 文件系统访问
+### /dev/fs -- Filesystem Access
 
-用于读取目标源代码文件：
-- 读取用户指定的文件获取完整源码
-- 如需上下文，可读取同目录的相关文件
+Used to read target source code files:
+- Read the user-specified file to obtain the full source code
+- If additional context is needed, read related files in the same directory
 
-## 输出格式
+## Output Format
 
-摘要应包含以下部分：
-- **文件用途**：一句话描述文件的核心职责
-- **核心类型**：列出主要的 struct/interface 及其用途
-- **关键函数**：列出重要的导出函数及其签名
-- **依赖关系**：列出主要的外部包依赖
+The summary should include the following sections:
+- **File Purpose**: A one-sentence description of the file's core responsibility
+- **Core Types**: List of primary structs/interfaces and their roles
+- **Key Functions**: List of important exported functions with their signatures
+- **Dependencies**: List of major external package dependencies
 ```
 
-### SKILL.md 结构解析
+### Anatomy of a SKILL.md
 
-`SKILL.md` 由两部分组成：
+A `SKILL.md` consists of two parts:
 
-**Frontmatter（YAML 头部）**：
+**Frontmatter (YAML Header)**:
 
-| 字段 | 说明 |
-|------|------|
-| `name` | Skill 的唯一标识名 |
-| `description` | 简短描述（用于发现阶段，~100 tokens） |
-| `allowed-tools` | 空格分隔的 VFS 设备路径白名单 |
-| `metadata.version` | 版本号 |
-| `metadata.tags` | 标签列表（用于搜索和分类） |
+| Field | Description |
+|-------|-------------|
+| `name` | Unique identifier for the Skill |
+| `description` | Short description (used during the discovery phase, ~100 tokens) |
+| `allowed-tools` | Space-separated whitelist of VFS device paths |
+| `metadata.version` | Version number |
+| `metadata.tags` | List of tags (used for search and categorization) |
 
-**Body（Markdown 正文）**：Skill 的详细指令，在激活阶段注入智能体的系统提示词。
+**Body (Markdown Content)**: Detailed instructions for the Skill, injected into the agent's system prompt during the activation phase.
 
-### allowed-tools 与 VFS 路径映射
+### allowed-tools and VFS Path Mapping
 
-`allowed-tools` 字段决定了智能体被允许访问哪些 VFS 设备。这是 Rnix 的安全机制——Skill 只能使用它声明的工具。
+The `allowed-tools` field determines which VFS devices the agent is permitted to access. This is Rnix's security mechanism -- a Skill can only use the tools it explicitly declares.
 
-| 设备路径 | 能力 |
-|----------|------|
-| `/dev/fs` | 读写宿主文件系统 |
-| `/dev/shell` | 执行 Shell 命令 |
-| `/dev/llm/claude` | 调用 LLM 推理 |
+| Device Path | Capability |
+|-------------|------------|
+| `/dev/fs` | Read/write the host filesystem |
+| `/dev/shell` | Execute shell commands |
+| `/dev/llm/claude` | Invoke LLM inference |
 
-我们的 `code-summarizer` 只需要读取文件，所以只声明了 `/dev/fs`。
+Our `code-summarizer` only needs to read files, so it declares only `/dev/fs`.
 
-### 渐进式加载策略
+### Progressive Loading Strategy
 
-Rnix 采用两阶段加载 Skill 以优化 token 消耗：
+Rnix loads Skills in two phases to optimize token consumption:
 
-1. **发现阶段** — 只读取 frontmatter（~100 tokens），用于判断 Skill 是否匹配
-2. **激活阶段** — 读取完整 body（< 5000 tokens），注入系统提示词
+1. **Discovery Phase** -- Only the frontmatter is read (~100 tokens) to determine whether the Skill is a match
+2. **Activation Phase** -- The full body is read (< 5000 tokens) and injected into the system prompt
 
-这意味着 frontmatter 的 `description` 字段必须足够准确，让 Rnix 能在发现阶段做出正确的匹配决策。
+This means the frontmatter's `description` field must be precise enough for Rnix to make correct matching decisions during the discovery phase.
 
 ---
 
-## 步骤二：创建引用 Skill 的 Agent
+## Step 2: Create an Agent That References the Skill
 
-Agent 是"身份定义"——它定义了智能体的角色、使用的模型和引用的 Skill。
+An Agent is an "identity definition" -- it defines the agent's role, preferred model, and referenced Skills.
 
-### 创建 Agent 目录
+### Create the Agent Directory
 
 ```bash
 mkdir -p lib/agents/summarizer
 ```
 
-### 编写 agent.yaml
+### Write agent.yaml
 
-创建 `lib/agents/summarizer/agent.yaml`：
+Create `lib/agents/summarizer/agent.yaml`:
 
 ```yaml
 name: summarizer
-description: "读取代码文件并生成结构化摘要的智能体"
+description: "An agent that reads code files and generates structured summaries"
 models:
   provider: claude
   preferred: sonnet
@@ -144,118 +144,118 @@ skills:
   - code-summarizer
 ```
 
-**字段说明：**
+**Field Descriptions:**
 
-| 字段 | 说明 |
-|------|------|
-| `name` | Agent 的唯一标识名 |
-| `description` | Agent 的简短描述 |
-| `models.provider` | LLM 提供者（当前仅支持 `claude`） |
-| `models.preferred` | 首选模型 |
-| `models.fallback` | 降级模型 |
-| `context_budget` | 上下文预算（tokens） |
-| `skills` | 引用的 Skill 列表（对应 Skill 的 `name` 字段） |
+| Field | Description |
+|-------|-------------|
+| `name` | Unique identifier for the Agent |
+| `description` | Short description of the Agent |
+| `models.provider` | LLM provider (`claude` (default) or `cursor`) |
+| `models.preferred` | Preferred model |
+| `models.fallback` | Fallback model |
+| `context_budget` | Context budget (in tokens) |
+| `skills` | List of referenced Skills (corresponding to the Skill's `name` field) |
 
-### 编写 instructions.md
+### Write instructions.md
 
-创建 `lib/agents/summarizer/instructions.md`——Agent 的系统提示词：
+Create `lib/agents/summarizer/instructions.md` -- the Agent's system prompt:
 
 ```markdown
 # Summarizer Agent
 
-你是一个代码摘要生成专家。你的职责是读取用户指定的代码文件，生成结构化的摘要报告。
+You are a code summarization expert. Your job is to read user-specified code files and generate structured summary reports.
 
-## 工作原则
+## Working Principles
 
-- 摘要应简明扼要，一个文件的摘要不超过 200 字
-- 重点关注导出的类型和函数（公共 API）
-- 如果文件过长（> 500 行），先概述整体结构再详述重点部分
-- 使用中文输出摘要
+- Summaries should be concise -- no more than 200 words per file
+- Focus on exported types and functions (the public API)
+- If a file is too long (> 500 lines), provide an overview of the overall structure first, then detail the key sections
+- Output summaries in English
 ```
 
-### 四层能力模型
+### The Four-Layer Capability Model
 
-此时你已经搭建了 Rnix 的能力层次结构：
+At this point, you have built the Rnix capability hierarchy:
 
 ```
-Process（运行时实例）
-  └── Agent（身份：summarizer）
-        └── Skill（能力：code-summarizer）
-              └── Tools（工具：/dev/fs）
+Process (runtime instance)
+  └── Agent (identity: summarizer)
+        └── Skill (capability: code-summarizer)
+              └── Tools (device: /dev/fs)
 ```
 
-- **Process** 是运行时实例——每次 `rnix -i` 创建一个
-- **Agent** 定义了"我是谁"——角色、模型偏好
-- **Skill** 定义了"我能做什么"——知识和工具权限
-- **Tools** 是 VFS 设备——实际的执行能力
+- **Process** is a runtime instance -- each `rnix -i` invocation creates one
+- **Agent** defines "who I am" -- the role and model preferences
+- **Skill** defines "what I can do" -- knowledge and tool permissions
+- **Tools** are VFS devices -- the actual execution capabilities
 
 ---
 
-## 步骤三：运行 Skill
+## Step 3: Run the Skill
 
-### 启动智能体
+### Launch the Agent
 
-使用 `--agent` 标志指定刚创建的 Agent：
+Use the `--agent` flag to specify the Agent you just created:
 
 ```bash
-rnix -i "总结 kernel/kernel.go 的代码结构" --agent=summarizer
+rnix -i "Summarize the code structure of kernel/kernel.go" --agent=summarizer
 ```
 
-你将看到类似以下的输出：
+You should see output similar to the following:
 
 ```
 PID 1 | summarizer | running
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## 摘要: kernel/kernel.go
+## Summary: kernel/kernel.go
 
-**文件用途:** Rnix 内核的核心实现，包含 Kernel 接口组合和 Spawn/reasonStep 主循环。
+**File Purpose:** Core implementation of the Rnix kernel, containing the Kernel interface composition and the Spawn/reasonStep main loop.
 
-**核心类型:**
-- KernelImpl — 内核实现结构体，组合了 ProcessManager、ContextManager、FileSystem 等子接口
-- Kernel — 内核顶层接口，嵌入所有子接口
+**Core Types:**
+- KernelImpl -- Kernel implementation struct, composing sub-interfaces such as ProcessManager, ContextManager, and FileSystem
+- Kernel -- Top-level kernel interface, embedding all sub-interfaces
 
-**关键函数:**
-- Spawn(intent, agent, opts) → PID — 创建并启动智能体进程
-- reasonStep(proc) → error — 单次推理步骤
+**Key Functions:**
+- Spawn(intent, agent, opts) → PID -- Creates and starts an agent process
+- reasonStep(proc) → error -- A single reasoning step
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PID 1 | completed | 0 | 3.2s | 1,240 tokens
 ```
 
-### 查看进程状态
+### View Process Status
 
-在智能体运行期间（或运行后），可以用 `rnix ps` 查看进程列表：
+While the agent is running (or after it finishes), you can view the process list with `rnix ps`:
 
 ```bash
 rnix ps
 ```
 
-输出示例：
+Example output:
 
 ```
   PID   STATE     SKILL              TOKENS   ELAPSED
     1   zombie    code-summarizer    1,240    3.2s
 ```
 
-### 使用 strace 查看 Syscall 追踪
+### Use strace to View Syscall Traces
 
-`rnix strace` 可以实时追踪智能体的每一个系统调用——Open、Read、Write 等操作都会被记录：
+`rnix strace` lets you trace every system call made by the agent in real time -- operations such as Open, Read, and Write are all recorded:
 
 ```bash
 rnix strace 1
 ```
 
-输出示例：
+Example output:
 
 ```
-[  0.001s] Spawn(agent="summarizer", intent="总结 kernel/kernel.go 的代码结构") → 1    1ms
+[  0.001s] Spawn(agent="summarizer", intent="Summarize the code structure of kernel/kernel.go") → 1    1ms
 [  0.002s] CtxAlloc() → 1    0µs
 [  0.003s] Open(flags=1, path="/lib/skills/code-summarizer/SKILL.md") → 3    0µs
 [  0.003s] Read(fd=3, length=1048576) → 892    0µs
 [  0.004s] Close(fd=3) → <nil>    0µs
-[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM 调用
-[  0.006s] Write(fd=4, size=1234) → <nil>    2.80s  ← 慢操作
+[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM call
+[  0.006s] Write(fd=4, size=1234) → <nil>    2.80s  ← slow operation
 [  0.006s] Read(fd=4, length=1048576) → 1560    2ms
 [  0.007s] Close(fd=4) → <nil>    0µs
 [  0.008s] Open(flags=1, path="/dev/fs") → 5    0µs
@@ -263,20 +263,20 @@ rnix strace 1
 [  0.009s] Close(fd=5) → <nil>    0µs
 ```
 
-从 strace 输出可以清楚看到：
-1. 内核先加载了 `code-summarizer` Skill（读取 `/lib/skills/code-summarizer/SKILL.md`，892 字节）
-2. 然后调用 LLM（`/dev/llm/claude`）进行推理——Write 发送请求，Read 获取响应
-3. LLM 指示读取目标文件（`/dev/fs`，2048 字节）
-4. 一切操作都通过 VFS 完成，Skill 声明的 `allowed-tools: /dev/fs` 控制了访问权限
-5. Read 的返回值是**字节数**（如 `→ 2048`），不是文件内容本身
+From the strace output, you can clearly see:
+1. The kernel first loaded the `code-summarizer` Skill (reading `/lib/skills/code-summarizer/SKILL.md`, 892 bytes)
+2. Then it invoked the LLM (`/dev/llm/claude`) for inference -- Write sends the request, Read retrieves the response
+3. The LLM instructed reading the target file (`/dev/fs`, 2048 bytes)
+4. All operations go through the VFS, and the `allowed-tools: /dev/fs` declaration in the Skill controls access permissions
+5. The return value of Read is the **byte count** (e.g., `→ 2048`), not the file content itself
 
 ---
 
-## 完整可运行示例
+## Complete Runnable Example
 
-### 文件清单
+### File Listing
 
-创建以下文件结构：
+Create the following file structure:
 
 ```
 lib/
@@ -289,13 +289,13 @@ lib/
         └── SKILL.md
 ```
 
-**`lib/skills/code-summarizer/SKILL.md`**：
+**`lib/skills/code-summarizer/SKILL.md`**:
 
 ```markdown
 ---
 name: code-summarizer
 description: >
-  读取源代码文件并生成简明摘要。用于快速了解代码文件的功能和结构。
+  Reads source code files and generates concise summaries. Useful for quickly understanding the purpose and structure of a code file.
 allowed-tools: /dev/fs
 metadata:
   author: my-team
@@ -307,34 +307,34 @@ metadata:
 
 # Code Summarizer
 
-## 何时使用
+## When to Use
 
-当用户需要快速了解一个代码文件的功能、结构和关键接口时使用此 Skill。
+Use this Skill when a user needs to quickly understand the purpose, structure, and key interfaces of a code file.
 
-## 工作流程
+## Workflow
 
-1. 通过 /dev/fs 读取用户指定的源代码文件
-2. 分析代码结构：包名、导入、导出类型、函数签名
-3. 生成简明摘要
+1. Read the user-specified source code file via /dev/fs
+2. Analyze the code structure: package name, imports, exported types, function signatures
+3. Generate a concise summary
 
-## 工具使用指南
+## Tool Usage Guide
 
-### /dev/fs — 文件系统访问
+### /dev/fs -- Filesystem Access
 
-用于读取目标源代码文件。
+Used to read target source code files.
 
-## 输出格式
+## Output Format
 
-- **文件用途**：一句话描述
-- **核心类型**：主要 struct/interface
-- **关键函数**：重要的导出函数签名
+- **File Purpose**: One-sentence description
+- **Core Types**: Primary structs/interfaces
+- **Key Functions**: Important exported function signatures
 ```
 
-**`lib/agents/summarizer/agent.yaml`**：
+**`lib/agents/summarizer/agent.yaml`**:
 
 ```yaml
 name: summarizer
-description: "读取代码文件并生成结构化摘要的智能体"
+description: "An agent that reads code files and generates structured summaries"
 models:
   provider: claude
   preferred: sonnet
@@ -344,72 +344,72 @@ skills:
   - code-summarizer
 ```
 
-**`lib/agents/summarizer/instructions.md`**：
+**`lib/agents/summarizer/instructions.md`**:
 
 ```markdown
 # Summarizer Agent
 
-你是一个代码摘要生成专家。读取用户指定的代码文件，生成结构化的摘要报告。
+You are a code summarization expert. Read user-specified code files and generate structured summary reports.
 
-- 摘要简明扼要，不超过 200 字
-- 重点关注导出的类型和函数
-- 使用中文输出
+- Summaries should be concise -- no more than 200 words
+- Focus on exported types and functions
+- Output in English
 ```
 
-### 运行命令
+### Run Command
 
 ```bash
-rnix -i "总结 kernel/kernel.go 的代码结构" --agent=summarizer
+rnix -i "Summarize the code structure of kernel/kernel.go" --agent=summarizer
 ```
 
-### 预期输出
+### Expected Output
 
-智能体读取 `kernel/kernel.go`，输出结构化的代码摘要报告。
-
----
-
-## 常见问题与排错
-
-### Skill 找不到
-
-**症状：** 运行时报错 `skill not found: code-summarizer`
-
-**原因：** Skill 目录名或 SKILL.md 中的 `name` 字段与 Agent 的 `skills` 列表不匹配。
-
-**解决：** 确认 `lib/skills/code-summarizer/SKILL.md` 的 `name` 字段值为 `code-summarizer`，与 `agent.yaml` 中 `skills: [code-summarizer]` 一致。
-
-### Agent 加载失败
-
-**症状：** 报错 `agent not found: summarizer`
-
-**原因：** Agent 目录名与 `--agent=summarizer` 参数不匹配。
-
-**解决：** 确认目录为 `lib/agents/summarizer/`，且包含 `agent.yaml` 文件。
-
-### 权限错误（PERMISSION）
-
-**症状：** strace 中看到 `[ERR]` 行，错误码为 `PERMISSION`
-
-**原因：** Skill 的 `allowed-tools` 未包含智能体实际访问的 VFS 设备路径。
-
-**解决：** 检查 `SKILL.md` 的 `allowed-tools` 字段，添加缺失的设备路径。详见 [教程 2：调试第一个 bug](/tutorials/debugging-first-bug)。
-
-### SKILL.md 格式错误
-
-**症状：** 报错提示 YAML 解析失败
-
-**原因：** Frontmatter 格式不正确（缺少 `---` 分隔符、缩进错误等）。
-
-**解决：** 确认 SKILL.md 以 `---` 开头和结尾包裹 YAML frontmatter，且 YAML 语法正确。
+The agent reads `kernel/kernel.go` and outputs a structured code summary report.
 
 ---
 
-## 下一步
+## Troubleshooting
 
-- [教程 2：调试第一个 bug](/tutorials/debugging-first-bug) — 学习使用 strace 定位和修复问题
-- [教程 3：组合多智能体工作流](/tutorials/composing-multi-agent-workflow) — 学习用 Compose 编排多个智能体协作
+### Skill Not Found
 
-## 相关文档
+**Symptom:** Runtime error `skill not found: code-summarizer`
 
-- [核心概念：Skill](/guide/concepts) — Skill 的概念模型和四层能力架构
-- [参考手册：Agent 和 Skill 清单](/reference/) — agent.yaml 和 SKILL.md 的完整字段说明
+**Cause:** The Skill directory name or the `name` field in SKILL.md does not match the Agent's `skills` list.
+
+**Solution:** Verify that the `name` field in `lib/skills/code-summarizer/SKILL.md` is set to `code-summarizer`, matching `skills: [code-summarizer]` in `agent.yaml`.
+
+### Agent Loading Failure
+
+**Symptom:** Error `agent not found: summarizer`
+
+**Cause:** The Agent directory name does not match the `--agent=summarizer` parameter.
+
+**Solution:** Verify that the directory is `lib/agents/summarizer/` and that it contains an `agent.yaml` file.
+
+### Permission Error (PERMISSION)
+
+**Symptom:** `[ERR]` lines in strace output with error code `PERMISSION`
+
+**Cause:** The Skill's `allowed-tools` does not include a VFS device path that the agent actually accesses.
+
+**Solution:** Check the `allowed-tools` field in `SKILL.md` and add the missing device paths. See [Tutorial 2: Debugging Your First Bug](debugging-first-bug.md) for details.
+
+### SKILL.md Format Error
+
+**Symptom:** Error indicating YAML parsing failure
+
+**Cause:** Incorrect frontmatter format (missing `---` delimiters, indentation errors, etc.).
+
+**Solution:** Ensure that SKILL.md begins and ends with `---` wrapping the YAML frontmatter, and that the YAML syntax is correct.
+
+---
+
+## Next Steps
+
+- [Tutorial 2: Debugging Your First Bug](debugging-first-bug.md) -- Learn to use strace to locate and fix issues
+- [Tutorial 3: Composing a Multi-Agent Workflow](composing-multi-agent-workflow.md) -- Learn to orchestrate multiple agents with Compose
+
+## Related Documentation
+
+- [Core Concepts: Skill](/guide/concepts) -- The Skill conceptual model and four-layer capability architecture
+- [Reference: Agent and Skill Manifests](/reference/) -- Complete field descriptions for agent.yaml and SKILL.md

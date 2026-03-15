@@ -1,33 +1,33 @@
-# Rnix 教程
+# Rnix Tutorials
 
-本目录包含三篇实战教程，帮助你从零开始掌握 Rnix 的核心开发技能。
+This section contains three hands-on tutorials to help you master Rnix's core development skills from scratch.
 
-> 阅读教程前，建议先完成 [快速上手指南](/guide/quick-start) 确保 Rnix 已正确安装。
-> 如需查阅概念解释，请参考 [核心概念文档](/guide/concepts)。
-> 如需精确的 API 签名和字段定义，请参考 [参考手册](/reference/)。
-
----
-
-## 教程列表
-
-| 编号 | 教程 | 面向人群 | 预计时间 |
-|------|------|---------|---------|
-| 1 | [编写第一个 Skill](/tutorials/writing-first-skill) | 首次使用 Rnix 的开发者 | ~20 分钟 |
-| 2 | [调试第一个 bug](/tutorials/debugging-first-bug) | 已完成教程 1 的开发者 | ~15 分钟 |
-| 3 | [组合多智能体工作流](/tutorials/composing-multi-agent-workflow) | 已完成教程 1 的开发者 | ~25 分钟 |
+> Before starting the tutorials, we recommend completing the [Quick Start Guide](/guide/quick-start) to ensure Rnix is properly installed.
+> For conceptual explanations, refer to the [Core Concepts](/guide/concepts) documentation.
+> For precise API signatures and field definitions, refer to the [Reference Manual](/reference/).
 
 ---
 
-## 推荐学习路径
+## Tutorial List
 
-**新手路径：** 教程 1 → 教程 2 → 教程 3（按顺序完成）
-
-**有经验的开发者：** 可以直接跳到教程 3 学习多智能体编排，遇到不熟悉的概念再回头看教程 1。
+| # | Tutorial | Target Audience | Estimated Time |
+|---|----------|----------------|----------------|
+| 1 | [Writing Your First Skill](/tutorials/writing-first-skill) | Developers new to Rnix | ~20 min |
+| 2 | [Debugging Your First Bug](/tutorials/debugging-first-bug) | Developers who completed Tutorial 1 | ~15 min |
+| 3 | [Composing a Multi-Agent Workflow](/tutorials/composing-multi-agent-workflow) | Developers who completed Tutorial 1 | ~25 min |
 
 ---
 
-## 相关文档
+## Recommended Learning Paths
 
-- [核心概念](/guide/concepts) — 进程、VFS、Skill、Syscall 的心智模型
-- [快速上手](/guide/quick-start) — 15 分钟安装和首次运行
-- [参考手册](/reference/) — Syscall、VFS、CLI、IPC 完整技术参考
+**Beginners:** Tutorial 1 → Tutorial 2 → Tutorial 3 (complete them in order)
+
+**Experienced developers:** Feel free to jump straight to Tutorial 3 to learn multi-agent orchestration, and refer back to Tutorial 1 if you encounter unfamiliar concepts.
+
+---
+
+## Related Documentation
+
+- [Core Concepts](/guide/concepts) — Mental models for processes, VFS, skills, and syscalls
+- [Quick Start](/guide/quick-start) — Install and run Rnix in 15 minutes
+- [Reference Manual](/reference/) — Complete technical reference for syscalls, VFS, CLI, and IPC

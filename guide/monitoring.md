@@ -1,143 +1,168 @@
-# Rnix 系统监控工具
+# Monitoring & Supervisor
 
-## 概述
+Real-time process monitoring, categorized reasoning logs, token budget management, supervisor trees, and init bootstrap.
 
-`monitor.sh` 是一个用于持续监控 Rnix daemon 运行状态的脚本，每 30 秒报告一次系统状态摘要。
+---
 
-## 功能
-
-- **Daemon 状态**: 检查 daemon 是否运行中
-- **进程信息**: 显示 daemon 的 PID、内存使用（RSS/VSZ）
-- **管理进程**: 统计当前管理的进程数量
-- **系统资源**: 监控整体 CPU 和内存使用率
-- **日志记录**: 所有状态报告都被记录到日志文件
-
-## 使用方法
-
-### 基本启动
+## rnix top — Real-Time Monitor
 
 ```bash
-./scripts/monitor.sh
+$ rnix top
 ```
 
-### 后台运行
+```
+rnix top — Real-time Monitor                        Refresh: 1s
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PID  PPID  STATE    AGENT         TOKENS   ELAPSED  INTENT
+1    0     running  code-analyst  2,340    4.5s     Analyze code quality
+2    1     running  default       890      2.1s     Check dependencies
+3    0     zombie   —             1,567    8.3s     Security scan
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Processes: 3 | Running: 2 | Zombie: 1 | Dead: 0
+Tokens: 4,797 | Elapsed: 8.3s
+```
+
+**Interactive operations:**
+- Navigate with arrow keys
+- `k` — kill selected process
+- `d` — view process details
+- `s` — attach strace
+- `q` — quit
+
+---
+
+## rnix log — Reasoning Logs
+
+View an agent's reasoning process with categorized output:
 
 ```bash
-./scripts/monitor.sh > /dev/null 2>&1 &
+$ rnix log <pid>
+[think] Analyzing the main.go file structure...
+[tool]  Open(/dev/fs/./src/main.go) → read 2,048 bytes
+[think] Found 3 potential issues in error handling...
+[tool]  Open(/dev/shell) → ran "golangci-lint run ./..."
+[output] ## Code Quality Report
+         1. Missing error wrapping on line 45...
 ```
 
-或使用 nohup：
+**Categories:**
+- `[think]` — LLM reasoning (internal thoughts)
+- `[tool]` — Tool calls (VFS operations)
+- `[output]` — Final output to user
+
+**Filtering:**
 
 ```bash
-nohup ./scripts/monitor.sh &
+rnix log <pid> --filter think    # Only reasoning
+rnix log <pid> --filter tool     # Only tool calls
+rnix log <pid> --filter output   # Only output
 ```
 
-### 查看日志
+---
+
+## Token Budget Management
+
+Set per-agent or per-workflow token limits:
+
+**Agent level** (`agent.yaml`):
+```yaml
+context_budget: 8192
+```
+
+**Compose level** (`rnix-compose.yaml`):
+```yaml
+budget_pool:
+  total: 50000
+  allocation: priority
+```
+
+**CLI override:**
+```bash
+rnix -i "Analyze code" --budget 5000
+```
+
+When budget is exceeded, the process exits with code 2 (`budget_exceeded`). See [Token Economy](/guide/token-economy) for budget pools, SLA, and reputation.
+
+---
+
+## Supervisor Trees
+
+Supervisor processes monitor child agents and automatically restart them on failure.
+
+### Restart Strategies
+
+| Strategy | Behavior |
+|----------|----------|
+| `one_for_one` | Only restart the crashed child |
+| `one_for_all` | Restart all children |
+| `rest_for_one` | Restart the crashed child and all started after it |
+
+### Configuration
+
+```yaml
+# rnix-init.yaml
+version: "1.0"
+services:
+  monitor:
+    intent: "Monitor system health"
+    agent: "health-monitor"
+    restart: always
+    max_restarts: 3
+
+  analyzer:
+    intent: "Continuous code analysis"
+    agent: "code-analyst"
+    restart: on-failure
+    depends_on:
+      - monitor
+```
+
+### Restart Policies
+
+| Policy | When to Restart |
+|--------|-----------------|
+| `no` | Never (default) |
+| `always` | On any exit |
+| `on-failure` | Only on non-zero exit code |
+
+---
+
+## Init Bootstrap
+
+The daemon bootstrap sequence on startup:
+
+1. Parse `rnix-providers.yaml` → register LLM providers to VFS
+2. Parse `rnix-init.yaml` → start system services and supervisor trees
+3. Initialize Skill registry
+4. Start MCP service management
+5. Begin idle timeout monitoring
+
+Services defined in `rnix-init.yaml` start in dependency order, with supervisors monitoring their children.
+
+---
+
+## Daemon Management
 
 ```bash
-tail -f logs/rnix-monitor.log          # 实时查看
-cat logs/rnix-monitor.log              # 查看完整日志
-grep "Daemon" logs/rnix-monitor.log    # 过滤特定内容
+$ rnix daemon status
+status:  running
+version: 0.5.0
+socket:  /run/user/1000/rnix/rnix.sock
+procs:   2 active / 5 total
+providers: claude (healthy), ollama (healthy)
+
+$ rnix daemon stop
+daemon stopped
 ```
 
-## 输出示例
+**Auto-start:** daemon starts on first `rnix` command.
+**Auto-stop:** exits after 60s with no active processes or connections.
 
-```
-═══════════════════════════════════════════
-[2026-03-04 15:30:45] Rnix 系统监控报告
-═══════════════════════════════════════════
-▸ Daemon 状态: ✓ 运行中
-▸ Daemon 进程: PID=12345 | RSS=25MB | VSZ=150MB
-▸ 管理进程数: 8
-▸ 系统资源: CPU=12.5% | MEM=45.2%
-═══════════════════════════════════════════
-```
+---
 
-## 状态解释
+## Related Documentation
 
-| 状态 | 含义 |
-|------|------|
-| ✓ 运行中 | Daemon 正常运行，可响应请求 |
-| ⚠ Socket 存在但无响应 | 进程可能崩溃或卡死 |
-| ✗ 离线 | Daemon 未运行 |
-
-## 配置选项
-
-### 修改监控间隔
-
-编辑脚本中的睡眠时间（默认 30 秒）：
-
-```bash
-sleep 30  # 改为其他值，如 sleep 60 表示 60 秒
-```
-
-### 修改日志目录
-
-设置环境变量：
-
-```bash
-export RNIX_LOG_DIR=/var/log/rnix
-./scripts/monitor.sh
-```
-
-## 停止监控
-
-按 `Ctrl+C` 即可停止监控脚本。
-
-## 故障排除
-
-### 权限问题
-
-```bash
-chmod +x ./scripts/monitor.sh
-```
-
-### Socket 路径问题
-
-如果监控无法连接到 daemon，检查 socket 路径：
-
-```bash
-# 查看实际 socket 路径
-echo $XDG_RUNTIME_DIR/rnix/rnix.sock
-# 或
-ls -la /tmp/rnix-$(id -u)/
-```
-
-### Daemon 无法启动
-
-```bash
-# 手动启动 daemon
-./bin/rnix daemon
-
-# 在另一个终端查看状态
-./scripts/monitor.sh
-```
-
-## 与其他工具集成
-
-### 发送告警（示例）
-
-修改脚本的 `check_daemon_status` 函数以添加告警逻辑：
-
-```bash
-if [ "$(check_daemon_status)" == "✗ 离线" ]; then
-    # 发送通知或重启 daemon
-    ./bin/rnix daemon &
-fi
-```
-
-## 相关命令
-
-```bash
-# 查看进程列表
-rnix ps
-
-# 查看特定进程
-rnix ps <pid>
-
-# 跟踪进程执行
-rnix strace <pid>
-
-# 杀死进程
-rnix kill <pid>
-```
+- [Token Economy](/guide/token-economy) — Budget pools, SLA, reputation
+- [Security](/guide/security) — Immune daemon and anomaly detection
+- [Configuration](/guide/configuration) — rnix-init.yaml reference
+- [Debugging](/guide/debugging) — strace and gdb

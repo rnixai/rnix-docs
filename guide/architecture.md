@@ -1,35 +1,35 @@
-# Rnix 架构文档
+# Rnix Architecture
 
-本文档面向希望深入理解 Rnix 内部设计的贡献者。阅读前建议先熟悉 [核心概念](/guide/concepts)，这里不再复述概念定义，而是聚焦**设计决策、接口边界、数据流和扩展路径**。
+This document is intended for contributors who want to deeply understand Rnix's internal design. It is recommended to first familiarize yourself with [Core Concepts](concepts.md) before reading — concept definitions are not repeated here; instead, the focus is on **design decisions, interface boundaries, data flow, and extension paths**.
 
-> 如需查询具体 API 签名和参数细节，请参阅 [参考手册](/reference/)。
-> 如需实战操作指引，请参阅 [教程](/tutorials/)。
-
----
-
-## 目录
-
-1. [微内核设计](#1-微内核设计)
-2. [进程模型](#2-进程模型)
-3. [驱动层](#3-驱动层)
-4. [上下文管理](#4-上下文管理)
+> For specific API signatures and parameter details, see the [Reference Manual](/reference/).
+> For hands-on operational guides, see the [Tutorials](/tutorials/).
 
 ---
 
-## 1. 微内核设计
+## Table of Contents
 
-### 1.1 设计哲学
+1. [Microkernel Design](#_1-microkernel-design)
+2. [Process Model](#_2-process-model)
+3. [Driver Layer](#_3-driver-layer)
+4. [Context Management](#_4-context-management)
 
-Rnix 内核采用**接口组合模式**——将系统调用按功能分类为独立的子接口，由一个统一的 `KernelImpl` 结构体组合实现。这个设计选择源于 OS 隐喻与 Go 语言特性的交汇：
+---
 
-- **Unix 微内核隐喻**：传统微内核将进程管理、文件系统、IPC 分离为独立的服务器。Rnix 在单进程内以接口边界模拟这种分离，每个子接口各自承担一个功能域的职责。
-- **Go 接口组合的天然适配**：Go 的小接口 + 组合优于大接口的哲学恰好匹配——每个子接口只定义 2~5 个方法，职责清晰、可独立测试、可独立演进。
+## 1. Microkernel Design
 
-决策记录：接口组合模式 vs 单一大接口 vs 函数集合——选择接口组合的核心理由是**扩展性**：新增一类 syscall 只需定义新接口并在 `KernelImpl` 上实现，不影响已有子接口的编译和测试。
+### 1.1 Design Philosophy
 
-### 1.2 KernelImpl 与子接口
+The Rnix kernel uses an **interface composition pattern** — system calls are classified by function into independent sub-interfaces, and a unified `KernelImpl` struct composes their implementations. This design choice emerges from the intersection of the OS metaphor and Go language characteristics:
 
-`KernelImpl` 是内核的核心实现结构体，定义于 `kernel/kernel.go`：
+- **Unix microkernel metaphor**: Traditional microkernels separate process management, filesystem, and IPC into independent servers. Rnix simulates this separation within a single process using interface boundaries, with each sub-interface taking responsibility for a single functional domain.
+- **Natural fit with Go interface composition**: Go's philosophy of small interfaces + composition over large interfaces is a perfect match — each sub-interface defines only 2-5 methods, with clear responsibilities, independently testable and evolvable.
+
+Design record: Interface composition vs single large interface vs function collection — the core reason for choosing interface composition is **extensibility**: adding a new category of syscalls only requires defining a new interface and implementing it on `KernelImpl`, without affecting compilation or testing of existing sub-interfaces.
+
+### 1.2 KernelImpl and Sub-Interfaces
+
+`KernelImpl` is the kernel's core implementation struct, defined in `kernel/kernel.go`:
 
 ```go
 type KernelImpl struct {
@@ -48,37 +48,37 @@ type KernelImpl struct {
 }
 ```
 
-它通过方法集合隐式实现以下 6 个分类子接口：
+It implicitly implements the following 6 classified sub-interfaces through its method set:
 
-| 子接口 | 方法 | 职责 |
-|--------|------|------|
-| **ProcessManager** | `Spawn(intent, agent, opts) (PID, error)` | 进程创建（分配 PID、上下文、FD，启动推理 goroutine） |
-|  | `Kill(pid, signal) error` | 向进程发送信号（SIGTERM/SIGKILL/SIGPAUSE/SIGRESUME） |
-|  | `Wait(pid) (ExitStatus, error)` | 阻塞等待进程结束并触发 reapProcess 资源释放 |
-| **MountManager** | `Mount(path, config) error` | 挂载 MCP 服务器到 `/mnt/mcp/` |
-|  | `Unmount(path) error` | 卸载 MCP 服务器 |
-|  | `UnmountAll() error` | 卸载所有 MCP（Shutdown 时调用） |
-| **IPCManager** | `Send(senderPID, targetPID, data) error` | 向目标进程发送消息 |
-|  | `Recv(pid) (*Message, error)` | 阻塞接收消息 |
-|  | `Pipe(writerPID, readerPID) (writeFD, readFD, error)` | 创建进程间管道 |
-| **SignalManager** | `Signal(pid, sig) error` | 投递信号（含自定义 handler 分发） |
-|  | `SigBlock(pid, sig) error` | 阻塞信号 |
-|  | `SigUnblock(pid, sig) error` | 解除信号阻塞并投递 pending |
-| **ProcGroupManager** | `JoinGroup(pid, groupID) error` | 加入进程组 |
-|  | `LeaveGroup(pid, groupID) error` | 离开进程组 |
-|  | `GetProcGroup(groupID) ([]PID, error)` | 查询进程组成员列表 |
-|  | `SignalGroup(groupID, signal) error` | 向进程组广播信号 |
-| **SupervisorManager** | `SpawnSupervisor(spec) (PID, error)` | 创建 Supervisor 树节点 |
+| Sub-Interface | Methods | Responsibility |
+|---------------|---------|----------------|
+| **ProcessManager** | `Spawn(intent, agent, opts) (PID, error)` | Process creation (allocate PID, context, FD, start reasoning goroutine) |
+|  | `Kill(pid, signal) error` | Send signal to process (SIGTERM/SIGKILL/SIGPAUSE/SIGRESUME) |
+|  | `Wait(pid) (ExitStatus, error)` | Block until process ends and trigger reapProcess resource release |
+| **MountManager** | `Mount(path, config) error` | Mount MCP server to `/mnt/mcp/` |
+|  | `Unmount(path) error` | Unmount MCP server |
+|  | `UnmountAll() error` | Unmount all MCP (called during Shutdown) |
+| **IPCManager** | `Send(senderPID, targetPID, data) error` | Send message to target process |
+|  | `Recv(pid) (*Message, error)` | Block to receive message |
+|  | `Pipe(writerPID, readerPID) (writeFD, readFD, error)` | Create inter-process pipe |
+| **SignalManager** | `Signal(pid, sig) error` | Deliver signal (includes custom handler dispatch) |
+|  | `SigBlock(pid, sig) error` | Block signal |
+|  | `SigUnblock(pid, sig) error` | Unblock signal and deliver pending |
+| **ProcGroupManager** | `JoinGroup(pid, groupID) error` | Join process group |
+|  | `LeaveGroup(pid, groupID) error` | Leave process group |
+|  | `GetProcGroup(groupID) ([]PID, error)` | Query process group member list |
+|  | `SignalGroup(groupID, signal) error` | Broadcast signal to process group |
+| **SupervisorManager** | `SpawnSupervisor(spec) (PID, error)` | Create supervisor tree node |
 
-编译时接口合规检查确保 `KernelImpl` 满足 `ProcessManager` 约束：
+Compile-time interface compliance check ensures `KernelImpl` satisfies the `ProcessManager` constraint:
 
 ```go
 var _ ProcessManager = (*KernelImpl)(nil)
 ```
 
-### 1.3 KernelCallbacks 回调机制
+### 1.3 KernelCallbacks Mechanism
 
-`KernelCallbacks` 是内核到 CLI/UI 层的通知通道，解耦内核与展示逻辑：
+`KernelCallbacks` is the notification channel from kernel to CLI/UI layer, decoupling kernel from presentation logic:
 
 ```go
 type KernelCallbacks interface {
@@ -89,21 +89,21 @@ type KernelCallbacks interface {
 }
 ```
 
-| 回调 | 触发时机 | 用途 |
-|------|---------|------|
-| OnSpawn | 进程注册到进程表后 | CLI 显示 `[kernel] spawning PID N...` |
-| OnStep | 每次 reasonStep 循环开头 | CLI 显示 `[agent] step X/N` |
-| OnComplete | finishProcess 写入 ExitStatus 后 | CLI 显示最终结果和退出码 |
-| OnError | finishProcess 中 exit.Err 非 nil | CLI 显示错误信息 |
+| Callback | Trigger | Purpose |
+|----------|---------|---------|
+| OnSpawn | After process registered in process table | CLI displays `[kernel] spawning PID N...` |
+| OnStep | At start of each reasonStep loop | CLI displays `[agent] step X/N` |
+| OnComplete | After finishProcess writes ExitStatus | CLI displays final result and exit code |
+| OnError | When exit.Err is non-nil in finishProcess | CLI displays error message |
 
-传入 `nil` 可关闭回调（静默模式），适用于测试和嵌入式集成。
+Passing `nil` disables callbacks (silent mode), suitable for testing and embedded integration.
 
-### 1.4 数据流：从 Spawn 到完成
+### 1.4 Data Flow: From Spawn to Completion
 
-一次完整的智能体执行遵循以下数据流：
+A complete agent execution follows this data flow:
 
 ```
-CLI 层                    内核层                   VFS/驱动层
+CLI Layer                Kernel Layer              VFS/Driver Layer
   │                        │                         │
   │  Spawn(intent, agent)  │                         │
   ├───────────────────────>│                         │
@@ -116,12 +116,12 @@ CLI 层                    内核层                   VFS/驱动层
   │                        │  Open(/dev/llm/claude)  │
   │                        ├────────────────────────>│ vfs.DeviceRegistry
   │                        │                         │
-  │                        │  [启动推理 goroutine]    │
+  │                        │  [Start reasoning goroutine]
   │                        │                         │
   │     OnSpawn(pid)       │                         │
   │<───────────────────────│                         │
   │                        │                         │
-  │                     ┌──┤ reasonStep 循环         │
+  │                     ┌──┤ reasonStep loop         │
   │     OnStep(1/10)    │  │                         │
   │<────────────────────┤  │  BuildPrompt(cid)       │
   │                     │  ├────────────────────────>│ context.Manager
@@ -132,120 +132,120 @@ CLI 层                    内核层                   VFS/驱动层
   │                     │  │  Read(llmFD)            │
   │                     │  ├────────────────────────>│ /dev/llm/claude
   │                     │  │                         │
-  │                     │  │  [解析 action]           │
+  │                     │  │  [Parse action]         │
   │                     │  │                         │
-  │                     │  │  如果 tool_call:         │
+  │                     │  │  If tool_call:          │
   │                     │  │  Open/Write/Read/Close   │
   │                     │  ├────────────────────────>│ /dev/fs, /dev/shell, ...
   │                     │  │                         │
   │                     │  │  AppendToolResult(cid)   │
   │                     │  ├────────────────────────>│ context.Manager
   │                     │  │                         │
-  │                     └──┤ 如果 text → 完成        │
+  │                     └──┤ If text → complete      │
   │                        │                         │
   │                        │  finishProcess(exit)     │
   │   OnComplete(result)   │                         │
   │<───────────────────────│                         │
   │                        │                         │
   │  Wait(pid) / Reap      │                         │
-  ├───────────────────────>│  reapProcess 序列       │
+  ├───────────────────────>│  reapProcess sequence   │
   │                        ├────────────────────────>│ CtxFree, CloseAll, ...
 ```
 
-### 1.5 扩展路径
+### 1.5 Extension Paths
 
-**添加新 syscall：**
+**Adding a new syscall:**
 
-1. 在 `kernel/kernel.go` 中定义新接口（如 `type FooManager interface { ... }`）
-2. 在 `KernelImpl` 上实现方法
-3. 添加编译时检查：`var _ FooManager = (*KernelImpl)(nil)`
-4. 在 `debug.NewEvent` 中注册新的 syscall 名称
-5. 添加 IPC method（`ipc/protocol.go`）使 CLI 可调用
+1. Define a new interface in `kernel/kernel.go` (e.g., `type FooManager interface { ... }`)
+2. Implement methods on `KernelImpl`
+3. Add compile-time check: `var _ FooManager = (*KernelImpl)(nil)`
+4. Register the new syscall name in `debug.NewEvent`
+5. Add an IPC method (`ipc/protocol.go`) so CLI can invoke it
 
-**添加新设备驱动：**
+**Adding a new device driver:**
 
-1. 实现 `vfs.VFSFileFactory` 函数
-2. 在 `cmd/rnix/main.go` 的初始化代码中调用 `devRegistry.Register(path, factory)`
-3. VFS 自动处理 Open/Read/Write/Close 路由
+1. Implement a `vfs.VFSFileFactory` function
+2. Call `devRegistry.Register(path, factory)` in the initialization code in `cmd/rnix/main.go`
+3. VFS automatically handles Open/Read/Write/Close routing
 
 ---
 
-## 2. 进程模型
+## 2. Process Model
 
-### 2.1 Process 结构体设计
+### 2.1 Process Struct Design
 
-`Process` 定义于 `kernel/process.go`，是 Rnix 进程的完整运行时表示。字段按功能分组：
+`Process` is defined in `kernel/process.go` and is the complete runtime representation of a Rnix process. Fields are grouped by function:
 
-**身份与状态（不可变 / mu 保护）：**
+**Identity and State (immutable / mu-protected):**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| PID | `types.PID` | 全局唯一，创建后不可变 |
-| PPID | `types.PID` | 父进程 PID，孤儿进程被 reparent 时可修改 |
-| State | `types.ProcessState` | 状态机当前状态，mu 保护 |
-| Intent | `string` | 创建时的意图描述，不可变 |
-| Skills | `[]string` | 加载的 Skill 名称列表 |
-| Children | `[]types.PID` | 子进程 PID 列表 |
-| CreatedAt | `time.Time` | 进程创建时间（用于 elapsed 和 strace 时间戳） |
-| Exit | `*ExitStatus` | Zombie/Dead 时非 nil，记录退出状态 |
+| Field | Type | Description |
+|-------|------|-------------|
+| PID | `types.PID` | Globally unique, immutable after creation |
+| PPID | `types.PID` | Parent process PID, modifiable when orphan is reparented |
+| State | `types.ProcessState` | Current state machine state, mu-protected |
+| Intent | `string` | Intent description at creation, immutable |
+| Skills | `[]string` | List of loaded skill names |
+| Children | `[]types.PID` | Child process PID list |
+| CreatedAt | `time.Time` | Process creation time (used for elapsed and strace timestamps) |
+| Exit | `*ExitStatus` | Non-nil when Zombie/Dead, records exit status |
 
-**资源与通道：**
+**Resources and Channels:**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| FDTable | `map[types.FD]vfs.VFSFile` | 文件描述符表（VFS 内部管理实际状态） |
-| DebugChan | `chan types.SyscallEvent` | 缓冲 256，strace 追踪通道 |
-| LogChan | `chan types.LogEntry` | 缓冲 256，推理日志通道 |
-| Done | `chan ExitStatus` | 缓冲 1，进程退出信号 |
-| CtxID | `types.CtxID` | 关联的上下文空间 ID |
+| Field | Type | Description |
+|-------|------|-------------|
+| FDTable | `map[types.FD]vfs.VFSFile` | File descriptor table (VFS manages actual state internally) |
+| DebugChan | `chan types.SyscallEvent` | Buffer 256, strace trace channel |
+| LogChan | `chan types.LogEntry` | Buffer 256, reasoning log channel |
+| Done | `chan ExitStatus` | Buffer 1, process exit signal |
+| CtxID | `types.CtxID` | Associated context space ID |
 
-**推理状态：**
+**Reasoning State:**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| Result | `string` | 最终推理输出 |
-| TokensUsed | `int` | 累计 token 消耗 |
-| ContextBudget | `int` | token 预算（0 = 无限制） |
-| AllowedDevices | `[]string` | 设备白名单（nil = 全部允许） |
-| MCPMounts | `[]string` | 自动挂载的 MCP 路径 |
+| Field | Type | Description |
+|-------|------|-------------|
+| Result | `string` | Final reasoning output |
+| TokensUsed | `int` | Cumulative token consumption |
+| ContextBudget | `int` | Token budget (0 = unlimited) |
+| AllowedDevices | `[]string` | Device whitelist (nil = all allowed) |
+| MCPMounts | `[]string` | Auto-mounted MCP paths |
 
-**并发子系统（均由 mu 保护）：**
+**Concurrency Subsystems (all mu-protected):**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| groups | `[]types.PGID` | 进程组成员关系 |
-| sigHandlers | `map[Signal]SignalHandler` | 自定义信号处理器 |
-| blockedSignals | `map[Signal]struct{}` | 被阻塞的信号集 |
-| pendingSignals | `map[Signal]struct{}` | 待投递的信号集 |
-| resumeCh | `chan struct{}` | SIGPAUSE/SIGRESUME 协调 |
-| threads | `map[TID]*Thread` | 线程表 |
-| coroutines | `map[CoID]*Coroutine` | 协程表 |
+| Field | Type | Description |
+|-------|------|-------------|
+| groups | `[]types.PGID` | Process group memberships |
+| sigHandlers | `map[Signal]SignalHandler` | Custom signal handlers |
+| blockedSignals | `map[Signal]struct{}` | Blocked signal set |
+| pendingSignals | `map[Signal]struct{}` | Pending signal set |
+| resumeCh | `chan struct{}` | SIGPAUSE/SIGRESUME coordination |
+| threads | `map[TID]*Thread` | Thread table |
+| coroutines | `map[CoID]*Coroutine` | Coroutine table |
 
-**同步原语：**
+**Synchronization Primitives:**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| mu | `sync.Mutex` | 保护所有可变状态 |
-| cancel | `context.CancelFunc` | 取消推理 goroutine |
-| ctx | `context.Context` | 推理 goroutine 的上下文 |
-| wg | `sync.WaitGroup` | 等待推理 goroutine 完成 |
-| reapOnce | `sync.Once` | 确保 reapProcess 只执行一次 |
+| Field | Type | Description |
+|-------|------|-------------|
+| mu | `sync.Mutex` | Protects all mutable state |
+| cancel | `context.CancelFunc` | Cancels reasoning goroutine |
+| ctx | `context.Context` | Reasoning goroutine's context |
+| wg | `sync.WaitGroup` | Waits for reasoning goroutine completion |
+| reapOnce | `sync.Once` | Ensures reapProcess executes only once |
 
-### 2.2 状态机
+### 2.2 State Machine
 
-进程状态严格遵循单向转移规则，不允许回退：
+Process states follow strict one-directional transition rules; rollback is not allowed:
 
 ```
 Created ──Start()──→ Running ──Terminate()──→ Zombie ──Reap()──→ Dead
 ```
 
-| 转移 | 方法 | 触发条件 |
-|------|------|---------|
-| Created → Running | `Start()` | 推理 goroutine 启动 |
-| Running → Zombie | `Terminate(exit)` | 推理完成/出错/超时/Kill/预算超限 |
-| Zombie → Dead | `Reap()` | Wait 调用或自动 reaper 清理 |
+| Transition | Method | Trigger |
+|------------|--------|---------|
+| Created → Running | `Start()` | Reasoning goroutine launches |
+| Running → Zombie | `Terminate(exit)` | Reasoning complete/error/timeout/Kill/budget exceeded |
+| Zombie → Dead | `Reap()` | Wait call or auto-reaper cleanup |
 
-状态转移逻辑使用 `validTransitions` 表驱动：
+State transition logic uses a `validTransitions` table-driven approach:
 
 ```go
 var validTransitions = map[types.ProcessState][]types.ProcessState{
@@ -255,11 +255,11 @@ var validTransitions = map[types.ProcessState][]types.ProcessState{
 }
 ```
 
-非法转移返回 `*SyscallError`（`ErrInternal`）。`transitionLocked` 在持有 mu 的情况下检查转移合法性，确保并发安全。
+Illegal transitions return `*SyscallError` (`ErrInternal`). `transitionLocked` checks transition legality while holding mu, ensuring concurrency safety.
 
-### 2.3 PID 分配策略
+### 2.3 PID Allocation Strategy
 
-PID 使用包级 `atomic.Uint64` 全局递增分配：
+PIDs use a package-level `atomic.Uint64` for globally incrementing allocation:
 
 ```go
 var pidCounter atomic.Uint64
@@ -269,15 +269,15 @@ func nextPID() types.PID {
 }
 ```
 
-设计决策：
+Design decisions:
 
-- **不回收**：PID 单调递增，永不复用。这简化了进程引用的生命周期管理——持有旧 PID 的引用不会意外指向新进程。
-- **从 1 开始**：PID 0 保留给"内核/init"虚拟进程，CLI 直接 Spawn 的顶层进程 PPID 为 0。
-- **原子操作**：无需加锁，多个并发 Spawn 安全。
+- **No recycling**: PIDs increase monotonically, never reused. This simplifies process reference lifecycle management — references holding old PIDs won't accidentally point to new processes.
+- **Starting from 1**: PID 0 is reserved for the "kernel/init" virtual process; top-level processes spawned directly by CLI have PPID 0.
+- **Atomic operations**: No locking needed; multiple concurrent Spawns are safe.
 
-### 2.4 goroutine 生命周期管理
+### 2.4 Goroutine Lifecycle Management
 
-每个进程拥有一个**专属推理 goroutine**，在 Spawn 中启动：
+Each process has a **dedicated reasoning goroutine**, launched during Spawn:
 
 ```go
 proc.wg.Add(1)
@@ -289,73 +289,73 @@ go func() {
 }()
 ```
 
-关键约束：
+Key constraints:
 
-1. **wg 追踪**：`wg.Add(1)` 在 goroutine 启动前调用，`wg.Done()` 通过 defer 确保执行。reapProcess 中 `wg.Wait()` 等待 goroutine 退出。
-2. **context.Cancel 取消**：Kill(SIGKILL) 调用 `proc.Cancel()`，reasonStep 循环在每个 step 开头检查 `proc.ctx.Done()`。
-3. **defer CloseAll**：goroutine 退出前关闭所有打开的 VFS 文件描述符。
-4. **SIGPAUSE/SIGRESUME**：reasonStep 在每个 step 开头调用 `proc.WaitIfPaused()`，如果 `resumeCh` 非 nil 则阻塞，直到 Resume 关闭 channel。
+1. **wg tracking**: `wg.Add(1)` is called before goroutine launch; `wg.Done()` is ensured via defer. `wg.Wait()` in reapProcess waits for goroutine exit.
+2. **context.Cancel cancellation**: Kill(SIGKILL) calls `proc.Cancel()`; the reasonStep loop checks `proc.ctx.Done()` at the start of each step.
+3. **defer CloseAll**: All open VFS file descriptors are closed before goroutine exit.
+4. **SIGPAUSE/SIGRESUME**: reasonStep calls `proc.WaitIfPaused()` at the start of each step; if `resumeCh` is non-nil, it blocks until Resume closes the channel.
 
-### 2.5 资源释放顺序
+### 2.5 Resource Release Order
 
-`reapProcess`（定义于 `kernel/reap.go`）执行严格的资源释放序列。通过 `reapOnce` 确保幂等——Wait 和自动 reaper 可能并发调用，只有第一个执行：
+`reapProcess` (defined in `kernel/reap.go`) executes a strict resource release sequence. Idempotency is ensured via `reapOnce` — Wait and the auto-reaper may call concurrently, but only the first one executes:
 
-| 步骤 | 操作 | 目的 |
-|------|------|------|
-| 1 | `handleOrphanChildren(proc)` | Running 子进程 reparent 到 PID 0，Zombie 子进程推入 reapCh |
-| 2 | `proc.Cancel()` | 取消 context，通知推理 goroutine 停止 |
-| 3 | `proc.wg.Wait()` | 等待推理 goroutine 退出（其 defer 会调用 CloseAll） |
-| 4 | `close(DebugChan)`, `close(LogChan)` | 先 nil 化再 close，防止与 emitEvent 竞态 |
-| 5 | `msgQueue.close()` | 关闭消息队列，解除 Recv 阻塞 |
-| 6 | `removeFromAllGroups` | 清理进程组成员关系 |
-| 7 | `ClearSignalState()` | 清理信号 handler/blocked/pending/resumeCh |
-| 8 | `ClearThreads()` | 取消所有线程并等待完成 |
-| 9 | `ClearCoroutines()` | 清理协程（关闭 resumeCh，排空 yieldCh） |
-| 10 | `CtxFree(CtxID)` | 释放上下文空间 |
-| 11 | `proc.Reap()` | Zombie → Dead 状态转移 |
-| 12 | `RemoveProcess(pid)` | 从进程表移除 |
+| Step | Operation | Purpose |
+|------|-----------|---------|
+| 1 | `handleOrphanChildren(proc)` | Reparent running children to PID 0, push zombie children to reapCh |
+| 2 | `proc.Cancel()` | Cancel context, notify reasoning goroutine to stop |
+| 3 | `proc.wg.Wait()` | Wait for reasoning goroutine exit (its defer calls CloseAll) |
+| 4 | `close(DebugChan)`, `close(LogChan)` | Nil-ify first then close, preventing race with emitEvent |
+| 5 | `msgQueue.close()` | Close message queue, unblock Recv |
+| 6 | `removeFromAllGroups` | Clean up process group memberships |
+| 7 | `ClearSignalState()` | Clean up signal handler/blocked/pending/resumeCh |
+| 8 | `ClearThreads()` | Cancel all threads and wait for completion |
+| 9 | `ClearCoroutines()` | Clean up coroutines (close resumeCh, drain yieldCh) |
+| 10 | `CtxFree(CtxID)` | Free context space |
+| 11 | `proc.Reap()` | Zombie → Dead state transition |
+| 12 | `RemoveProcess(pid)` | Remove from process table |
 
-步骤顺序至关重要：必须先处理孤儿子进程（步骤 1），再停止 goroutine（步骤 2-3），再关闭通道（步骤 4-5），最后释放资源（步骤 10-12）。
+Step order is critical: orphan children must be handled first (step 1), then stop the goroutine (steps 2-3), then close channels (steps 4-5), and finally release resources (steps 10-12).
 
-### 2.6 三级并发模型
+### 2.6 Three-Level Concurrency Model
 
-Rnix 提供三种粒度的并发原语，映射到不同的使用场景：
+Rnix provides three granularities of concurrency primitives, mapped to different use cases:
 
-| 级别 | 原语 | 调度模型 | 资源隔离 | 适用场景 |
-|------|------|---------|---------|---------|
-| **Process** | `Spawn` | 抢占式（独立 goroutine + context） | 独立 PID、独立 CtxID、独立 FD 表 | 独立任务 |
-| **Thread** | `SpawnThread` | 抢占式（独立 goroutine，共享父 ctx） | 共享父进程上下文 | 并行子任务 |
-| **Coroutine** | `SpawnCoroutine` | 协作式（yield/resume） | 共享父进程上下文 | 流式处理、状态机 |
+| Level | Primitive | Scheduling Model | Resource Isolation | Use Case |
+|-------|-----------|-------------------|-------------------|----------|
+| **Process** | `Spawn` | Preemptive (independent goroutine + context) | Independent PID, CtxID, FD table | Independent tasks |
+| **Thread** | `SpawnThread` | Preemptive (independent goroutine, shared parent ctx) | Shared parent process context | Parallel subtasks |
+| **Coroutine** | `SpawnCoroutine` | Cooperative (yield/resume) | Shared parent process context | Streaming, state machines |
 
-Thread 结构体包含 TID、ParentPID、Intent、State、Done、Result、Err 以及内部同步字段（mu、cancel、ctx），通过 `context.WithCancel(parentCtx)` 派生子 context，父进程被 Kill 时子 Thread 的 context 也被取消。
+The Thread struct contains TID, ParentPID, Intent, State, Done, Result, Err and internal sync fields (mu, cancel, ctx), deriving a child context via `context.WithCancel(parentCtx)`. When the parent process is killed, child Thread contexts are also cancelled.
 
-Coroutine 使用 `yieldCh` / `resumeCh` 通道对实现协作式让出和恢复，支持值传递。ClearCoroutines 在进程回收时需要处理两种阻塞情况：阻塞在 `yieldCh <- value`（通过 drain goroutine 排空）和阻塞在 `<-resumeCh`（通过关闭 channel 解除）。
+Coroutines use `yieldCh` / `resumeCh` channel pairs for cooperative yielding and resuming, with value passing. ClearCoroutines during process reaping handles two blocking scenarios: blocking on `yieldCh <- value` (resolved by a drain goroutine) and blocking on `<-resumeCh` (resolved by closing the channel).
 
-### 2.7 进程组与信号系统
+### 2.7 Process Groups and Signal System
 
-**进程组**允许将多个进程逻辑分组，通过 `SignalGroup` 向组内所有成员广播信号，适用于 Compose 编排中的批量控制。
+**Process groups** allow logically grouping multiple processes, broadcasting signals to all members via `SignalGroup`, suitable for batch control in Compose orchestration.
 
-**信号系统**支持 5 种信号：
+**The signal system** supports 5 signals:
 
-| 信号 | 可阻塞 | 可自定义 handler | 默认行为 |
-|------|--------|-----------------|---------|
-| SIGTERM | ✓ | ✓ | Cancel context |
-| SIGKILL | ✗ | ✗ | 强制 Cancel |
-| SIGINT | ✓ | ✓ | Cancel context |
-| SIGPAUSE | ✓ | ✓ | 暂停推理循环 |
-| SIGRESUME | ✓ | ✓ | 恢复推理循环 |
+| Signal | Blockable | Custom Handler | Default Behavior |
+|--------|-----------|----------------|------------------|
+| SIGTERM | Yes | Yes | Cancel context |
+| SIGKILL | No | No | Force Cancel |
+| SIGINT | Yes | Yes | Cancel context |
+| SIGPAUSE | Yes | Yes | Pause reasoning loop |
+| SIGRESUME | Yes | Yes | Resume reasoning loop |
 
-信号投递使用 `resolveSignalDisposition` 在单次锁持有中原子确定分发路径（blocked → pending / handler / default），避免 TOCTOU 竞态。
+Signal delivery uses `resolveSignalDisposition` to atomically determine the dispatch path within a single lock hold (blocked → pending / handler / default), avoiding TOCTOU races.
 
 ---
 
-## 3. 驱动层
+## 3. Driver Layer
 
-### 3.1 VFS 设备注册机制
+### 3.1 VFS Device Registration Mechanism
 
-VFS（虚拟文件系统）是 Rnix 的资源抽象层。所有外部资源——LLM、文件系统、Shell、MCP 工具——统一表现为可 Open/Read/Write/Close 的"文件"。
+VFS (Virtual File System) is Rnix's resource abstraction layer. All external resources — LLM, filesystem, shell, MCP tools — are uniformly represented as "files" that can be Open/Read/Write/Closed.
 
-**核心抽象（`vfs/vfs.go`）：**
+**Core Abstraction (`vfs/vfs.go`):**
 
 ```go
 type VFSFile interface {
@@ -368,9 +368,9 @@ type VFSFile interface {
 type VFSFileFactory func(subpath string, flags OpenFlag) (VFSFile, error)
 ```
 
-**设备注册表（`vfs/dev.go`）：**
+**Device Registry (`vfs/dev.go`):**
 
-`DeviceRegistry` 使用 `xsync.Registry`（基于 `sync.Map` 的带注册/反注册语义的注册表）管理路径到工厂的映射：
+`DeviceRegistry` uses `xsync.Registry` (a `sync.Map`-based registry with register/unregister semantics) to manage path-to-factory mappings:
 
 ```go
 type DeviceRegistry struct {
@@ -378,36 +378,37 @@ type DeviceRegistry struct {
 }
 ```
 
-- `Register(path, factory)`：注册设备（路径唯一，重复注册报错）
-- `Unregister(path)`：反注册设备（MCP Unmount 时使用）
-- `Open(path, flags)`：先精确匹配，再最长前缀匹配（`/dev/llm/claude` 匹配 `/dev/llm/claude/subpath`）
+- `Register(path, factory)`: Register device (path must be unique; duplicate registration returns error)
+- `Unregister(path)`: Unregister device (used during MCP Unmount)
+- `Open(path, flags)`: Exact match first, then longest prefix match (`/dev/llm/claude` matches `/dev/llm/claude/subpath`)
 
-**路径解析策略：**
+**Path Resolution Strategy:**
 
-1. 精确匹配：`Open("/dev/fs", ...)` → factory("", flags)
-2. 最长前缀匹配：`Open("/dev/fs/src/main.go", ...)` → factory("/src/main.go", flags)
+1. Exact match: `Open("/dev/fs", ...)` → factory("", flags)
+2. Longest prefix match: `Open("/dev/fs/src/main.go", ...)` → factory("/src/main.go", flags)
 
-这使设备驱动可以处理子路径——例如 `/dev/fs` 驱动通过 subpath 访问宿主文件系统中的任意文件。
+This allows device drivers to handle subpaths — for example, the `/dev/fs` driver accesses arbitrary files in the host filesystem via subpath.
 
-**FD 表：**
+**FD Table:**
 
-每个进程在 VFS 层拥有独立的 FD 表（`fdTable`），FD 从 3 开始分配（0/1/2 保留给 stdin/stdout/stderr 的语义对齐）。FD 表由 VFS 管理，不是 Process 结构体直接持有——Process.FDTable 仅用于跟踪 FD 是否存在。
+Each process has an independent FD table (`fdTable`) in the VFS layer, with FDs allocated starting from 3 (0/1/2 reserved for semantic alignment with stdin/stdout/stderr). The FD table is managed by VFS, not directly held by the Process struct — Process.FDTable is only used to track whether an FD exists.
 
-### 3.2 已注册设备
+### 3.2 Registered Devices
 
-系统启动时在 `cmd/rnix/main.go` 中注册以下设备：
+The following devices are registered at system startup in `cmd/rnix/main.go`:
 
-| 设备路径 | 驱动包 | 描述 |
-|----------|--------|------|
-| `/dev/llm/claude` | `drivers/llm` | LLM 调用（Claude Code CLI） |
-| `/dev/fs` | `drivers/fs` | 宿主文件系统只读访问 |
-| `/dev/shell` | `drivers/shell` | Shell 命令执行 |
-| `/proc` | `vfs.ProcFS` | 动态进程信息（`/proc/{pid}/status`, `intent`, `context`） |
-| `/mnt/mcp/{pid}-{server}` | 动态注册 | MCP 工具（Spawn 时自动挂载） |
+| Device Path | Driver Package | Description |
+|-------------|---------------|-------------|
+| `/dev/llm/claude` | `drivers/llm` | LLM calls (Claude Code CLI) |
+| `/dev/llm/cursor` | `drivers/llm` | LLM calls (Cursor CLI) |
+| `/dev/fs` | `drivers/fs` | Host filesystem read-only access |
+| `/dev/shell` | `drivers/shell` | Shell command execution |
+| `/proc` | `vfs.ProcFS` | Dynamic process info (`/proc/{pid}/status`, `intent`, `context`) |
+| `/mnt/mcp/{pid}-{server}` | Dynamic registration | MCP tools (auto-mounted during Spawn) |
 
-### 3.3 LLMDriver 接口
+### 3.3 LLMDriver Interface
 
-LLMDriver 定义于 `drivers/llm/driver.go`，是 LLM 能力的抽象：
+LLMDriver is defined in `drivers/llm/driver.go` and abstracts LLM capabilities:
 
 ```go
 type LLMDriver interface {
@@ -417,30 +418,37 @@ type LLMDriver interface {
 }
 ```
 
-**LLMRequest：**
+**LLMRequest:**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| Intent | `string` | 用户意图 |
-| SystemPrompt | `string` | 系统提示词 |
-| Model | `string` | 模型标识（空 = 驱动默认） |
-| MaxTurns | `int` | 最大交互轮次 |
-| TimeoutMs | `int64` | 超时毫秒数 |
+| Field | Type | Description |
+|-------|------|-------------|
+| Intent | `string` | User intent |
+| SystemPrompt | `string` | System prompt |
+| Model | `string` | Model identifier (empty = driver default) |
+| MaxTurns | `int` | Maximum interaction turns |
+| TimeoutMs | `int64` | Timeout in milliseconds |
 
-**LLMResponse：**
+**LLMResponse:**
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| Content | `string` | LLM 输出内容 |
-| TokensUsed | `int` | 本次消耗 token 数 |
+| Field | Type | Description |
+|-------|------|-------------|
+| Content | `string` | LLM output content |
+| TokensUsed | `int` | Tokens consumed in this call |
 
-当前实现为 Claude Code CLI 驱动。添加新 LLM 驱动只需实现 `LLMDriver` 接口并注册到 VFS。内核 reasonStep 通过 VFS Read/Write 与 LLM 交互，不直接依赖具体驱动实现。
+Current implementation includes two LLM drivers:
 
-### 3.4 MCP 挂载机制
+| Driver | VFS Path | CLI Command | Features |
+|--------|----------|-------------|----------|
+| `ClaudeCliDriver` | `/dev/llm/claude` | `claude -p` | Supports `--system-prompt`, `--max-turns` |
+| `CursorCliDriver` | `/dev/llm/cursor` | `agent --print` | System prompt concatenated into prompt, no `--max-turns` |
 
-MCP（Model Context Protocol）集成通过动态挂载实现，使 MCP 工具以 VFS 路径暴露给智能体。
+Adding a new LLM driver only requires implementing the `LLMDriver` interface and registering it with VFS. The kernel's Spawn resolves the LLM device path via `resolveLLMDevice()` based on the `--provider` CLI flag or agent.yaml `models.provider`. reasonStep interacts with the LLM through VFS Read/Write, without directly depending on specific driver implementations.
 
-**MCPTransport 接口（`vfs/mcp.go`）：**
+### 3.4 MCP Mount Mechanism
+
+MCP (Model Context Protocol) integration is implemented through dynamic mounting, exposing MCP tools as VFS paths to agents.
+
+**MCPTransport Interface (`vfs/mcp.go`):**
 
 ```go
 type MCPTransport interface {
@@ -453,50 +461,50 @@ type MCPTransport interface {
 type TransportFactory func(config MCPConfig) (MCPTransport, error)
 ```
 
-接口定义在 `vfs` 包中（而非 `drivers/mcp`），这是**依赖反转**的设计——vfs 定义接口，drivers/mcp 提供实现，避免 vfs → drivers 的反向依赖。
+The interface is defined in the `vfs` package (not `drivers/mcp`) — this is a **dependency inversion** design: vfs defines the interface, drivers/mcp provides the implementation, avoiding a reverse dependency from vfs → drivers.
 
-**MountManager（接口定义于 `kernel/kernel.go`，实现于 `vfs/mount.go` 的 `vfs.MountManager` 结构体）：**
+**MountManager (interface defined in `kernel/kernel.go`, implemented in `vfs/mount.go`'s `vfs.MountManager` struct):**
 
-Mount 流程：
-1. `TransportFactory(config)` → 创建 transport
-2. `transport.Connect(ctx)` → 建立连接（500ms 超时，NFR25）
-3. `mcpFileFactory(transport)` → 创建 VFSFileFactory
-4. `devReg.Register(path, factory)` → 注册到设备注册表
-5. 存储 mount 记录
+Mount flow:
+1. `TransportFactory(config)` → create transport
+2. `transport.Connect(ctx)` → establish connection (500ms timeout)
+3. `mcpFileFactory(transport)` → create VFSFileFactory
+4. `devReg.Register(path, factory)` → register in device registry
+5. Store mount record
 
-Unmount 流程：
-1. 从 mounts 表移除
-2. `transport.Close()` → 关闭连接
-3. `devReg.Unregister(path)` → 从设备注册表移除
+Unmount flow:
+1. Remove from mounts table
+2. `transport.Close()` → close connection
+3. `devReg.Unregister(path)` → remove from device registry
 
-**VFS 子路径映射：**
+**VFS Subpath Mapping:**
 
-挂载点下的子路径映射到 MCP 协议操作：
+Subpaths under the mount point map to MCP protocol operations:
 
-| VFS 路径 | MCP 操作 | Read 行为 | Write 行为 |
-|----------|----------|----------|------------|
-| `/mnt/mcp/{mount}/` | — | 返回 `["tools","resources"]` | — |
-| `/mnt/mcp/{mount}/tools` | `tools/list` | 返回工具列表 | — |
-| `/mnt/mcp/{mount}/tools/{name}` | `tools/call` | 返回上次调用结果 | 发起工具调用 |
-| `/mnt/mcp/{mount}/resources` | `resources/list` | 返回资源列表 | — |
-| `/mnt/mcp/{mount}/resources/{uri}` | `resources/read` | 读取资源内容 | — |
+| VFS Path | MCP Operation | Read Behavior | Write Behavior |
+|----------|---------------|---------------|----------------|
+| `/mnt/mcp/{mount}/` | — | Returns `["tools","resources"]` | — |
+| `/mnt/mcp/{mount}/tools` | `tools/list` | Returns tool list | — |
+| `/mnt/mcp/{mount}/tools/{name}` | `tools/call` | Returns last call result | Invokes tool call |
+| `/mnt/mcp/{mount}/resources` | `resources/list` | Returns resource list | — |
+| `/mnt/mcp/{mount}/resources/{uri}` | `resources/read` | Reads resource content | — |
 
-### 3.5 Agent 自动挂载生命周期
+### 3.5 Agent Auto-Mount Lifecycle
 
-Agent 的 `agent.yaml` 可声明 MCP 依赖。Spawn 时自动处理：
+An agent's `agent.yaml` can declare MCP dependencies. These are handled automatically during Spawn:
 
-1. **挂载**：遍历 `agent.MCPConfigs`，为每个 MCP 服务器执行 `Mount("/mnt/mcp/{pid}-{serverName}", config)`
-2. **白名单注入**：挂载路径自动添加到 `proc.AllowedDevices`
-3. **失败回滚**：任一 MCP 挂载失败则回滚已挂载的路径，释放上下文，返回错误
-4. **自动卸载**：`finishProcess` 在终止进程前逐个调用 `Unmount`，卸载失败不阻塞进程退出
+1. **Mount**: Iterate `agent.MCPConfigs`, execute `Mount("/mnt/mcp/{pid}-{serverName}", config)` for each MCP server
+2. **Whitelist injection**: Mount paths are automatically added to `proc.AllowedDevices`
+3. **Failure rollback**: If any MCP mount fails, already-mounted paths are rolled back, context is freed, and an error is returned
+4. **Auto-unmount**: `finishProcess` calls `Unmount` for each mount before terminating the process; unmount failures do not block process exit
 
 ---
 
-## 4. 上下文管理
+## 4. Context Management
 
-### 4.1 Context 结构体
+### 4.1 Context Struct
 
-`Context` 定义于 `context/context.go`，表示一个独立的对话空间：
+`Context` is defined in `context/context.go` and represents an independent conversation space:
 
 ```go
 type Context struct {
@@ -514,72 +522,72 @@ type Message struct {
 }
 ```
 
-Role 枚举：`system`、`user`、`assistant`、`tool`。
+Role enum: `system`, `user`, `assistant`, `tool`.
 
-MaxSize 限制 Messages 切片长度（消息数量）。当前 MVP 不限制单条消息的字节大小。
+MaxSize limits the Messages slice length (number of messages). The current MVP does not limit individual message byte size.
 
-### 4.2 Manager 方法
+### 4.2 Manager Methods
 
-`Manager` 管理上下文的完整生命周期，方法分为三类：
+`Manager` manages the complete context lifecycle, with methods in three categories:
 
-**分配与释放：**
+**Allocation and Release:**
 
-| 方法 | 签名 | 说明 |
-|------|------|------|
-| CtxAlloc | `(size int) (CtxID, error)` | 分配上下文，size 为消息容量 |
-| CtxFree | `(cid CtxID) error` | 释放上下文（reapProcess 步骤 10） |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| CtxAlloc | `(size int) (CtxID, error)` | Allocate context, size is message capacity |
+| CtxFree | `(cid CtxID) error` | Free context (reapProcess step 10) |
 
-**内容操作：**
+**Content Operations:**
 
-| 方法 | 签名 | 说明 |
-|------|------|------|
-| SetSystemPrompt | `(cid, prompt) error` | 设置/更新系统提示词 |
-| AppendMessage | `(cid, role, content) error` | 追加对话消息 |
-| AppendToolResult | `(cid, toolCallID, content) error` | 追加工具执行结果 |
-| CtxWrite | `(cid, offset, data) error` | 低级写入（offset=0 追加，>0 覆盖） |
-| CtxRead | `(cid, offset, length) ([]byte, error)` | 低级读取（JSON 序列化） |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| SetSystemPrompt | `(cid, prompt) error` | Set/update system prompt |
+| AppendMessage | `(cid, role, content) error` | Append conversation message |
+| AppendToolResult | `(cid, toolCallID, content) error` | Append tool execution result |
+| CtxWrite | `(cid, offset, data) error` | Low-level write (offset=0 append, >0 overwrite) |
+| CtxRead | `(cid, offset, length) ([]byte, error)` | Low-level read (JSON serialized) |
 
-**查询：**
+**Query:**
 
-| 方法 | 签名 | 说明 |
-|------|------|------|
-| BuildPrompt | `(cid) (*PromptResult, error)` | 组装完整 LLM prompt |
-| GetContextSummary | `(ctxID) (string, error)` | `/proc/{pid}/context` 的摘要 |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| BuildPrompt | `(cid) (*PromptResult, error)` | Assemble complete LLM prompt |
+| GetContextSummary | `(ctxID) (string, error)` | Summary for `/proc/{pid}/context` |
 
-### 4.3 Prompt 组装流程
+### 4.3 Prompt Assembly Flow
 
-`BuildPrompt` 返回 `PromptResult`，包含 `SystemPrompt` 和 `Messages` 两个字段。reasonStep 将其组装为 LLM 请求：
+`BuildPrompt` returns a `PromptResult` containing `SystemPrompt` and `Messages` fields. reasonStep assembles these into an LLM request:
 
-1. **系统提示词构建**（Spawn 阶段）：
-   - `Agent.SystemPrompt()` = instructions.md 内容 + 所有激活 Skill 的 body 注入
-   - 如果 SpawnOpts 也提供了 SystemPrompt，拼接：`opts.SystemPrompt + "\n\n" + agentPrompt`
+1. **System prompt construction** (Spawn phase):
+   - `Agent.SystemPrompt()` = instructions.md content + all activated Skill bodies injected
+   - If SpawnOpts also provides SystemPrompt, concatenate: `opts.SystemPrompt + "\n\n" + agentPrompt`
 
-2. **消息历史累积**（reasonStep 循环）：
-   - 初始：AppendMessage(user, intent)
-   - 每轮 LLM 响应：AppendMessage(assistant, resp.Content)
-   - 工具调用结果：AppendToolResult(toolPath, result)
+2. **Message history accumulation** (reasonStep loop):
+   - Initial: AppendMessage(user, intent)
+   - Each LLM response: AppendMessage(assistant, resp.Content)
+   - Tool call results: AppendToolResult(toolPath, result)
 
-3. **发送给 LLM**：
-   - `BuildPrompt(cid)` → PromptResult（SystemPrompt + Messages 快照）
-   - 序列化为 `llmRequest{Intent, SystemPrompt, Model, Messages}`
-   - 写入 LLM VFS 设备
+3. **Send to LLM**:
+   - `BuildPrompt(cid)` → PromptResult (SystemPrompt + Messages snapshot)
+   - Serialize to `llmRequest{Intent, SystemPrompt, Model, Messages}`
+   - Write to LLM VFS device
 
-### 4.4 Token 预算管理
+### 4.4 Token Budget Management
 
-Token 预算防止单个进程过度消耗 LLM 资源。
+Token budgets prevent a single process from over-consuming LLM resources.
 
-**预算来源优先级（从高到低）：**
+**Budget source priority (highest to lowest):**
 
-1. `SpawnOpts.ContextBudget`（CLI `--budget` 或 Compose 配置）
-2. `AgentManifest.ContextBudget`（agent.yaml 中的配置）
-3. 0（无限制）
+1. `SpawnOpts.ContextBudget` (CLI `--budget` or Compose config)
+2. `AgentManifest.ContextBudget` (configured in agent.yaml)
+3. 0 (unlimited)
 
-负数预算在 Spawn 时规范化为 0。
+Negative budgets are normalized to 0 during Spawn.
 
-**执行逻辑**（在 reasonStep 循环中）：
+**Execution logic** (in the reasonStep loop):
 
 ```
-每次 LLM Read 返回后:
+After each LLM Read returns:
     proc.TokensUsed += resp.TokensUsed
 
     if budget > 0 && TokensUsed >= ContextBudget:
@@ -589,31 +597,31 @@ Token 预算防止单个进程过度消耗 LLM 资源。
         return
 ```
 
-退出码约定：
-- **0** — 正常完成
-- **1** — 错误（LLM 失败、工具失败、超时等）
-- **2** — 预算超限（`budget_exceeded`）
+Exit code conventions:
+- **0** — Normal completion
+- **1** — Error (LLM failure, tool failure, timeout, etc.)
+- **2** — Budget exceeded (`budget_exceeded`)
 
-### 4.5 上下文与进程的生命周期绑定
+### 4.5 Context and Process Lifecycle Binding
 
-上下文的生命周期严格绑定到拥有它的进程：
+Context lifecycle is strictly bound to its owning process:
 
-| 进程事件 | 上下文操作 |
-|---------|-----------|
-| Spawn 开始 | `CtxAlloc(64)` 分配上下文 |
-| Spawn 失败（MCP 挂载出错等） | `CtxFree(cid)` 立即释放 |
-| reasonStep 循环 | 持续 AppendMessage / BuildPrompt |
-| reapProcess 步骤 10 | `CtxFree(cid)` 最终释放 |
+| Process Event | Context Operation |
+|---------------|-------------------|
+| Spawn begins | `CtxAlloc(64)` allocates context |
+| Spawn fails (MCP mount error, etc.) | `CtxFree(cid)` immediate release |
+| reasonStep loop | Continuous AppendMessage / BuildPrompt |
+| reapProcess step 10 | `CtxFree(cid)` final release |
 
-Thread 和 Coroutine 共享父进程的上下文（通过 CtxID），不独立分配。这意味着并发线程对同一上下文的 AppendMessage 调用由 `Context.mu` 序列化，保证消息顺序一致性。
+Threads and Coroutines share the parent process's context (via CtxID) and do not allocate independently. This means concurrent threads' AppendMessage calls to the same context are serialized by `Context.mu`, ensuring message order consistency.
 
 ---
 
-## 延伸阅读
+## Further Reading
 
-- [核心概念](/guide/concepts) — 建立 Rnix 的心智模型
-- [参考手册](/reference/) — 精确的 API 签名和参数细节
-- [教程](/tutorials/) — 手把手实战操作
-  - [编写第一个 Skill](/tutorials/writing-first-skill)
-  - [调试第一个 bug](/tutorials/debugging-first-bug)
-  - [组合多智能体工作流](/tutorials/composing-multi-agent-workflow)
+- [Core Concepts](/guide/concepts) — Build the Rnix mental model
+- [Reference Manual](/reference/) — Precise API signatures and parameter details
+- [Tutorials](/tutorials/) — Hands-on practical guides
+  - [Writing Your First Skill](/tutorials/writing-first-skill)
+  - [Debugging Your First Bug](/tutorials/debugging-first-bug)
+  - [Composing Multi-Agent Workflows](/tutorials/composing-multi-agent-workflow)

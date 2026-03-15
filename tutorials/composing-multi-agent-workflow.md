@@ -1,108 +1,108 @@
-# 教程 3：组合多智能体工作流
+# Tutorial 3: Composing Multi-Agent Workflows
 
-本教程带你使用 Rnix Compose 编排多个智能体协作完成一个复杂任务，并用 `rnix top` 实时监控执行过程。
-
----
-
-## 前置条件
-
-- 已完成 [教程 1：编写第一个 Skill](/tutorials/writing-first-skill)（了解 Skill 和 Agent 的创建流程）
-- Rnix 已安装并可运行
-- 对 Rnix 的进程、VFS 概念有基本了解（参考 [核心概念文档](/guide/concepts)）
+This tutorial walks you through using Rnix Compose to orchestrate multiple agents collaborating on a complex task, and monitoring execution in real-time with `rnix top`.
 
 ---
 
-## 你将学到什么
+## Prerequisites
 
-1. 如何设计多智能体 DAG 工作流
-2. 如何编写 `rnix-compose.yaml` 定义智能体依赖关系
-3. 如何用 `rnix compose up` 启动工作流
-4. 如何用 `rnix top` 实时监控执行
-5. 如何用管道语法和 AgentShell 脚本实现更灵活的编排
+- Completed [Tutorial 1: Writing Your First Skill](/tutorials/writing-first-skill) (familiar with Skill and Agent creation)
+- Rnix installed and working
+- Basic understanding of Rnix process and VFS concepts (see [Core Concepts](/guide/concepts))
 
 ---
 
-## 步骤一：设计多智能体工作流
+## What You Will Learn
 
-### 场景
+1. How to design multi-agent DAG workflows
+2. How to write `rnix-compose.yaml` to define agent dependencies
+3. How to launch workflows with `rnix compose up`
+4. How to monitor execution in real-time with `rnix top`
+5. How to use pipe syntax and AgentShell scripts for more flexible orchestration
 
-我们要构建一个代码审查工作流，包含三个阶段：
+---
 
-1. **分析器（analyzer）** — 读取代码文件，输出代码质量分析
-2. **文档生成器（doc-gen）** — 基于分析结果，生成改进文档
-3. **质量检查器（checker）** — 检查分析和文档的质量
+## Step 1: Design the Multi-Agent Workflow
 
-### DAG 依赖关系
+### Scenario
+
+We will build a code review workflow with three stages:
+
+1. **Analyzer** — reads code files and outputs a code quality analysis
+2. **Doc Generator (doc-gen)** — generates improvement documentation based on the analysis
+3. **Checker** — verifies the quality of the analysis and documentation
+
+### DAG Dependencies
 
 ```
 analyzer ──→ doc-gen ──→ checker
 ```
 
-`doc-gen` 依赖 `analyzer` 完成后才启动，`checker` 依赖 `doc-gen` 完成后才启动。这是一个简单的线性 DAG。
+`doc-gen` depends on `analyzer` completing first, and `checker` depends on `doc-gen` completing first. This is a simple linear DAG.
 
-Rnix Compose 的 DAG 调度引擎会自动解析依赖，按拓扑排序确定执行顺序。如果依赖图允许并行（比如 A 和 B 都依赖 C，则 A 和 B 可以并行执行），引擎会自动并行调度。
+The Rnix Compose DAG scheduling engine automatically resolves dependencies and determines execution order through topological sorting. If the dependency graph allows parallelism (e.g., both A and B depend on C, then A and B can execute in parallel), the engine schedules them concurrently.
 
-### 准备 Agent
+### Preparing Agents
 
-你可以复用教程 1 中创建的 Agent，或者使用已有的 `code-analyst`。本教程使用内置的 `code-analyst` Agent 以及默认 Agent（无需额外创建）。
+You can reuse the Agent from Tutorial 1 or use the existing `code-analyst`. This tutorial uses the built-in `code-analyst` Agent and the default Agent (no additional setup needed).
 
 ---
 
-## 步骤二：编写 rnix-compose.yaml
+## Step 2: Write rnix-compose.yaml
 
-在项目根目录创建 `rnix-compose.yaml`：
+Create `rnix-compose.yaml` in the project root:
 
 ```yaml
 version: "1.0"
-intent: "代码审查工作流"
+intent: "Code review workflow"
 model: "haiku"
 agents:
   analyzer:
-    intent: "分析 kernel/kernel.go 的代码质量"
+    intent: "Analyze code quality of kernel/kernel.go"
     agent: "code-analyst"
   doc-gen:
-    intent: "基于分析结果生成改进建议文档"
+    intent: "Generate improvement documentation based on analysis results"
     depends_on:
       analyzer: completed
   checker:
-    intent: "检查分析和建议的质量与完整性"
+    intent: "Verify the quality and completeness of analysis and recommendations"
     depends_on:
       doc-gen: completed
 ```
 
-### 字段说明
+### Field Reference
 
-| 字段 | 说明 |
-|------|------|
-| `version` | Compose 规范版本（当前为 `"1.0"`） |
-| `intent` | 工作流的整体意图描述 |
-| `model` | 全局默认模型（各 Agent 可覆盖） |
-| `agents` | Agent 定义映射表 |
-| `agents.<name>.intent` | 该 Agent 的执行意图 |
-| `agents.<name>.agent` | 指定使用的 Agent 定义（可选，默认使用通用 Agent） |
-| `agents.<name>.depends_on` | 依赖关系：`<上游agent名>: completed` |
+| Field | Description |
+|-------|-------------|
+| `version` | Compose spec version (currently `"1.0"`) |
+| `intent` | Overall workflow description |
+| `model` | Global default model (individual agents can override) |
+| `agents` | Agent definition map |
+| `agents.<name>.intent` | Task description for this agent |
+| `agents.<name>.agent` | Named agent definition to use (optional, defaults to generic agent) |
+| `agents.<name>.depends_on` | Dependencies: `<upstream_agent>: completed` |
 
-### DAG 调度引擎工作原理
+### How the DAG Scheduling Engine Works
 
-Compose 引擎读取 `rnix-compose.yaml` 后：
+After reading `rnix-compose.yaml`, the Compose engine:
 
-1. **解析依赖图** — 将所有 Agent 和 `depends_on` 关系构建为有向无环图（DAG）
-2. **拓扑排序** — 确定执行层级（无依赖的 Agent 在第一层，依赖它们的在第二层，以此类推）
-3. **层级并行** — 同一层级的 Agent 可并行执行
-4. **结果传递** — 上游 Agent 的输出注入下游 Agent 的上下文
+1. **Parses the dependency graph** — builds a directed acyclic graph (DAG) from all agents and `depends_on` relationships
+2. **Topological sort** — determines execution layers (agents with no dependencies go in layer 1, those depending on them in layer 2, etc.)
+3. **Layer-level parallelism** — agents in the same layer execute concurrently
+4. **Result passing** — upstream agent output is injected into downstream agent context
 
 ---
 
-## 步骤三：运行 rnix compose up
+## Step 3: Run rnix compose up
 
 ```bash
 rnix compose up
 ```
 
-Compose 引擎启动工作流：
+The Compose engine launches the workflow:
 
 ```
-compose | 代码审查工作流 | starting
+compose | Code review workflow | starting
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [layer 1/3] analyzer
   PID 5 | code-analyst | running...
@@ -120,58 +120,58 @@ compose | 代码审查工作流 | starting
 compose | completed | 3/3 agents | 10.5s | 3,520 tokens
 ```
 
-每个 Agent 按 DAG 顺序依次执行，后续 Agent 自动获得上游 Agent 的输出作为上下文。
+Each agent executes in DAG order, with downstream agents automatically receiving upstream agent output as context.
 
 ---
 
-## 步骤四：使用 rnix top 实时监控
+## Step 4: Real-Time Monitoring with rnix top
 
-在工作流运行期间，打开另一个终端运行：
+While the workflow is running, open another terminal and run:
 
 ```bash
 rnix top
 ```
 
-你会看到一个 TUI（终端用户界面）实时显示所有进程的状态：
+You will see a TUI (Terminal User Interface) displaying real-time status of all processes:
 
 ```
-rnix top — 实时监控                           刷新: 1s
+rnix top — Real-time Monitor                      Refresh: 1s
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PID  STATE    AGENT         TOKENS   ELAPSED  INTENT
-5    running  code-analyst  1,200    2.3s     分析 kernel/kernel.go…
-6    created  default       0        -        基于分析结果生成…
-7    created  default       0        -        检查分析和建议…
+5    running  code-analyst  1,200    2.3s     Analyze kernel/kernel.go…
+6    created  default       0        -        Generate improvement docs…
+7    created  default       0        -        Verify analysis quality…
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-进程: 3 | 运行中: 1 | 等待: 2 | 完成: 0
-Token 总量: 1,200 | 已用时: 2.3s
+Processes: 3 | Running: 1 | Waiting: 2 | Completed: 0
+Total tokens: 1,200 | Elapsed: 2.3s
 ```
 
-`rnix top` 会持续刷新，你可以实时观察：
-- 哪些 Agent 正在运行（`running`）
-- 哪些在等待依赖完成（`created`）
-- Token 消耗和执行时间
+`rnix top` refreshes continuously. You can observe in real-time:
+- Which agents are running (`running`)
+- Which are waiting for dependencies (`created`)
+- Token consumption and execution time
 
-按 `q` 退出 `rnix top`。
+Press `q` to exit `rnix top`.
 
 ---
 
-## 步骤五：查看结果
+## Step 5: View Results
 
-### 查看 compose 完成输出
+### View Compose Output
 
-`rnix compose up` 完成后会输出各 Agent 的执行摘要。要获取更详细的结果，可以使用 JSON 输出：
+After `rnix compose up` completes, it outputs an execution summary for each agent. For more detailed results, use JSON output:
 
 ```bash
 rnix compose up --json
 ```
 
-JSON 输出包含每个 Agent 的完整结果：
+The JSON output contains complete results for each agent:
 
 ```json
 {
   "ok": true,
   "data": {
-    "intent": "代码审查工作流",
+    "intent": "Code review workflow",
     "agents": [
       {"name": "analyzer", "pid": 5, "exit_code": 0, "elapsed_ms": 3800, "tokens": 1450},
       {"name": "doc-gen", "pid": 6, "exit_code": 0, "elapsed_ms": 4200, "tokens": 1180},
@@ -183,84 +183,84 @@ JSON 输出包含每个 Agent 的完整结果：
 }
 ```
 
-### 查看推理日志
+### View Reasoning Logs
 
-用 `rnix log` 查看各智能体的推理过程：
+Use `rnix log` to view each agent's reasoning process:
 
 ```bash
 rnix log
 ```
 
-日志按时间和进程分组，展示每个 Agent 的推理步骤和决策过程。
+Logs are grouped by time and process, showing each agent's reasoning steps and decisions.
 
 ---
 
-## 步骤六：清理
+## Step 6: Cleanup
 
-如果工作流中途失败或需要停止，使用：
+If the workflow fails midway or needs to be stopped, use:
 
 ```bash
 rnix compose down
 ```
 
-这会终止所有 compose 启动的进程并清理资源。
+This terminates all compose-spawned processes and cleans up resources.
 
 ---
 
-## 扩展场景
+## Advanced Scenarios
 
-### 管道语法替代
+### Pipe Syntax Alternative
 
-对于简单的线性工作流，可以用管道语法代替 compose 文件：
+For simple linear workflows, you can use pipe syntax instead of a compose file:
 
 ```bash
-rnix -i 'spawn "分析 kernel/kernel.go" --agent=code-analyst | spawn "生成改进文档" | spawn "质量检查"'
+rnix -i 'spawn "Analyze kernel/kernel.go" --agent=code-analyst | spawn "Generate improvement docs" | spawn "Quality check"'
 ```
 
-管道语法 `|` 将前一个 Agent 的输出自动注入为下一个 Agent 的 `[PIPE_INPUT]` 上下文。
+The pipe operator `|` automatically injects the previous agent's output as the next agent's `[PIPE_INPUT]` context.
 
-### 使用变量和环境传递
+### Using Variables and Environment Passing
 
-结合 AgentShell 的环境变量，让工作流更灵活：
+Combine with AgentShell environment variables for more flexible workflows:
 
 ```bash
 rnix -i '
 export TARGET=./kernel/kernel.go
-spawn "分析 $TARGET 的代码质量" --agent=code-analyst | spawn "生成改进文档"
+spawn "Analyze $TARGET code quality" --agent=code-analyst | spawn "Generate improvement docs"
 '
 ```
 
-或在 `rnix-compose.yaml` 中使用 environment：
+Or use environment in `rnix-compose.yaml`:
 
 ```yaml
 agents:
   analyzer:
-    intent: "分析代码质量"
+    intent: "Analyze code quality"
     agent: "code-analyst"
 ```
 
-### 使用 if/else 条件分支
+### Using if/else Conditional Branching
 
-当分析发现问题时生成修复方案，否则输出通过报告：
+Generate a fix plan when issues are found, otherwise output a passing report:
 
 ```
-result = spawn "分析 kernel/kernel.go" --agent=code-analyst
+result = spawn "Analyze kernel/kernel.go" --agent=code-analyst
 if $result.exitcode == 0
-  spawn "生成通过报告"
+  spawn "Generate passing report"
 else
-  spawn "生成修复方案" on-error spawn "记录分析失败"
+  spawn "Generate fix plan" on-error spawn "Log analysis failure"
 end
 ```
 
-AgentShell 支持完整的控制结构：
-- **`if/else/end`** — 根据上游结果条件分支
-- **`on-error`** — 内联错误处理（失败时自动执行备选操作）
-- **变量赋值** — `result = spawn "..."` 捕获执行结果
-- **属性访问** — `$result.exitcode` 访问退出码
+AgentShell supports full control structures:
+- **`if/else/end`** — conditional branching based on upstream results
+- **`on-error`** — inline error handling (automatically executes fallback on failure)
+- **Variable assignment** — `result = spawn "..."` captures execution results
+- **Property access** — `$result.exitcode` accesses the exit code
 
 ### rnix compose down
 
-如果工作流中有残留进程（比如某个 Agent 挂起），用 `compose down` 强制清理：
+If a workflow has lingering processes (e.g., a hung agent), use `compose down` to force cleanup:
 
 ```bash
 rnix compose down
@@ -268,23 +268,23 @@ rnix compose down
 
 ---
 
-## 下一步
+## Next Steps
 
-恭喜！你已经掌握了 Rnix 的三大核心技能：
+Congratulations! You have mastered the three core skills of Rnix:
 
-1. **编写 Skill 和 Agent** — 创建可复用的智能体能力
-2. **调试问题** — 用 strace 追踪和定位错误
-3. **编排工作流** — 用 Compose 和管道组合多智能体协作
+1. **Writing Skills and Agents** — creating reusable agent capabilities
+2. **Debugging** — tracing and locating errors with strace
+3. **Workflow orchestration** — composing multi-agent collaboration with Compose and pipes
 
-### 进阶学习
+### Further Learning
 
-- [核心概念文档](/guide/concepts) — 深入理解 Rnix 的 OS 设计哲学
-- [参考手册](/reference/) — 查阅所有 Syscall、VFS 路径、CLI 命令的完整定义
-- [教程 1：编写第一个 Skill](/tutorials/writing-first-skill) — 回顾 Skill 编写细节
-- [教程 2：调试第一个 bug](/tutorials/debugging-first-bug) — 回顾调试技巧
+- [Core Concepts](/guide/concepts) — deep understanding of Rnix's OS design philosophy
+- [Reference Manual](/reference/) — complete definitions for all Syscalls, VFS paths, and CLI commands
+- [Tutorial 1: Writing Your First Skill](/tutorials/writing-first-skill) — review Skill writing details
+- [Tutorial 2: Debugging Your First Bug](/tutorials/debugging-first-bug) — review debugging techniques
 
-## 相关文档
+## Related Documentation
 
-- [核心概念](/guide/concepts) — 进程、VFS、Skill 的心智模型
-- [参考手册：CLI 命令参考](/reference/) — compose up/down、top、log 的完整参数说明
-- [参考手册：IPC 架构](/reference/) — Compose 引擎的内部通信机制
+- [Core Concepts](/guide/concepts) — mental model for processes, VFS, and Skills
+- [Reference Manual: CLI Commands](/reference/) — complete parameters for compose up/down, top, and log
+- [Reference Manual: IPC Architecture](/reference/) — Compose engine's internal communication mechanism

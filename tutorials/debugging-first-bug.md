@@ -1,37 +1,38 @@
-# 教程 2：调试第一个 bug
+# Tutorial 2: Debugging Your First Bug
 
-本教程带你体验 Rnix 的调试工作流：故意引入一个 bug，用 `rnix strace` 定位问题，修复后验证。
-
----
-
-## 前置条件
-
-- 已完成 [教程 1：编写第一个 Skill](/tutorials/writing-first-skill)（了解 Skill 和 Agent 的创建流程）
-- Rnix 已安装并可运行
+This tutorial walks you through the Rnix debugging workflow: intentionally introducing a bug, using `rnix strace` to locate the problem, then fixing and verifying the fix.
 
 ---
 
-## 你将学到什么
+## Prerequisites
 
-1. 如何用 `rnix strace` 实时追踪智能体的系统调用
-2. 如何从 SyscallEvent 中读取错误信息定位问题
-3. 常见错误码及其含义
+- Completed [Tutorial 1: Writing Your First Skill](/tutorials/writing-first-skill) (familiar with creating Skills and Agents)
+- Rnix installed and working
 
 ---
 
-## 步骤一：准备一个有 bug 的 Skill
+## What You Will Learn
 
-我们复用教程 1 的 `code-summarizer` Skill，但故意制造一个权限 bug：让 Skill 需要执行 Shell 命令（比如 `wc -l` 统计行数），却没有在 `allowed-tools` 中声明 `/dev/shell` 权限。
+1. How to trace an agent's system calls in real time with `rnix strace`
+2. How to read error information from a SyscallEvent to pinpoint problems
+3. Common error codes and what they mean
 
-### 创建有 bug 的 Skill
+---
 
-创建 `lib/skills/line-counter/SKILL.md`：
+## Step 1: Prepare a Buggy Skill
+
+We will reuse the `code-summarizer` Skill from Tutorial 1, but intentionally introduce a permission bug: the Skill needs to run a Shell command (e.g., `wc -l` to count lines), yet `/dev/shell` is not declared in `allowed-tools`.
+
+### Create the Buggy Skill
+
+Create `lib/skills/line-counter/SKILL.md`:
 
 ```markdown
 ---
 name: line-counter
 description: >
-  统计代码文件的行数并报告。需要文件系统和 Shell 访问。
+  Count the number of lines in a code file and report the result.
+  Requires filesystem and Shell access.
 allowed-tools: /dev/fs
 metadata:
   author: my-team
@@ -43,30 +44,30 @@ metadata:
 
 # Line Counter
 
-## 工作流程
+## Workflow
 
-1. 通过 /dev/fs 读取用户指定的文件确认其存在
-2. 通过 /dev/shell 执行 `wc -l` 命令统计行数
-3. 输出文件名和行数
+1. Read the user-specified file via /dev/fs to confirm it exists
+2. Run `wc -l` via /dev/shell to count the lines
+3. Output the filename and line count
 
-## 工具使用指南
+## Tool Usage Guide
 
-### /dev/fs — 文件系统访问
-用于确认目标文件存在。
+### /dev/fs — Filesystem Access
+Used to verify that the target file exists.
 
-### /dev/shell — Shell 命令执行
-用于运行 `wc -l` 统计行数。
+### /dev/shell — Shell Command Execution
+Used to run `wc -l` to count lines.
 ```
 
-注意看 bug 在哪里：Skill body 中声明了需要 `/dev/shell`，但 frontmatter 的 `allowed-tools` **只有** `/dev/fs`，缺少了 `/dev/shell`。
+Notice where the bug is: the Skill body mentions that it needs `/dev/shell`, but the frontmatter's `allowed-tools` lists **only** `/dev/fs` — `/dev/shell` is missing.
 
-### 创建引用该 Skill 的 Agent
+### Create an Agent That Uses This Skill
 
-创建 `lib/agents/counter/agent.yaml`：
+Create `lib/agents/counter/agent.yaml`:
 
 ```yaml
 name: counter
-description: "统计代码行数的智能体"
+description: "An agent that counts lines of code"
 models:
   provider: claude
   preferred: haiku
@@ -75,54 +76,54 @@ skills:
   - line-counter
 ```
 
-### 运行并观察失败
+### Run and Observe the Failure
 
 ```bash
-rnix -i "统计 kernel/kernel.go 的行数" --agent=counter
+rnix -i "Count the lines in kernel/kernel.go" --agent=counter
 ```
 
-你会看到智能体尝试执行但报错退出：
+You will see the agent attempt to run but exit with an error:
 
 ```
 PID 2 | counter | running
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-错误: [PERMISSION] PID 2 Open /dev/shell: permission denied (device not in allowed-tools)
+Error: [PERMISSION] PID 2 Open /dev/shell: permission denied (device not in allowed-tools)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PID 2 | failed | 1 | 1.5s | 320 tokens
 ```
 
-智能体因为权限不足而失败了。但错误信息可能不够详细——让我们用 `strace` 深入定位。
+The agent failed due to insufficient permissions. But the error message may not be detailed enough — let's use `strace` to dig deeper.
 
 ---
 
-## 步骤二：使用 rnix strace 定位问题
+## Step 2: Locate the Problem with rnix strace
 
-`rnix strace` 追踪进程的每一个系统调用，就像 Unix 的 `strace` 追踪系统调用一样。
+`rnix strace` traces every system call made by a process, just like Unix `strace` traces system calls.
 
-### 启动 strace
+### Start strace
 
-在一个终端启动智能体：
+In one terminal, launch the agent:
 
 ```bash
-rnix -i "统计 kernel/kernel.go 的行数" --agent=counter
+rnix -i "Count the lines in kernel/kernel.go" --agent=counter
 ```
 
-在另一个终端追踪该进程（假设 PID 为 3）：
+In another terminal, trace the process (assuming PID 3):
 
 ```bash
 rnix strace 3
 ```
 
-### 分析 strace 输出
+### Analyze the strace Output
 
 ```
-[  0.001s] Spawn(agent="counter", intent="统计 kernel/kernel.go 的行数") → 3    1ms
+[  0.001s] Spawn(agent="counter", intent="Count the lines in kernel/kernel.go") → 3    1ms
 [  0.002s] CtxAlloc() → 2    0µs
 [  0.003s] Open(flags=1, path="/lib/skills/line-counter/SKILL.md") → 3    0µs
 [  0.003s] Read(fd=3, length=1048576) → 645    0µs
 [  0.004s] Close(fd=3) → <nil>    0µs
-[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM 调用
-[  0.005s] Write(fd=4, size=890) → <nil>    1.20s  ← 慢操作
+[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM call
+[  0.005s] Write(fd=4, size=890) → <nil>    1.20s  ← slow operation
 [  0.006s] Read(fd=4, length=1048576) → 512    2ms
 [  0.006s] Close(fd=4) → <nil>    0µs
 [  0.007s] Open(flags=1, path="/dev/fs") → 5    0µs
@@ -131,90 +132,90 @@ rnix strace 3
 [ERR] [  0.009s] Open(flags=2, path="/dev/shell") → err([PERMISSION] PID 3 Open /dev/shell: permission denied)    0µs
 ```
 
-### 解读关键信息
+### Interpreting the Key Information
 
-最后一行是关键——带有 `[ERR]` 前缀的红色错误行：
+The last line is the critical one — the red error line prefixed with `[ERR]`:
 
 ```
 [ERR] [  0.009s] Open(flags=2, path="/dev/shell") → err([PERMISSION] PID 3 Open /dev/shell: permission denied)    0µs
 ```
 
-从这一行可以提取以下信息：
+Here is what you can extract from this line:
 
-| 字段 | 值 | 含义 |
-|------|-----|------|
-| Syscall | `Open` | 尝试打开设备 |
-| path | `/dev/shell` | 目标 VFS 设备路径 |
-| PID | `3` | 出错的进程 |
-| 错误码 | `PERMISSION` | 权限不足 |
-| 错误描述 | `permission denied` | 设备未在 allowed-tools 中声明 |
+| Field | Value | Meaning |
+|-------|-------|---------|
+| Syscall | `Open` | Attempted to open a device |
+| path | `/dev/shell` | Target VFS device path |
+| PID | `3` | The process that encountered the error |
+| Error code | `PERMISSION` | Insufficient permissions |
+| Error description | `permission denied` | The device is not declared in allowed-tools |
 
-现在定位清楚了：**智能体尝试打开 `/dev/shell` 设备，但 Skill 的 `allowed-tools` 中没有包含这个路径，所以内核拒绝了访问。**
+The diagnosis is now clear: **the agent tried to open the `/dev/shell` device, but the Skill's `allowed-tools` does not include that path, so the kernel denied access.**
 
-### SyscallEvent 结构
+### SyscallEvent Structure
 
-每条 strace 输出对应一个 `SyscallEvent`，包含：
+Each line of strace output corresponds to a `SyscallEvent` containing:
 
-- **Timestamp** — 相对进程启动的时间戳
-- **Syscall** — 系统调用名称（Open/Read/Write/Close/Spawn 等）
-- **PID** — 进程 ID
-- **Args** — 调用参数（path、fd、flags 等）
-- **Result** — 返回值
-- **Err** — 错误信息（nil 表示成功）
-- **Duration** — 调用耗时
+- **Timestamp** — time elapsed since process start
+- **Syscall** — system call name (Open/Read/Write/Close/Spawn, etc.)
+- **PID** — process ID
+- **Args** — call arguments (path, fd, flags, etc.)
+- **Result** — return value
+- **Err** — error information (nil means success)
+- **Duration** — how long the call took
 
-错误行额外标注 `[ERR]` 前缀（终端中显示为红色），方便一眼定位问题。
+Error lines are additionally marked with an `[ERR]` prefix (displayed in red in the terminal) so you can spot problems at a glance.
 
 ---
 
-## 步骤三：修复 bug 并验证
+## Step 3: Fix the Bug and Verify
 
-### 修复
+### The Fix
 
-问题很明确：`SKILL.md` 的 `allowed-tools` 缺少 `/dev/shell`。修改 `lib/skills/line-counter/SKILL.md` 的 frontmatter：
+The problem is clear: the `SKILL.md` frontmatter is missing `/dev/shell` in `allowed-tools`. Edit `lib/skills/line-counter/SKILL.md`:
 
-修复前：
+Before:
 ```yaml
 allowed-tools: /dev/fs
 ```
 
-修复后：
+After:
 ```yaml
 allowed-tools: /dev/fs /dev/shell
 ```
 
-### 重新运行
+### Run Again
 
 ```bash
-rnix -i "统计 kernel/kernel.go 的行数" --agent=counter
+rnix -i "Count the lines in kernel/kernel.go" --agent=counter
 ```
 
-这次应该正常完成：
+This time it should complete successfully:
 
 ```
 PID 4 | counter | running
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-kernel/kernel.go: 287 行
+kernel/kernel.go: 287 lines
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PID 4 | completed | 0 | 2.1s | 450 tokens
 ```
 
-### 用 strace 确认修复
+### Confirm the Fix with strace
 
-再次用 strace 追踪确认所有 syscall 正常：
+Run strace again to verify that all syscalls succeed:
 
 ```bash
 rnix strace 4
 ```
 
 ```
-[  0.001s] Spawn(agent="counter", intent="统计 kernel/kernel.go 的行数") → 4    1ms
+[  0.001s] Spawn(agent="counter", intent="Count the lines in kernel/kernel.go") → 4    1ms
 [  0.002s] CtxAlloc() → 3    0µs
 [  0.003s] Open(flags=1, path="/lib/skills/line-counter/SKILL.md") → 3    0µs
 [  0.003s] Read(fd=3, length=1048576) → 680    0µs
 [  0.004s] Close(fd=3) → <nil>    0µs
-[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM 调用
-[  0.005s] Write(fd=4, size=920) → <nil>    1.80s  ← 慢操作
+[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM call
+[  0.005s] Write(fd=4, size=920) → <nil>    1.80s  ← slow operation
 [  0.006s] Read(fd=4, length=1048576) → 480    2ms
 [  0.006s] Close(fd=4) → <nil>    0µs
 [  0.007s] Open(flags=1, path="/dev/fs") → 5    0µs
@@ -226,55 +227,55 @@ rnix strace 4
 [  0.010s] Close(fd=6) → <nil>    0µs
 ```
 
-这次没有 `[ERR]` 行了——所有 syscall 都成功执行，包括 `/dev/shell` 的 Open/Write/Read/Close。
+This time there are no `[ERR]` lines — all syscalls executed successfully, including the Open/Write/Read/Close sequence for `/dev/shell`.
 
 ---
 
-## 扩展调试技巧
+## Additional Debugging Tips
 
-### rnix ps — 查看进程状态
+### rnix ps — View Process Status
 
 ```bash
 rnix ps
 ```
 
-快速查看所有进程的当前状态（running/zombie/dead）和基本信息。用于确认进程是否还在运行或已经结束。
+Quickly check the current state (running/zombie/dead) and basic information for all processes. Use this to confirm whether a process is still running or has already exited.
 
-### rnix log — 查看分类日志
+### rnix log — View Categorized Logs
 
 ```bash
 rnix log
 ```
 
-查看智能体的推理日志，按类别分组。比 strace 更高层——strace 追踪的是 syscall 层面的操作，log 展示的是推理过程的逻辑记录。
+View the agent's reasoning logs, grouped by category. This is higher-level than strace — strace traces operations at the syscall level, while log shows logical records of the reasoning process.
 
-### rnix top — 实时监控
+### rnix top — Real-Time Monitoring
 
 ```bash
 rnix top
 ```
 
-TUI 界面实时监控所有进程的状态、Token 消耗和资源使用。详见 [教程 3](/tutorials/composing-multi-agent-workflow)。
+A TUI interface for real-time monitoring of all processes' status, token consumption, and resource usage. See [Tutorial 3](/tutorials/composing-multi-agent-workflow) for details.
 
-### 常见错误码
+### Common Error Codes
 
-| 错误码 | 含义 | 常见原因 |
-|--------|------|---------|
-| `PERMISSION` | 权限不足 | Skill 的 allowed-tools 未包含目标设备 |
-| `NOT_FOUND` | 资源不存在 | 文件路径错误、进程已退出、设备未注册 |
-| `TIMEOUT` | 操作超时 | LLM 响应超时、外部命令执行超时 |
-| `DRIVER` | 驱动错误 | LLM CLI 返回错误、Shell 命令执行失败 |
-| `INTERNAL` | 内部错误 | 内核 bug、非法状态转移 |
+| Error Code | Meaning | Common Causes |
+|------------|---------|---------------|
+| `PERMISSION` | Insufficient permissions | The Skill's allowed-tools does not include the target device |
+| `NOT_FOUND` | Resource not found | Incorrect file path, process already exited, device not registered |
+| `TIMEOUT` | Operation timed out | LLM response timeout, external command execution timeout |
+| `DRIVER` | Driver error | LLM CLI returned an error, Shell command execution failed |
+| `INTERNAL` | Internal error | Kernel bug, illegal state transition |
 
 ---
 
-## 下一步
+## Next Steps
 
-- [教程 3：组合多智能体工作流](/tutorials/composing-multi-agent-workflow) — 学习用 Compose 和管道编排多个智能体协作
-- [教程 1：编写第一个 Skill](/tutorials/writing-first-skill) — 回顾 Skill 和 Agent 的创建流程
+- [Tutorial 3: Composing a Multi-Agent Workflow](/tutorials/composing-multi-agent-workflow) — Learn to orchestrate multiple agents with Compose and pipes
+- [Tutorial 1: Writing Your First Skill](/tutorials/writing-first-skill) — Review the Skill and Agent creation workflow
 
-## 相关文档
+## Related Documentation
 
-- [核心概念：系统调用](/guide/concepts) — Syscall 和 SyscallEvent 的概念模型
-- [参考手册：rnix strace](/reference/) — strace 命令的完整参数和输出格式
-- [参考手册：SyscallError](/reference/) — 错误码枚举和 SyscallError 结构
+- [Core Concepts: System Calls](/guide/concepts) — Conceptual model for Syscalls and SyscallEvents
+- [Reference: rnix strace](/reference/) — Complete parameters and output format for the strace command
+- [Reference: SyscallError](/reference/) — Error code enumeration and SyscallError structure
