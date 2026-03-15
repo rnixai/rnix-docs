@@ -1,51 +1,111 @@
 # Configuration Guide
 
-Rnix uses several YAML configuration files to control LLM providers, bootstrap services, multi-agent workflows, and agent/skill definitions. This guide covers each configuration file and its options.
+Rnix uses a two-tier configuration system with YAML files, agent definitions, and skill definitions. Run `rnix init` to bootstrap the configuration environment.
 
 ---
 
-## Overview
+## Two-Tier Configuration
 
-| File | Purpose | Location |
-|------|---------|----------|
-| `rnix-providers.yaml` | LLM provider definitions | Project root |
-| `rnix-init.yaml` | Bootstrap services and supervisor trees | Project root |
-| `rnix-compose.yaml` | Multi-agent workflow DAGs | Project root |
-| `lib/agents/*/agent.yaml` | Agent manifests | `lib/agents/` |
-| `lib/skills/*/SKILL.md` | Skill definitions | `lib/skills/` |
+Rnix follows a **global + project** configuration model:
+
+| Tier | Location | Purpose |
+|------|----------|---------|
+| **Global** | `~/.config/rnix/` (or `$XDG_CONFIG_HOME/rnix/`) | User-wide defaults, shared agents and skills |
+| **Project** | `<project>/.rnix/` | Project-specific overrides and definitions |
+
+### Directory Structure
+
+```
+~/.config/rnix/              ← Global (created by rnix init)
+├── providers.yaml           ← LLM provider definitions
+├── config.yaml              ← Global configuration
+├── agents/                  ← Global agent definitions
+│   └── code-analyst/
+│       ├── agent.yaml
+│       └── instructions.md
+└── skills/                  ← Global skill definitions
+    └── code-analysis/
+        └── SKILL.md
+
+<project>/.rnix/             ← Project (created by rnix init in project dir)
+├── providers.yaml           ← Project provider overrides (optional)
+├── config.yaml              ← Project configuration (optional)
+├── agents/                  ← Project-specific agents
+├── skills/                  ← Project-specific skills
+└── data/                    ← Runtime data (records, traces)
+```
+
+### Merge Rules
+
+- **YAML files** (`providers.yaml`, `config.yaml`): Deep merge — project-level values override global-level
+- **Resource directories** (`agents/`, `skills/`): Shadow — project-level definitions with the same name completely shadow global-level
+
+### Initialization
+
+```bash
+# Create both global (~/.config/rnix/) and project (.rnix/) directories
+$ rnix init
+[init] created ~/.config/rnix/
+[init] created .rnix/
+```
+
+`rnix init` is idempotent — it skips existing files and directories.
 
 ---
 
-## rnix-providers.yaml — LLM Providers
+## providers.yaml — LLM Providers
 
-This file defines available LLM providers. Rnix ships with built-in support for Claude Code CLI and Cursor CLI, but you can configure additional providers here.
+This file defines available LLM providers. Located at `~/.config/rnix/providers.yaml` (global) and optionally `.rnix/providers.yaml` (project override).
 
 ```yaml
+version: "1"
 default_provider: claude
 
 providers:
-  claude:
+  - name: claude
     driver: claude-cli
-    model: sonnet
-    # Uses Claude Code CLI (claude -p)
-    # Requires: npm install -g @anthropic-ai/claude-code
+    default_model: haiku
 
-  cursor:
+  - name: cursor
     driver: cursor-cli
-    model: gpt-4
-    # Uses Cursor CLI (agent --print)
-    # Requires: CURSOR_API_KEY environment variable
+
+  - name: groq
+    driver: openai-compat
+    base_url: https://api.groq.com/openai/v1
+    default_model: llama-3.3-70b-versatile
+    api_key_env: GROQ_API_KEY
+
+  - name: ollama
+    driver: openai-compat
+    base_url: http://localhost:11434/v1
+    default_model: llama3
+
+  - name: deepseek
+    driver: openai-compat
+    base_url: https://api.deepseek.com/v1
+    default_model: deepseek-chat
+    api_key_env: DEEPSEEK_API_KEY
 ```
 
 ### Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `version` | `string` | Config format version (`"1"`) |
 | `default_provider` | `string` | Default provider when none specified (default: `claude`) |
-| `providers.<name>.driver` | `string` | Driver type: `claude-cli` or `cursor-cli` |
-| `providers.<name>.model` | `string` | Default model name |
-| `providers.<name>.base_url` | `string` | API base URL (for custom endpoints) |
-| `providers.<name>.api_key` | `string` | API key (prefer environment variables) |
+| `providers[].name` | `string` | Provider name, maps to `/dev/llm/<name>` |
+| `providers[].driver` | `string` | Driver type: `claude-cli`, `cursor-cli`, or `openai-compat` |
+| `providers[].default_model` | `string` | Default model name |
+| `providers[].base_url` | `string` | API base URL (for `openai-compat` driver) |
+| `providers[].api_key_env` | `string` | Environment variable name for API key |
+
+### Driver Types
+
+| Driver | How It Works | Examples |
+|--------|-------------|----------|
+| `claude-cli` | Invokes Claude Code CLI (`claude -p`) | Anthropic Claude |
+| `cursor-cli` | Invokes Cursor CLI (`agent --print`) | Cursor |
+| `openai-compat` | Calls OpenAI-compatible HTTP API | Ollama, Groq, DeepSeek, any OpenAI-compatible endpoint |
 
 ### Provider Resolution Priority
 
@@ -53,21 +113,31 @@ When spawning an agent, the LLM provider is resolved in this order:
 
 1. `--provider` CLI flag (highest priority)
 2. `agent.yaml` → `models.provider` field
-3. `rnix-providers.yaml` → `default_provider`
+3. `providers.yaml` → `default_provider`
 4. Built-in default: `claude`
 
 ### Model Resolution Priority
 
 1. `--model` CLI flag
 2. `agent.yaml` → `models.preferred` field
-3. Provider's default model
+3. Provider's `default_model`
 4. Driver's built-in default
+
+### API Key Management
+
+API keys are referenced via environment variables — never stored directly in config files:
+
+```yaml
+- name: groq
+  driver: openai-compat
+  api_key_env: GROQ_API_KEY   # Reads $GROQ_API_KEY at runtime
+```
 
 ---
 
-## rnix-init.yaml — Bootstrap Services
+## init.yaml — Bootstrap Services
 
-This file defines services that start automatically when the daemon launches. It supports supervisor trees for fault-tolerant agent management.
+This file defines services that start automatically when the daemon launches. Located at `~/.config/rnix/init.yaml` or `.rnix/init.yaml`.
 
 ```yaml
 version: "1.0"
@@ -107,9 +177,9 @@ services:
 
 ---
 
-## rnix-compose.yaml — Multi-Agent Workflows
+## compose.yaml — Multi-Agent Workflows
 
-Compose files define DAG-based multi-agent workflows. The compose engine automatically resolves dependencies, schedules parallel execution, and passes results between agents.
+Compose files define DAG-based multi-agent workflows. Located at `.rnix/compose.yaml` or project root.
 
 ```yaml
 version: "1.0"
@@ -153,33 +223,19 @@ agents:
 | `timeout` | `duration` | Execution timeout |
 | `max_retries` | `int` | Retry count on failure |
 
-### DAG Scheduling
-
-The compose engine:
-
-1. **Parses the dependency graph** — builds a DAG from `depends_on` relations
-2. **Topological sort** — determines execution layers
-3. **Parallel execution** — agents in the same layer run concurrently
-4. **Result injection** — upstream agent output is injected into downstream agent context
-
 ### Running Compose Workflows
 
 ```bash
-# Run the workflow
-rnix compose up
-
-# Run with JSON output
-rnix compose up --json
-
-# Stop all compose processes
-rnix compose down
+rnix compose up          # Run the workflow
+rnix compose up --json   # Run with JSON output
+rnix compose down        # Stop all compose processes
 ```
 
 ---
 
 ## Agent Manifest — agent.yaml
 
-Each agent is defined by an `agent.yaml` file and an `instructions.md` file in `lib/agents/<name>/`.
+Each agent is defined by an `agent.yaml` file and an `instructions.md` file in `agents/<name>/` (global: `~/.config/rnix/agents/`, project: `.rnix/agents/`).
 
 ```yaml
 name: code-analyst
@@ -208,27 +264,22 @@ mcp:
 | `name` | `string` | Yes | Unique agent identifier |
 | `description` | `string` | No | Human-readable description |
 | `models` | `object` | No | LLM model preferences |
-| `models.provider` | `string` | No | LLM provider (`claude` or `cursor`) |
+| `models.provider` | `string` | No | LLM provider name |
 | `models.preferred` | `string` | No | Preferred model name |
 | `models.fallback` | `string` | No | Fallback model name |
 | `context_budget` | `int` | No | Max token budget (0 = unlimited) |
 | `skills` | `[]string` | No | Referenced skill names |
 | `mcp` | `object` | No | MCP server configurations |
 
-### MCP Configuration in Agents
+### Shadow Resolution
 
-Agents can declare MCP server dependencies. During spawn:
-
-1. Each MCP server is mounted at `/mnt/mcp/{pid}-{serverName}`
-2. Mount paths are added to the process `AllowedDevices`
-3. If any mount fails, all mounts are rolled back
-4. On process exit, all MCP mounts are automatically unmounted
+When the same agent name exists in both project and global directories, the **project-level definition completely shadows the global one**. There is no merging at the agent level.
 
 ---
 
 ## Skill Definition — SKILL.md
 
-Skills are defined as `SKILL.md` files in `lib/skills/<name>/`, using YAML frontmatter + Markdown body format.
+Skills are defined as `SKILL.md` files in `skills/<name>/` (global: `~/.config/rnix/skills/`, project: `.rnix/skills/`).
 
 ```markdown
 ---
@@ -273,8 +324,7 @@ The `allowed-tools` field is the core of Rnix's permission model. A skill can on
 |--------|------------|
 | `/dev/fs` | Host filesystem read/write |
 | `/dev/shell` | Shell command execution |
-| `/dev/llm/claude` | LLM inference (Claude) |
-| `/dev/llm/cursor` | LLM inference (Cursor) |
+| `/dev/llm/<provider>` | LLM inference |
 
 When multiple skills are loaded by an agent, their `allowed-tools` are **unioned** — the agent can access any device permitted by any of its skills.
 
@@ -287,8 +337,7 @@ Empty `allowed-tools` means **no restrictions** (can access all devices).
 | Variable | Description |
 |----------|-------------|
 | `RNIX_ASCII` | Set to `1` to force ASCII mode (disable Unicode glyphs) |
-| `RNIX_LOG_DIR` | Log directory for monitor.sh |
-| `CURSOR_API_KEY` | API key for Cursor CLI provider |
+| `XDG_CONFIG_HOME` | Override global config directory (default: `~/.config`) |
 | `XDG_RUNTIME_DIR` | Used to determine socket path |
 
 ## Socket Path
@@ -305,5 +354,6 @@ Directory permissions: `0700` (current user only).
 ## Related Documentation
 
 - [Quick Start](/guide/quick-start) — Installation and first run
+- [LLM Providers](/guide/llm-providers) — Provider details and serve gateway
 - [Core Concepts](/guide/concepts) — Process, VFS, Agent/Skill model
 - [Reference Manual](/reference/) — Complete API and CLI reference

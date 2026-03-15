@@ -6,50 +6,47 @@ Rnix supports multiple LLM providers through declarative configuration and expos
 
 ## Multi-Provider Configuration
 
-### rnix-providers.yaml
+### providers.yaml
 
-Define LLM providers declaratively. The daemon parses this at startup and registers each as a VFS device at `/dev/llm/<name>`.
+Define LLM providers declaratively in `~/.config/rnix/providers.yaml` (global) or `.rnix/providers.yaml` (project override). The daemon parses this at startup and registers each as a VFS device at `/dev/llm/<name>`.
 
 ```yaml
+version: "1"
 default_provider: claude
 
 providers:
-  claude:
-    driver: cli
-    command: "claude"
-    args: ["-p"]
-    default_model: "sonnet"
+  - name: claude
+    driver: claude-cli
+    default_model: haiku
 
-  cursor:
-    driver: cli
-    command: "agent"
-    args: ["--print"]
-    default_model: "claude-3.5-sonnet"
+  - name: cursor
+    driver: cursor-cli
 
-  ollama:
-    driver: http
-    base_url: "http://localhost:11434/v1"
-    default_model: "llama3"
+  - name: ollama
+    driver: openai-compat
+    base_url: http://localhost:11434/v1
+    default_model: llama3
 
-  groq:
-    driver: http
-    base_url: "https://api.groq.com/openai/v1"
-    api_key_env: "GROQ_API_KEY"
-    default_model: "llama-3.3-70b"
+  - name: groq
+    driver: openai-compat
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY
+    default_model: llama-3.3-70b-versatile
 
-  deepseek:
-    driver: http
-    base_url: "https://api.deepseek.com/v1"
-    api_key_env: "DEEPSEEK_API_KEY"
-    default_model: "deepseek-chat"
+  - name: deepseek
+    driver: openai-compat
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+    default_model: deepseek-chat
 ```
 
 ### Driver Types
 
 | Driver | How It Works | Examples |
 |--------|-------------|----------|
-| `cli` | Executes local CLI tool via `exec.CommandContext` | Claude Code CLI, Cursor CLI |
-| `http` | Calls OpenAI-compatible HTTP API endpoint | Ollama, Groq, DeepSeek, any OpenAI-compatible server |
+| `claude-cli` | Invokes Claude Code CLI (`claude -p`) | Anthropic Claude |
+| `cursor-cli` | Invokes Cursor CLI (`agent --print`) | Cursor |
+| `openai-compat` | Calls OpenAI-compatible HTTP API endpoint | Ollama, Groq, DeepSeek, any OpenAI-compatible server |
 
 ### Provider Resolution
 
@@ -57,7 +54,7 @@ When spawning an agent, the provider is resolved:
 
 1. `--provider` CLI flag (highest priority)
 2. `agent.yaml` → `models.provider`
-3. `rnix-providers.yaml` → `default_provider`
+3. `providers.yaml` → `default_provider`
 4. Built-in default: `claude`
 
 ### Provider Fallback
@@ -89,9 +86,9 @@ deepseek     http    offline   deepseek-chat      timeout
 HTTP providers reference API keys via environment variables — keys are never stored in config files:
 
 ```yaml
-groq:
-  driver: http
-  api_key_env: "GROQ_API_KEY"   # Reads $GROQ_API_KEY at runtime
+- name: groq
+  driver: openai-compat
+  api_key_env: GROQ_API_KEY   # Reads $GROQ_API_KEY at runtime
 ```
 
 ---
@@ -155,7 +152,7 @@ Lists all registered and healthy providers with available models:
 
 ### Architecture
 
-The serve gateway **shares the daemon's driver instances** and `rnix-providers.yaml` configuration. Adding or changing a provider only requires editing the config and restarting the daemon.
+The serve gateway **shares the daemon's driver instances** and `providers.yaml` configuration. Adding or changing a provider only requires editing the config and restarting the daemon.
 
 ```
 External Tool → HTTP → rnix serve → VFS /dev/llm/* → Provider Driver → LLM

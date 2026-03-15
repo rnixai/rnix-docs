@@ -63,10 +63,10 @@ This command triggers the following lifecycle:
 CLI output example:
 
 ```
-[kernel] spawning PID 1...
+[kernel] spawning PID 1 (claude/haiku)...
 [agent]  step 1/10
 [result] Code analysis results...
-[kernel] PID 1 exited(0) | tokens: 1234 | elapsed: 6.2s
+[kernel] PID 1 exited(0) | claude/haiku | tokens: 1234 | elapsed: 6.2s
 ```
 
 ### Process Tree
@@ -91,6 +91,8 @@ Each process records its parent-child relationship through PPID (Parent Process 
 | AllowedDevices | Device permission whitelist (aggregated from Skills) |
 | DebugChan | Debug event channel (buffer 256), consumed by strace |
 | TokensUsed | Cumulative token consumption |
+| Provider | Resolved LLM provider name (immutable after spawn) |
+| Model | Resolved model name (immutable after spawn) |
 
 ---
 
@@ -494,10 +496,10 @@ cmd/rnix/main.go (CLI Client)
      │  Unix Domain Socket (StreamEvents)
      ▼
 CLI Client receives ProgressEvent → formatted output:
-    [kernel] spawning PID 1...
+    [kernel] spawning PID 1 (claude/haiku)...
     [agent/1] reasoning step 1...
     ══ Result ══...
-    [kernel] PID 1 exited(0) | tokens: 1234 | elapsed: 6.2s
+    [kernel] PID 1 exited(0) | claude/haiku | tokens: 1234 | elapsed: 6.2s
 ```
 
 Key distinction: the CLI no longer calls the kernel directly, but acts as an IPC client sending requests to the daemon. The daemon's `callbackMux` routes each process's progress events to the corresponding client connection, enabling streaming output. After the Spawn stream ends, the IPC Server proactively calls `kernel.Reap(pid)` to clean up the Zombie process (close DebugChan, free context, remove from process table), since in daemon mode there is no CLI-side `Wait()` call to trigger reclamation.

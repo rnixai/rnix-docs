@@ -17,22 +17,13 @@ go version go1.26.0 linux/amd64
 
 如果未安装，请前往 [Go 官方下载页面](https://go.dev/dl/) 安装。
 
-### Claude Code CLI
+### LLM 提供商
 
-Rnix 通过 Claude Code CLI 调用 LLM 推理。确认已安装：
+Rnix 支持多种 LLM 提供商，至少需要一个：
 
-```bash
-$ claude --version
-2.1.69
-```
-
-如果未安装：
-
-```bash
-npm install -g @anthropic-ai/claude-code
-```
-
-安装后，需要配置有效的 API 密钥。请参考 [Claude Code 文档](https://code.claude.com/docs) 完成配置。
+- **Claude Code CLI** — `npm install -g @anthropic-ai/claude-code`
+- **Cursor CLI** — 需要设置 `CURSOR_API_KEY` 环境变量
+- **OpenAI 兼容 API**（Ollama、Groq、DeepSeek 等）— 运行 `rnix init` 后在 `~/.config/rnix/providers.yaml` 中配置
 
 ---
 
@@ -49,16 +40,21 @@ go install github.com/rnixai/rnix/cmd/rnix@latest
 ```bash
 $ rnix version
 rnix v0.1.0
-claude-code: 2.1.69
+commit:  cd9c568
+built:   2026-03-15T07:23:57Z
 ```
 
-如果看到以下输出，说明 Claude Code CLI 未安装或不在 PATH 中：
+### 初始化配置
 
+首次使用前，运行 `rnix init` 创建配置环境：
+
+```bash
+$ rnix init
+[init] created ~/.config/rnix/
+[init] created .rnix/
 ```
-rnix v0.1.0
-✗ claude-code CLI not found
-  → 建议: npm install -g @anthropic-ai/claude-code
-```
+
+这会创建全局配置目录 `~/.config/rnix/`（包含 `providers.yaml`、`agents/`、`skills/`）和项目级配置目录 `.rnix/`。
 
 ---
 
@@ -77,7 +73,7 @@ $ rnix -i "分析 ./README.md"
 你将看到类似以下的输出：
 
 ```
-[kernel] spawning PID 1...
+[kernel] spawning PID 1 (claude/haiku)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 ══ Result ══════════════════════════════════════════════════════════════════════
@@ -86,17 +82,18 @@ $ rnix -i "分析 ./README.md"
   该文件是 Rnix 项目的入口说明文档，包含项目简介、安装方式和基本用法。
   结构清晰，涵盖了新用户上手所需的关键信息...
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | tokens: 1024 | elapsed: 5.3s
+[kernel] PID 1 exited(0) | claude/haiku | tokens: 1024 | elapsed: 5.3s
 ```
 
 ### 解读输出
 
 | 输出行 | 含义 |
 |--------|------|
-| `[kernel] spawning PID 1...` | 内核正在创建智能体进程，分配 PID 1 |
+| `[kernel] spawning PID 1 (claude/haiku)...` | 内核正在创建智能体进程，分配 PID 1，使用 claude 提供商的 haiku 模型 |
 | `[agent/1] reasoning step 1...` | PID 1 的智能体正在执行第 1 步推理 |
 | `══ Result ══...` | 双线边框内是智能体的最终输出结果 |
 | `[kernel] PID 1 exited(0)` | 进程正常退出（退出码 0） |
+| `claude/haiku` | 使用的 provider/model |
 | `tokens: 1024` | 本次执行消耗的 token 数量 |
 | `elapsed: 5.3s` | 总耗时 |
 
@@ -136,7 +133,7 @@ models:
 你将看到类似以下的输出：
 
 ```
-[kernel] spawning PID 1...
+[kernel] spawning PID 1 (claude/haiku)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 [agent/1] reasoning step 3...
@@ -150,7 +147,7 @@ models:
   - **Info** — 全局变量较多，可考虑封装到结构体中
   - **Info** — 建议为 runRoot 添加更多错误分类处理
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | tokens: 2340 | elapsed: 12.5s
+[kernel] PID 1 exited(0) | claude/haiku | tokens: 2340 | elapsed: 12.5s
 ```
 
 > 💡 想了解 Agent 和 Skill 的设计原理？请参阅 [核心概念文档](/zh/guide/concepts) 中的"Agent 与 Skill"章节。

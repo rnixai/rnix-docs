@@ -130,7 +130,7 @@ Signature: Spawn(intent string, agent *agents.AgentInfo, opts SpawnOpts) (PID, e
 5. `SetSystemPrompt` + `AppendMessage(user, intent)` — initializes context
 6. `Open("/dev/llm/claude", O_RDWR)` — obtains LLM device FD
 7. Starts goroutine — `Created -> Running` — enters `reasonStep` loop
-8. Triggers `OnSpawn` callback notification
+8. Triggers `OnSpawn` callback notification (with resolved provider and model)
 
 **Example:**
 
@@ -246,6 +246,8 @@ Signature: ListProcs() []ProcInfo
 | `CtxID` | `CtxID` | Context ID |
 | `Result` | `string` | Final output result |
 | `AllowedDevices` | `[]string` | Device permission whitelist |
+| `Provider` | `string` | Resolved LLM provider name |
+| `Model` | `string` | Resolved model name |
 
 **Behavior:** Iterates the process table, acquires a lock on each process to read a snapshot. The return value is a value copy with no references to the process objects.
 
@@ -1008,13 +1010,13 @@ Arguments: [intent] — arbitrary-length intent string (multiple arguments joine
 **Default Output Example:**
 
 ```
-[kernel] spawning PID 1...
+[kernel] spawning PID 1 (claude/haiku)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 ══ Result ══════════════════════════════════════════════════════════════════════
   Analysis result content...
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | tokens: 1234 | elapsed: 6.2s
+[kernel] PID 1 exited(0) | claude/haiku | tokens: 1234 | elapsed: 6.2s
 ```
 
 **JSON Success Response:**
@@ -1176,21 +1178,20 @@ Usage: rnix version
 
 ```
 rnix v0.1.0
-claude-code: 2.1.69
+commit:  cd9c568
+built:   2026-03-15T07:23:57Z
 ```
 
-**When Claude CLI Is Not Installed:**
+**Dev Build (no ldflags):**
 
 ```
-rnix v0.1.0
-✗ claude-code CLI not found
-  → Suggestion: npm install -g @anthropic-ai/claude-code
+rnix v0.1.0-dev
 ```
 
 **JSON Output:**
 
 ```json
-{"ok": true, "data": {"version": "0.1.0", "claude_code_available": true, "claude_code": "2.1.69"}}
+{"ok": true, "data": {"version": "0.1.0", "git_commit": "cd9c568", "build_date": "2026-03-15T07:23:57Z"}}
 ```
 
 ### 4.7 JSON Response Format
@@ -1352,6 +1353,8 @@ Streaming methods (`spawn`, `attach_debug`) push events line by line using `Stre
 | `event` | `string` | All | `"spawn"`, `"step"`, `"complete"`, `"error"` |
 | `pid` | `PID` | All | Process ID |
 | `intent` | `string` | spawn | User intent |
+| `provider` | `string` | spawn | Resolved LLM provider name |
+| `model` | `string` | spawn | Resolved model name |
 | `step` | `int` | step | Current step count |
 | `total` | `int` | step | Maximum step count |
 | `result` | `string` | complete | Final result |

@@ -130,7 +130,7 @@ Rnix 的内核接口按 4 个功能分类组织，共定义 15 个 syscall：
 5. `SetSystemPrompt` + `AppendMessage(user, intent)` → 初始化上下文
 6. `Open("/dev/llm/claude", O_RDWR)` → 获取 LLM 设备 FD
 7. 启动 goroutine → `Created → Running` → 进入 `reasonStep` 循环
-8. 触发 `OnSpawn` 回调通知
+8. 触发 `OnSpawn` 回调通知（包含解析后的 provider 和 model）
 
 **示例：**
 
@@ -246,6 +246,8 @@ fmt.Printf("exit code: %d, reason: %s\n", exit.Code, exit.Reason)
 | `CtxID` | `CtxID` | 上下文 ID |
 | `Result` | `string` | 最终输出结果 |
 | `AllowedDevices` | `[]string` | 设备权限白名单 |
+| `Provider` | `string` | 解析后的 LLM 提供商名称 |
+| `Model` | `string` | 解析后的模型名称 |
 
 **行为：** 遍历进程表，对每个进程加锁读取快照。返回值是值拷贝，不包含对进程对象的引用。
 
@@ -1008,13 +1010,13 @@ metadata:
 **默认输出示例：**
 
 ```
-[kernel] spawning PID 1...
+[kernel] spawning PID 1 (claude/haiku)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 ══ Result ══════════════════════════════════════════════════════════════════════
   分析结果内容...
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | tokens: 1234 | elapsed: 6.2s
+[kernel] PID 1 exited(0) | claude/haiku | tokens: 1234 | elapsed: 6.2s
 ```
 
 **JSON 成功响应：**
@@ -1176,21 +1178,20 @@ daemon is not running
 
 ```
 rnix v0.1.0
-claude-code: 2.1.69
+commit:  cd9c568
+built:   2026-03-15T07:23:57Z
 ```
 
-**Claude CLI 未安装时：**
+**开发构建（无 ldflags）：**
 
 ```
-rnix v0.1.0
-✗ claude-code CLI not found
-  → 建议: npm install -g @anthropic-ai/claude-code
+rnix v0.1.0-dev
 ```
 
 **JSON 输出：**
 
 ```json
-{"ok": true, "data": {"version": "0.1.0", "claude_code_available": true, "claude_code": "2.1.69"}}
+{"ok": true, "data": {"version": "0.1.0", "git_commit": "cd9c568", "build_date": "2026-03-15T07:23:57Z"}}
 ```
 
 ### 4.7 JSON 响应格式
@@ -1352,6 +1353,8 @@ IPC 通信使用 NDJSON（Newline Delimited JSON）格式，每行一个 JSON �
 | `event` | `string` | 所有 | `"spawn"`、`"step"`、`"complete"`、`"error"` |
 | `pid` | `PID` | 所有 | 进程 ID |
 | `intent` | `string` | spawn | 用户意图 |
+| `provider` | `string` | spawn | 解析后的 LLM 提供商名称 |
+| `model` | `string` | spawn | 解析后的模型名称 |
 | `step` | `int` | step | 当前步数 |
 | `total` | `int` | step | 最大步数 |
 | `result` | `string` | complete | 最终结果 |
@@ -1893,7 +1896,7 @@ OpenAI 兼容 HTTP 服务器。端点：`/v1/chat/completions`（同步 + SSE �
 
 ### 10.1 /dev/llm/* — 多 Provider 设备
 
-通过 `rnix-providers.yaml` 动态注册。每个 provider 一个 VFS 路径：
+通过 `providers.yaml` 动态注册。每个 provider 一个 VFS 路径：
 
 | 路径 | 驱动类型 | 说明 |
 |------|---------|------|

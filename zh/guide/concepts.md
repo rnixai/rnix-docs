@@ -61,10 +61,10 @@ $ rnix -i "分析代码"
 CLI 输出示例：
 
 ```
-[kernel] spawning PID 1...
+[kernel] spawning PID 1 (claude/haiku)...
 [agent]  step 1/10
 [result] 代码分析结果...
-[kernel] PID 1 exited(0) | tokens: 1234 | elapsed: 6.2s
+[kernel] PID 1 exited(0) | claude/haiku | tokens: 1234 | elapsed: 6.2s
 ```
 
 ### 进程树
@@ -89,6 +89,8 @@ CLI 输出示例：
 | AllowedDevices | 设备权限白名单（由 Skill 聚合而来） |
 | DebugChan | 调试事件通道（缓冲 256），供 strace 消费 |
 | TokensUsed | 累计 token 消耗量 |
+| Provider | 解析后的 LLM 提供商名称（spawn 后不可变） |
+| Model | 解析后的模型名称（spawn 后不可变） |
 
 ---
 
@@ -491,10 +493,10 @@ cmd/rnix/main.go（CLI 客户端）
      │  Unix Domain Socket（流式 StreamEvent）
      ▼
 CLI 客户端接收 ProgressEvent → 格式化输出:
-    [kernel] spawning PID 1...
+    [kernel] spawning PID 1 (claude/haiku)...
     [agent/1] reasoning step 1...
     ══ Result ══...
-    [kernel] PID 1 exited(0) | tokens: 1234 | elapsed: 6.2s
+    [kernel] PID 1 exited(0) | claude/haiku | tokens: 1234 | elapsed: 6.2s
 ```
 
 关键区别：CLI 不再直接调用 kernel，而是作为 IPC 客户端将请求发送给 daemon。daemon 中的 `callbackMux` 将每个进程的进度事件路由到对应的客户端连接，实现流式输出。Spawn 流式结束后，IPC Server 主动调用 `kernel.Reap(pid)` 清理 Zombie 进程（关闭 DebugChan、释放上下文、移除进程表），因为 daemon 模式下没有 CLI 端的 `Wait()` 调用来触发回收。

@@ -131,8 +131,8 @@ services:
 
 The daemon bootstrap sequence on startup:
 
-1. Parse `rnix-providers.yaml` → register LLM providers to VFS
-2. Parse `rnix-init.yaml` → start system services and supervisor trees
+1. Parse `providers.yaml` → register LLM providers to VFS
+2. Parse `init.yaml` → start system services and supervisor trees
 3. Initialize Skill registry
 4. Start MCP service management
 5. Begin idle timeout monitoring

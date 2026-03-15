@@ -82,7 +82,7 @@ var _ ProcessManager = (*KernelImpl)(nil)
 
 ```go
 type KernelCallbacks interface {
-    OnSpawn(pid types.PID, intent string)
+    OnSpawn(pid types.PID, intent, provider, model string)
     OnStep(pid types.PID, step int, total int)
     OnComplete(pid types.PID, result string, exit ExitStatus)
     OnError(pid types.PID, err error)
@@ -91,7 +91,7 @@ type KernelCallbacks interface {
 
 | 回调 | 触发时机 | 用途 |
 |------|---------|------|
-| OnSpawn | 进程注册到进程表后 | CLI 显示 `[kernel] spawning PID N...` |
+| OnSpawn | 进程注册到进程表后 | CLI 显示 `[kernel] spawning PID N (provider/model)...` |
 | OnStep | 每次 reasonStep 循环开头 | CLI 显示 `[agent] step X/N` |
 | OnComplete | finishProcess 写入 ExitStatus 后 | CLI 显示最终结果和退出码 |
 | OnError | finishProcess 中 exit.Err 非 nil | CLI 显示错误信息 |
@@ -118,7 +118,7 @@ CLI 层                    内核层                   VFS/驱动层
   │                        │                         │
   │                        │  [启动推理 goroutine]    │
   │                        │                         │
-  │     OnSpawn(pid)       │                         │
+  │     OnSpawn(pid, provider, model) │                         │
   │<───────────────────────│                         │
   │                        │                         │
   │                     ┌──┤ reasonStep 循环         │

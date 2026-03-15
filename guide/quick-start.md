@@ -21,14 +21,9 @@ If not installed, visit [go.dev/dl](https://go.dev/dl/).
 
 Rnix supports multiple LLM providers. You need at least one:
 
-**Claude Code CLI** (default):
-```bash
-$ claude --version
-2.1.69
-# If not installed: npm install -g @anthropic-ai/claude-code
-```
-
-**Or any OpenAI-compatible API** (Ollama, Groq, DeepSeek, etc.) — configure in `rnix-providers.yaml` after install.
+- **Claude Code CLI** — `npm install -g @anthropic-ai/claude-code`
+- **Cursor CLI** — requires `CURSOR_API_KEY` environment variable
+- **OpenAI-compatible API** (Ollama, Groq, DeepSeek, etc.) — configure in `~/.config/rnix/providers.yaml` after `rnix init`
 
 ---
 
@@ -43,7 +38,8 @@ Verify:
 ```bash
 $ rnix version
 rnix v0.1.0
-claude-code: 2.1.69
+commit:  cd9c568
+built:   2026-03-15T07:23:57Z
 ```
 
 ### Build from Source
@@ -60,7 +56,7 @@ make build    # → ./rnix
 
 ```bash
 $ rnix -i "Analyze the code quality of ./cmd/rnix/main.go"
-[kernel] spawning PID 1...
+[kernel] spawning PID 1 (claude/haiku)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 ══ Result ══════════════════════════════════════════════════════════════════════
@@ -69,7 +65,7 @@ $ rnix -i "Analyze the code quality of ./cmd/rnix/main.go"
   2. Import organization: clean and grouped
   ...
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | tokens: 1,234 | elapsed: 6.2s
+[kernel] PID 1 exited(0) | claude/haiku | tokens: 1,234 | elapsed: 6.2s
 ```
 
 The daemon starts automatically on first use and exits after 60s idle.
