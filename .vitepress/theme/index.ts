@@ -18,20 +18,19 @@ function initPostHog() {
   })
 }
 
-/** Sync tab favicon with VitePress light/dark theme */
-function syncFaviconWithTheme() {
+/** 标签页 favicon 仅随系统/浏览器主题（prefers-color-scheme），不随页面内亮暗切换 */
+function syncFaviconWithSystemTheme() {
   if (import.meta.env.SSR || typeof document === 'undefined') return
   const link = document.querySelector<HTMLLinkElement>('link[rel="icon"][type="image/svg+xml"]')
   if (!link) return
-  const isDark = document.documentElement.classList.contains('dark')
-  link.href = isDark ? '/logo-dark.svg' : '/logo.svg'
+  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches
+  link.href = dark ? '/logo-dark.svg' : '/logo.svg'
 }
 
 function initFaviconThemeSync() {
   if (import.meta.env.SSR || typeof document === 'undefined') return
-  syncFaviconWithTheme()
-  const observer = new MutationObserver(() => syncFaviconWithTheme())
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+  syncFaviconWithSystemTheme()
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncFaviconWithSystemTheme)
 }
 
 /** Harden a11y: aria-labels for theme switch & copy buttons, rel for external links */
