@@ -18,6 +18,22 @@ function initPostHog() {
   })
 }
 
+/** Sync tab favicon with VitePress light/dark theme */
+function syncFaviconWithTheme() {
+  if (import.meta.env.SSR || typeof document === 'undefined') return
+  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"][type="image/svg+xml"]')
+  if (!link) return
+  const isDark = document.documentElement.classList.contains('dark')
+  link.href = isDark ? '/logo-dark.svg' : '/logo.svg'
+}
+
+function initFaviconThemeSync() {
+  if (import.meta.env.SSR || typeof document === 'undefined') return
+  syncFaviconWithTheme()
+  const observer = new MutationObserver(() => syncFaviconWithTheme())
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+}
+
 /** Harden a11y: aria-labels for theme switch & copy buttons, rel for external links */
 function applyA11yHardening() {
   if (import.meta.env.SSR || typeof document === 'undefined') return
@@ -45,6 +61,7 @@ export default {
   enhanceApp({ app, router }) {
     if (import.meta.env.SSR) return
     initPostHog()
+    initFaviconThemeSync()
     setTimeout(applyA11yHardening, 0)
     if (router.onAfterRouteChanged) {
       router.onAfterRouteChanged(() => setTimeout(applyA11yHardening, 0))
