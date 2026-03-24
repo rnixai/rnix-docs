@@ -111,6 +111,7 @@ Rnix 的内核接口按多个功能分类组织，共定义 45 个 syscall：
 | `Model` | `string` | `""` | LLM 模型名称（优先级：CLI > Agent manifest > 驱动默认） |
 | `SystemPrompt` | `string` | `""` | 系统提示词（非空时追加到 Agent instructions 之后） |
 | `MaxTurns` | `int` | `0` | 最大推理步数（`0` = 使用默认值 `DefaultMaxSteps=10`） |
+| `MaxTokens` | `int` | `0` | 最大总 token 数（`0` = 不限制） |
 | `TimeoutMs` | `int64` | `0` | 超时毫秒数 |
 | `ParentPID` | `PID` | `0` | 父进程 PID（`0` = 顶层 CLI 级 spawn） |
 
@@ -159,7 +160,7 @@ pid, err := kern.Spawn("分析代码", agentInfo, kernel.SpawnOpts{
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `pid` | `PID` | 目标进程 ID |
-| `signal` | `Signal` | `SIGTERM(1)` 或 `SIGKILL(2)` |
+| `signal` | `Signal` | `SIGTERM(1)`、`SIGKILL(2)`、`SIGINT(3)`、`SIGPAUSE(4)` 或 `SIGRESUME(5)` |
 
 **返回值：** `error`
 
@@ -1761,7 +1762,7 @@ Lineage for PID 42
 [2] 2026-03-15 10:01:30  progressive specialization
     Skills: code-analysis, testing
     Trigger: "Also write tests"
-    Source: ooda-specialize
+    Source: specialize
 ```
 
 ### 4.27 rnix topology — 协作拓扑
@@ -1953,9 +1954,13 @@ IPC 通信使用 NDJSON（Newline Delimited JSON）格式，每行一个 JSON �
 |--------|------|-------------|------|
 | `ping` | 请求-响应 | — | 活性检查，返回版本号 |
 | `spawn` | 流式 | `SpawnRequest` | 创建进程，流式返回进度事件 |
-| `list_procs` | 请求-响应 | — | 获取所有进程列表 |
+| `list_procs` | 请求-响应 | — | 获取所有活跃进程列表 |
+| `list_all_procs` | 请求-响应 | — | 获取所有进程列表（含历史记录） |
 | `kill` | 请求-响应 | `KillRequest` | 发送信号到进程 |
 | `attach_debug` | 流式 | `AttachDebugRequest` | 订阅 SyscallEvent 流 |
+| `get_step_detail` | 请求-响应 | `StepDetailRequest` | 检索单个步骤记录 |
+| `list_steps` | 请求-响应 | `ListStepsRequest` | 列出进程的所有步骤摘要 |
+| `get_proc_detail` | 请求-响应 | `ProcDetailRequest` | 获取进程详细信息 |
 | `shutdown` | 请求-响应 | — | 优雅关闭 daemon |
 
 **SpawnRequest：**
@@ -2177,6 +2182,12 @@ type ContextError struct {
 | `ErrCode` | `string` | 错误分类码 |
 | `Signal` | `int` | 进程信号 |
 | `ProcessState` | `int` | 进程状态 |
+| `UUID` | `uuid.UUID` | UUID v7——跨 daemon 重启的全局唯一进程标识符 |
+| `TraceID` | `string` | 分布式追踪标识符 |
+| `SpanID` | `string` | 分布式追踪 Span 标识符 |
+| `PGID` | `uint64` | 进程组标识符 |
+| `TID` | `uint64` | 线程标识符 |
+| `CoID` | `uint64` | 协程标识符 |
 
 ---
 
@@ -2231,6 +2242,7 @@ type ExitStatus struct {
 | `1` | `"unexpected exit"` | 意外退出 |
 | `1` | `"max steps exceeded"` | 超过最大推理步数 |
 | `1` | 错误描述 | 推理过程中出错 |
+| `2` | `"budget_exceeded"` | Token 预算超限 |
 
 ### 7.4 资源释放顺序
 
@@ -2255,7 +2267,7 @@ type ExitStatus struct {
 
 **有效性检查：** `Signal.Valid()` 方法检查信号值是否为 SIGTERM 或 SIGKILL。
 
-**Kill 行为：** 无论信号类型，当前实现均调用 `proc.Cancel()` 取消 context。未来版本可能区分 SIGTERM（优雅）和 SIGKILL（强制）的行为。
+**Kill 行为：** 调用 `proc.Cancel()` 取消 context，导致推理 goroutine 中的 LLM 调用被中断。`SIGPAUSE` 暂停推理循环；`SIGRESUME` 恢复已暂停的循环。
 
 ---
 
@@ -2579,9 +2591,9 @@ Spawn 时自动挂载，格式 `/mnt/mcp/{pid}-{serverName}`。子路径映射�
 | `SIGPAUSE` | `4` | 暂停推理循环 |
 | `SIGRESUME` | `5` | 恢复推理循环 |
 
-### 11.2 OODA 推理模式
+### 11.2 统一推理循环
 
-agent.yaml 中 `reasoning: ooda` 启用 OODA 循环：Observe → Orient → Decide → Act。每个阶段映射到 VFS 操作（读取 /proc、LLM 评估、工具执行）。
+单一 `reasonStep` 循环，LLM 每步自主选择 ActionType：tool_call、plan、spawn、complete、specialize、replan、text。`planning: true/false`（默认 true）配置是否注入 plan 指引。内置熔断机制：连续 3 次 tool_call/spawn 失败自动终止。
 
 ### 11.3 ExitStatus 退出码约定（完整）
 

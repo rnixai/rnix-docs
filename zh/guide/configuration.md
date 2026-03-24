@@ -133,6 +133,81 @@ API 密钥通过环境变量引用——不直接存储在配置文件中：
   api_key_env: GROQ_API_KEY   # 运行时读取 $GROQ_API_KEY
 ```
 
+API 密钥按以下优先级解析：
+
+1. **项目 `.env` 文件**（当项目含 `.rnix/` 目录时）
+2. **Daemon 进程环境变量**（`os.Getenv` 兜底）
+
+详见下方[环境文件 (.env)](#环境文件-env) 章节。
+
+---
+
+## 环境文件 (.env)
+
+Rnix 支持项目级 `.env` 文件，用于管理 API 密钥和其他环境变量，不会污染 daemon 的进程环境。
+
+### 加载顺序
+
+当 spawn 请求指定项目目录（含 `.rnix/`）时，daemon 按以下顺序从项目根目录加载 `.env` 文件（后者覆盖前者）：
+
+1. `.env` — 基础环境
+2. `.env.local` — 本地覆盖（建议加入 .gitignore）
+3. `.env.{RNIX_ENV}` — 环境特定（如 `.env.production`）
+4. `.env.{RNIX_ENV}.local` — 环境特定的本地覆盖
+
+### RNIX_ENV
+
+`RNIX_ENV` 环境变量选择要加载的环境特定文件。默认值：`development`。
+
+```bash
+# 使用生产环境
+RNIX_ENV=production rnix "部署服务"
+
+# 默认（development）
+rnix "分析代码质量"
+```
+
+合法值：字母、数字、连字符、下划线（`^[a-zA-Z0-9_-]+$`）。
+
+### 语法
+
+```bash
+# 键=值（无引号）
+API_KEY=sk-xxx
+
+# 双引号（支持 \n、\t、\\、\" 转义）
+PROMPT="Hello\nWorld"
+
+# 单引号（字面值，不转义）
+REGEX='foo\.bar'
+
+# 空值
+EMPTY_VAR=
+
+# 注释
+# 这是注释
+API_KEY=value  # 行内注释
+
+# 可选 export 前缀
+export DATABASE_URL=postgres://localhost/mydb
+```
+
+### 项目间隔离
+
+每次 spawn 请求都会从 `.env` 文件生成独立的环境快照。变量**不会**写入 `os.Setenv`——不同项目的环境完全隔离，即使共享同一个 daemon。
+
+### 示例
+
+```
+myproject/
+├── .rnix/
+│   └── providers.yaml    ← 项目级 provider 覆盖
+├── .env                   ← API_KEY=dev-key
+├── .env.local             ← API_KEY=my-local-key（已 gitignore）
+├── .env.production        ← API_KEY=prod-key
+└── .gitignore             ← *.local, .env.local
+```
+
 ---
 
 ## init.yaml — 引导服务
@@ -227,7 +302,45 @@ agents:
 
 ## Agent 清单 — agent.yaml
 
-详细字段说明请参阅 [参考手册](/reference/)。
+每个 Agent 由 `agent.yaml` 和 `instructions.md` 定义，位于 `agents/<name>/`（全局：`~/.config/rnix/agents/`，项目：`.rnix/agents/`）。
+
+```yaml
+name: code-analyst
+description: "代码质量分析智能体"
+models:
+  provider: claude
+  preferred: sonnet
+  fallback: haiku
+context_budget: 8192
+max_steps: 20
+max_tokens: 50000
+skills:
+  - code-analysis
+  - security-scan
+mcp:
+  servers:
+    github:
+      command: "npx"
+      args: ["-y", "@anthropic/mcp-github"]
+      env:
+        GITHUB_TOKEN: "${GITHUB_TOKEN}"
+```
+
+### 字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `name` | `string` | 是 | 唯一 Agent 标识符 |
+| `description` | `string` | 否 | 人类可读描述 |
+| `models` | `object` | 否 | LLM 模型偏好 |
+| `models.provider` | `string` | 否 | LLM 提供商名称 |
+| `models.preferred` | `string` | 否 | 首选模型名称 |
+| `models.fallback` | `string` | 否 | 备选模型名称 |
+| `context_budget` | `int` | 否 | 最大 token 预算（0 = 不限制） |
+| `max_steps` | `int` | 否 | 最大推理步骤数（0 = 默认 10） |
+| `max_tokens` | `int` | 否 | 最大总 token 数（0 = 不限制） |
+| `skills` | `[]string` | 否 | 引用的 Skill 名称列表 |
+| `mcp` | `object` | 否 | MCP 服务器配置 |
 
 ## Skill 定义 — SKILL.md
 
@@ -239,6 +352,7 @@ agents:
 
 | 变量 | 说明 |
 |------|------|
+| `RNIX_ENV` | 选择 `.env` 文件加载的环境（默认：`development`） |
 | `RNIX_ASCII` | 设为 `1` 强制 ASCII 模式（禁用 Unicode） |
 | `XDG_CONFIG_HOME` | 覆盖全局配置目录（默认：`~/.config`） |
 | `XDG_RUNTIME_DIR` | 用于确定 socket 路径 |

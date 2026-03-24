@@ -4,9 +4,37 @@ Rnix implements an adaptive immune security system that monitors agent behavior,
 
 ---
 
+## Immune System Configuration
+
+The Immune System is **disabled by default**. To enable it, add the following configuration:
+
+```yaml
+# config.yaml
+immune:
+  enabled: true
+  deviation_threshold: 2.0    # Standard deviations from baseline (default: 2.0)
+  min_samples: 10             # Minimum samples before anomaly detection activates
+  auto_suspend: true          # Auto-suspend processes on anomaly detection
+  threat_memory: true         # Enable threat signature persistence
+```
+
+### Configuration Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | `bool` | `false` | Enable or disable the immune system |
+| `deviation_threshold` | `float` | `2.0` | Number of standard deviations to trigger anomaly |
+| `min_samples` | `int` | `10` | Minimum behavior samples before detection begins |
+| `auto_suspend` | `bool` | `true` | Automatically suspend anomalous processes |
+| `threat_memory` | `bool` | `true` | Persist threat signatures across sessions |
+
+When disabled, all immune-related IPC methods return empty status, and no behavior monitoring occurs.
+
+---
+
 ## Immune Daemon
 
-The **Immune Daemon** is a security monitoring process that continuously watches all agent behavior patterns.
+When enabled, the **Immune Daemon** is a security monitoring process that continuously watches all agent behavior patterns.
 
 ### Behavior Baseline
 
@@ -107,5 +135,5 @@ This mirrors biological neural plasticity: when one pathway fails, the system st
 
 - [Monitoring & Supervisor](/guide/monitoring) — Process monitoring and restart strategies
 - [Token Economy](/guide/token-economy) — Budget pools and reputation
-- [Autonomous Agents](/guide/autonomous-agents) — OODA decision loop
+- [Autonomous Agents](/guide/autonomous-agents) — Unified reasoning loop
 - [Compose Orchestration](/guide/compose) — Multi-agent DAG workflows

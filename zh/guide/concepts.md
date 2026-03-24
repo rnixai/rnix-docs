@@ -79,7 +79,8 @@ CLI 输出示例：
 
 | 属性 | 说明 |
 |------|------|
-| PID | 全局唯一进程标识符 |
+| PID | 全局唯一进程标识符（单调递增，永不回收） |
+| UUID | UUID v7 标识符——跨 daemon 重启保持全局唯一，提供时间有序性 |
 | PPID | 父进程 PID |
 | Intent | 用户意图字符串，创建后不可变 |
 | State | 当前状态（Created/Running/Zombie/Dead） |
@@ -91,6 +92,25 @@ CLI 输出示例：
 | TokensUsed | 累计 token 消耗量 |
 | Provider | 解析后的 LLM 提供商名称（spawn 后不可变） |
 | Model | 解析后的模型名称（spawn 后不可变） |
+
+### 进程标识：PID 与 UUID
+
+每个进程有两个标识符：
+
+- **PID** — 单调递增的整数，在单个 daemon 会话内唯一。PID 永不回收。
+- **UUID**（UUID v7）— 全局唯一标识符，跨 daemon 重启保持不变。UUID v7 嵌入了时间戳，提供自然的时间排序。步骤记录和追踪数据使用 UUID 存储，实现跨会话连续性。
+
+大多数 CLI 命令使用 PID 引用进程。UUID 用于内部数据持久化和 Dashboard 历史视图。
+
+### 进程历史
+
+进程退出时，会被记录到一个有界 FIFO 历史缓冲区中。这使系统能够保留最近结束进程的信息，用于：
+
+- Dashboard 历史视图浏览
+- 步骤记录检索
+- 调试与分析
+
+历史缓冲区有可配置的大小限制；缓冲区满时最早条目会被驱逐。
 
 ---
 
@@ -112,12 +132,13 @@ VFS 是 Rnix 的统一抽象层。所有外部资源——LLM 推理引擎、宿
 
 ### 设备路径表
 
-以下是 Rnix MVP 中所有已注册的 VFS 设备路径：
+以下是 Rnix 中所有已注册的 VFS 设备路径：
 
 | VFS 路径 | 用途 | 驱动实现 |
 |---------|------|---------|
 | `/dev/llm/claude` | LLM 推理设备 | 通过 Claude Code CLI（`claude -p`）调用 |
 | `/dev/llm/cursor` | LLM 推理设备 | 通过 Cursor CLI（`agent --print`）调用 |
+| `/dev/llm/<provider>` | LLM 推理设备 | OpenAI 兼容 HTTP API（Ollama、Groq、DeepSeek 等） |
 | `/dev/fs` | 宿主文件系统访问 | 封装 Go 标准库 `os.Open/Read` |
 | `/dev/shell` | Shell 命令执行 | 封装 `exec.CommandContext` |
 | `/proc/{pid}/status` | 进程状态（JSON 格式） | ProcFS 动态生成 |

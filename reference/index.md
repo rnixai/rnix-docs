@@ -133,6 +133,7 @@ Signature: Spawn(intent string, agent *agents.AgentInfo, opts SpawnOpts) (PID, e
 | `Model` | `string` | `""` | LLM model name (priority: CLI > Agent manifest > driver default) |
 | `SystemPrompt` | `string` | `""` | System prompt (when non-empty, appended after Agent instructions) |
 | `MaxTurns` | `int` | `0` | Maximum reasoning steps (`0` = use default `DefaultMaxSteps=10`) |
+| `MaxTokens` | `int` | `0` | Maximum total tokens (`0` = unlimited) |
 | `TimeoutMs` | `int64` | `0` | Timeout in milliseconds |
 | `ParentPID` | `PID` | `0` | Parent process PID (`0` = top-level CLI spawn) |
 
@@ -181,7 +182,7 @@ Signature: Kill(pid PID, signal Signal) error
 | Parameter | Type | Description |
 |------|------|------|
 | `pid` | `PID` | Target process ID |
-| `signal` | `Signal` | `SIGTERM(1)` or `SIGKILL(2)` |
+| `signal` | `Signal` | `SIGTERM(1)`, `SIGKILL(2)`, `SIGINT(3)`, `SIGPAUSE(4)`, or `SIGRESUME(5)` |
 
 **Return Value:** `error`
 
@@ -194,7 +195,7 @@ Signature: Kill(pid PID, signal Signal) error
 
 **Idempotency:** Killing a process already in Zombie or Dead state is a no-op and does not return an error.
 
-**Behavior:** Calls the process's `Cancel()` to cancel the context, causing LLM calls in the reasoning goroutine to be interrupted.
+**Behavior:** Calls the process's `Cancel()` to cancel the context, causing LLM calls in the reasoning goroutine to be interrupted. For `SIGPAUSE`, pauses the reasoning loop; for `SIGRESUME`, resumes a paused loop.
 
 **Example:**
 
@@ -1783,7 +1784,7 @@ Lineage for PID 42
 [2] 2026-03-15 10:01:30  progressive specialization
     Skills: code-analysis, testing
     Trigger: "Also write tests"
-    Source: ooda-specialize
+    Source: specialize
 ```
 
 ### 4.27 rnix topology — Collaboration Topology
@@ -1975,9 +1976,13 @@ IPC communication uses the NDJSON (Newline Delimited JSON) format, one JSON obje
 |--------|------|-------------|------|
 | `ping` | Request-Response | — | Liveness check, returns version |
 | `spawn` | Streaming | `SpawnRequest` | Creates a process, streams progress events |
-| `list_procs` | Request-Response | — | Gets the list of all processes |
+| `list_procs` | Request-Response | — | Gets the list of all active processes |
+| `list_all_procs` | Request-Response | — | Gets the list of all processes including history |
 | `kill` | Request-Response | `KillRequest` | Sends a signal to a process |
 | `attach_debug` | Streaming | `AttachDebugRequest` | Subscribes to a SyscallEvent stream |
+| `get_step_detail` | Request-Response | `StepDetailRequest` | Retrieves a single step record |
+| `list_steps` | Request-Response | `ListStepsRequest` | Lists all step summaries for a process |
+| `get_proc_detail` | Request-Response | `ProcDetailRequest` | Gets detailed process information |
 | `shutdown` | Request-Response | — | Gracefully shuts down the daemon |
 
 **SpawnRequest:**
@@ -2199,6 +2204,12 @@ type ContextError struct {
 | `ErrCode` | `string` | Error classification code |
 | `Signal` | `int` | Process signal |
 | `ProcessState` | `int` | Process state |
+| `UUID` | `uuid.UUID` | UUID v7 — globally unique process identifier across daemon restarts |
+| `TraceID` | `string` | Distributed trace identifier |
+| `SpanID` | `string` | Distributed trace span identifier |
+| `PGID` | `uint64` | Process group identifier |
+| `TID` | `uint64` | Thread identifier |
+| `CoID` | `uint64` | Coroutine identifier |
 
 ---
 
@@ -2255,6 +2266,7 @@ type ExitStatus struct {
 | `1` | `"unexpected exit"` | Unexpected exit |
 | `1` | `"max steps exceeded"` | Exceeded maximum reasoning steps |
 | `1` | Error description | Error during reasoning |
+| `2` | `"budget_exceeded"` | Token budget exceeded |
 
 ### 7.4 Resource Release Order
 
@@ -2272,11 +2284,14 @@ type ExitStatus struct {
 
 ### 7.5 Signal Definitions
 
-| Constant | Value | Description |
-|------|-----|------|
-| `SIGTERM` | `1` | Termination signal (graceful shutdown) |
-| `SIGKILL` | `2` | Force kill |
+| Constant | Value | Blockable | Description |
+|------|-----|-----------|------|
+| `SIGTERM` | `1` | Yes | Termination signal (graceful shutdown) |
+| `SIGKILL` | `2` | No | Force kill |
+| `SIGINT` | `3` | Yes | Interrupt signal |
+| `SIGPAUSE` | `4` | Yes | Pause reasoning loop |
+| `SIGRESUME` | `5` | Yes | Resume paused reasoning loop |
 
-**Validity Check:** The `Signal.Valid()` method checks whether the signal value is SIGTERM or SIGKILL.
+**Signal Delivery:** Uses `resolveSignalDisposition` to atomically determine the dispatch path within a single lock hold (blocked → pending / handler / default), avoiding TOCTOU races.
 
-**Kill Behavior:** Regardless of signal type, the current implementation calls `proc.Cancel()` to cancel the context. Future versions may differentiate between SIGTERM (graceful) and SIGKILL (forced) behavior.
+**SIGPAUSE/SIGRESUME:** reasonStep calls `proc.WaitIfPaused()` at the start of each step; if `resumeCh` is non-nil, it blocks until Resume closes the channel.

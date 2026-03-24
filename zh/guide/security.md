@@ -4,9 +4,37 @@ Rnix 实现了一套自适应免疫安全系统，持续监控智能体行为、
 
 ---
 
+## 免疫系统配置
+
+免疫系统**默认禁用**。要启用它，添加以下配置：
+
+```yaml
+# config.yaml
+immune:
+  enabled: true
+  deviation_threshold: 2.0    # 距离基线的标准差（默认：2.0）
+  min_samples: 10             # 异常检测激活前的最小样本数
+  auto_suspend: true          # 检测到异常时自动挂起进程
+  threat_memory: true         # 启用威胁签名持久化
+```
+
+### 配置字段
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | `bool` | `false` | 启用或禁用免疫系统 |
+| `deviation_threshold` | `float` | `2.0` | 触发异常的标准差阈值 |
+| `min_samples` | `int` | `10` | 检测开始前的最小行为样本数 |
+| `auto_suspend` | `bool` | `true` | 自动挂起异常进程 |
+| `threat_memory` | `bool` | `true` | 跨会话持久化威胁签名 |
+
+禁用时，所有免疫相关的 IPC 方法返回空状态，且不进行行为监控。
+
+---
+
 ## 免疫守护进程
 
-**免疫守护进程（Immune Daemon）** 是一个安全监控进程，持续监视所有智能体的行为模式。
+启用后，**免疫守护进程（Immune Daemon）** 是一个安全监控进程，持续监视所有智能体的行为模式。
 
 ### 行为基线
 
@@ -107,5 +135,5 @@ Agent Collaboration Topology:
 
 - [监控与 Supervisor](/zh/guide/monitoring) — 进程监控和重启策略
 - [Token 经济](/zh/guide/token-economy) — 预算池和信誉
-- [自主智能体](/zh/guide/autonomous-agents) — OODA 决策循环
+- [自主智能体](/zh/guide/autonomous-agents) — 统一推理循环
 - [Compose 编排](/zh/guide/compose) — 多智能体 DAG 工作流

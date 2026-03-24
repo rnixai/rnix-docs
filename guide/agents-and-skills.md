@@ -19,7 +19,7 @@ agents/code-analyst/
 ```yaml
 name: code-analyst
 description: "Code quality analysis agent"
-reasoning: linear           # linear (default) or ooda
+planning: true              # true (default) or false
 models:
   provider: claude          # claude, cursor, ollama, groq, etc.
   preferred: sonnet
@@ -41,7 +41,7 @@ mcp:
 |-------|------|-------------|
 | `name` | string | Unique identifier |
 | `description` | string | Human-readable description |
-| `reasoning` | string | Reasoning mode: `linear` (default) or `ooda` |
+| `planning` | bool | Planning capability: `true` (default) or `false` |
 | `models.provider` | string | LLM provider name |
 | `models.preferred` | string | Preferred model |
 | `models.fallback` | string | Fallback model/provider |
@@ -163,6 +163,6 @@ See [Skill Packages](/guide/skill-packages) for details.
 
 - [Skill Packages](/guide/skill-packages) — Install/search/update
 - [Token Economy](/guide/token-economy) — Reputation and synergy
-- [Autonomous Agents](/guide/autonomous-agents) — OODA and stem cell
+- [Autonomous Agents](/guide/autonomous-agents) — Unified reasoning and stem cell
 - [MCP Integration](/guide/mcp-integration) — MCP server configuration
 - [Reference Manual](/reference/) — Complete agent.yaml and SKILL.md field reference

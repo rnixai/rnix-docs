@@ -157,6 +157,6 @@ The matrix tracks which Skill combinations historically produce significantly be
 ## Related Documentation
 
 - [Compose Orchestration](/guide/compose) — Multi-agent workflows with budgets
-- [Autonomous Agents](/guide/autonomous-agents) — OODA and stem cell differentiation
+- [Autonomous Agents](/guide/autonomous-agents) — Unified reasoning and stem cell differentiation
 - [Agents & Skills](/guide/agents-and-skills) — Agent and Skill definitions
 - [Security](/guide/security) — Adaptive immune security

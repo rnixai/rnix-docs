@@ -181,6 +181,7 @@ CLI 层                    内核层                   VFS/驱动层
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | PID | `types.PID` | 全局唯一，创建后不可变 |
+| UUID | `uuid.UUID` | UUID v7——跨 daemon 重启保持全局唯一，时间有序 |
 | PPID | `types.PID` | 父进程 PID，孤儿进程被 reparent 时可修改 |
 | State | `types.ProcessState` | 状态机当前状态，mu 保护 |
 | Intent | `string` | 创建时的意图描述，不可变 |
@@ -614,6 +615,49 @@ Token 预算防止单个进程过度消耗 LLM 资源。
 | reapProcess 步骤 10 | `CtxFree(cid)` 最终释放 |
 
 Thread 和 Coroutine 共享父进程的上下文（通过 CtxID），不独立分配。这意味着并发线程对同一上下文的 AppendMessage 调用由 `Context.mu` 序列化，保证消息顺序一致性。
+
+---
+
+## 5. 步骤记录系统
+
+### 5.1 StepRecord
+
+每个 `reasonStep` 迭代都会被记录为一个 `StepRecord`，捕获完整的执行数据用于调试和分析：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| StepNumber | `int` | 步骤序号 |
+| Timestamp | `time.Time` | 步骤开始时间 |
+| Messages | `[]Message` | 本步骤发送的 LLM 消息 |
+| TokensUsed | `int` | 本步骤消耗的 token 数 |
+| RawResponse | `string` | 完整 LLM 响应 |
+| Action | `string` | 动作类型（tool_call、plan、spawn、complete、specialize、replan、text） |
+| Summary | `string` | 步骤摘要 |
+| ToolPath | `string` | VFS 路径（tool_call 动作时） |
+| ToolInput | `string` | 工具输入数据 |
+| ToolResult | `string` | 工具执行结果 |
+| ToolError | `string` | 工具错误（如有） |
+
+### 5.2 StepWriter
+
+`StepWriter` 以 NDJSON（每行一个 JSON 对象）格式将 `StepRecord` 持久化到磁盘：
+
+```
+.rnix/data/steps/<uuid>/steps.jsonl
+```
+
+目录以进程 UUID 为键，即使 daemon 重启也能跨会话访问历史步骤数据。
+
+### 5.3 IPC 方法
+
+两个 IPC 方法暴露步骤数据：
+
+| 方法 | 类型 | 说明 |
+|------|------|------|
+| `get_step_detail` | 请求-响应 | 按 PID 和步骤号检索单个步骤记录 |
+| `list_steps` | 请求-响应 | 列出进程的所有步骤摘要 |
+
+这些方法为 Dashboard 的历史视图和 LLM 对话查看器提供数据支持。
 
 ---
 

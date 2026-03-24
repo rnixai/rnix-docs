@@ -81,7 +81,8 @@ Each process records its parent-child relationship through PPID (Parent Process 
 
 | Property | Description |
 |----------|-------------|
-| PID | Globally unique process identifier |
+| PID | Globally unique process identifier (monotonically increasing, never recycled) |
+| UUID | UUID v7 identifier — globally unique across daemon restarts, provides time-ordered uniqueness |
 | PPID | Parent process PID |
 | Intent | User intent string, immutable after creation |
 | State | Current state (Created/Running/Zombie/Dead) |
@@ -93,6 +94,25 @@ Each process records its parent-child relationship through PPID (Parent Process 
 | TokensUsed | Cumulative token consumption |
 | Provider | Resolved LLM provider name (immutable after spawn) |
 | Model | Resolved model name (immutable after spawn) |
+
+### Process Identification: PID and UUID
+
+Each process has two identifiers:
+
+- **PID** — A monotonically increasing integer, unique within a single daemon session. PIDs are never recycled.
+- **UUID** (UUID v7) — A globally unique identifier that persists across daemon restarts. UUID v7 embeds a timestamp, providing natural time-ordering. Step records and trace data are stored using UUID for cross-session continuity.
+
+In most CLI commands, PID is used for referencing processes. UUID is used internally for data persistence and in Dashboard history views.
+
+### Process History
+
+When a process exits, it is recorded in a bounded FIFO history buffer. This allows the system to retain information about recently completed processes for:
+
+- Dashboard history view browsing
+- Step record retrieval
+- Debugging and analysis
+
+The history buffer has a configurable size limit; oldest entries are evicted when the buffer is full.
 
 ---
 
@@ -114,12 +134,13 @@ VFS is Rnix's unified abstraction layer. All external resources — LLM inferenc
 
 ### Device Path Table
 
-The following are all registered VFS device paths in the Rnix MVP:
+The following are all registered VFS device paths in Rnix:
 
 | VFS Path | Purpose | Driver Implementation |
 |---------|---------|----------------------|
 | `/dev/llm/claude` | LLM inference device | Via Claude Code CLI (`claude -p`) |
 | `/dev/llm/cursor` | LLM inference device | Via Cursor CLI (`agent --print`) |
+| `/dev/llm/<provider>` | LLM inference device | OpenAI-compatible HTTP API (Ollama, Groq, DeepSeek, etc.) |
 | `/dev/fs` | Host filesystem access | Wraps Go stdlib `os.Open/Read` |
 | `/dev/shell` | Shell command execution | Wraps `exec.CommandContext` |
 | `/proc/{pid}/status` | Process status (JSON) | ProcFS dynamically generated |

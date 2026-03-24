@@ -133,6 +133,81 @@ API keys are referenced via environment variables — never stored directly in c
   api_key_env: GROQ_API_KEY   # Reads $GROQ_API_KEY at runtime
 ```
 
+API keys are resolved from the following sources (in priority order):
+
+1. **Project `.env` files** (if project has `.rnix/` directory)
+2. **Daemon process environment** (`os.Getenv`)
+
+See [Environment Files](#environment-files-env) below for details.
+
+---
+
+## Environment Files (.env)
+
+Rnix supports project-level `.env` files for managing API keys and other environment variables without polluting the daemon's process environment.
+
+### Loading Order
+
+When a spawn request specifies a project directory (containing `.rnix/`), the daemon loads `.env` files from the project root in this order (later files override earlier):
+
+1. `.env` — Base environment
+2. `.env.local` — Local overrides (gitignore this)
+3. `.env.{RNIX_ENV}` — Environment-specific (e.g., `.env.production`)
+4. `.env.{RNIX_ENV}.local` — Environment-specific local overrides
+
+### RNIX_ENV
+
+The `RNIX_ENV` environment variable selects which environment-specific files to load. Default: `development`.
+
+```bash
+# Use production environment
+RNIX_ENV=production rnix "deploy the service"
+
+# Default (development)
+rnix "analyze code quality"
+```
+
+Valid values: alphanumeric characters, hyphens, and underscores (`^[a-zA-Z0-9_-]+$`).
+
+### Syntax
+
+```bash
+# Key=Value (unquoted)
+API_KEY=sk-xxx
+
+# Double-quoted (supports \n, \t, \\, \" escapes)
+PROMPT="Hello\nWorld"
+
+# Single-quoted (literal, no escapes)
+REGEX='foo\.bar'
+
+# Empty value
+EMPTY_VAR=
+
+# Comments
+# This is a comment
+API_KEY=value  # Inline comment
+
+# Optional export prefix
+export DATABASE_URL=postgres://localhost/mydb
+```
+
+### Project Isolation
+
+Each spawn request generates an independent environment snapshot from `.env` files. Variables are **not** written to `os.Setenv` — different projects' environments are fully isolated, even when sharing the same daemon.
+
+### Example
+
+```
+myproject/
+├── .rnix/
+│   └── providers.yaml    ← Project provider overrides
+├── .env                   ← API_KEY=dev-key
+├── .env.local             ← API_KEY=my-local-key (gitignored)
+├── .env.production        ← API_KEY=prod-key
+└── .gitignore             ← *.local, .env.local
+```
+
 ---
 
 ## init.yaml — Bootstrap Services
@@ -245,6 +320,8 @@ models:
   preferred: sonnet
   fallback: haiku
 context_budget: 8192
+max_steps: 20
+max_tokens: 50000
 skills:
   - code-analysis
   - security-scan
@@ -268,6 +345,8 @@ mcp:
 | `models.preferred` | `string` | No | Preferred model name |
 | `models.fallback` | `string` | No | Fallback model name |
 | `context_budget` | `int` | No | Max token budget (0 = unlimited) |
+| `max_steps` | `int` | No | Maximum reasoning steps (0 = default 10) |
+| `max_tokens` | `int` | No | Maximum total tokens (0 = unlimited) |
 | `skills` | `[]string` | No | Referenced skill names |
 | `mcp` | `object` | No | MCP server configurations |
 
@@ -336,6 +415,7 @@ Empty `allowed-tools` means **no restrictions** (can access all devices).
 
 | Variable | Description |
 |----------|-------------|
+| `RNIX_ENV` | Select environment for `.env` file loading (default: `development`) |
 | `RNIX_ASCII` | Set to `1` to force ASCII mode (disable Unicode glyphs) |
 | `XDG_CONFIG_HOME` | Override global config directory (default: `~/.config`) |
 | `XDG_RUNTIME_DIR` | Used to determine socket path |

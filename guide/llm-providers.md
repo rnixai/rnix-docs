@@ -91,6 +91,23 @@ HTTP providers reference API keys via environment variables — keys are never s
   api_key_env: GROQ_API_KEY   # Reads $GROQ_API_KEY at runtime
 ```
 
+API keys are resolved in this order:
+
+1. **Project `.env` files** — loaded from the project root when `.rnix/` exists (`.env` → `.env.local` → `.env.{RNIX_ENV}` → `.env.{RNIX_ENV}.local`)
+2. **Daemon process environment** — `os.Getenv` fallback
+
+This means you can define API keys per-project without polluting the daemon's global environment. See [Configuration > Environment Files](/guide/configuration#environment-files-env) for `.env` syntax and loading order.
+
+### Project-Level Provider Overrides
+
+A project can override or extend global providers by placing a `providers.yaml` in `.rnix/`:
+
+```
+myproject/.rnix/providers.yaml
+```
+
+Project providers are **deep-merged** with global providers — you can override specific fields (like `api_key_env` or `default_model`) without redefining the entire provider list. Project-level providers that don't exist globally are added as new providers available only in that project.
+
 ---
 
 ## LLM Serve Gateway

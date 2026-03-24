@@ -181,6 +181,7 @@ CLI Layer                Kernel Layer              VFS/Driver Layer
 | Field | Type | Description |
 |-------|------|-------------|
 | PID | `types.PID` | Globally unique, immutable after creation |
+| UUID | `uuid.UUID` | UUID v7 — globally unique across daemon restarts, time-ordered |
 | PPID | `types.PID` | Parent process PID, modifiable when orphan is reparented |
 | State | `types.ProcessState` | Current state machine state, mu-protected |
 | Intent | `string` | Intent description at creation, immutable |
@@ -614,6 +615,49 @@ Context lifecycle is strictly bound to its owning process:
 | reapProcess step 10 | `CtxFree(cid)` final release |
 
 Threads and Coroutines share the parent process's context (via CtxID) and do not allocate independently. This means concurrent threads' AppendMessage calls to the same context are serialized by `Context.mu`, ensuring message order consistency.
+
+---
+
+## 5. Step Recording System
+
+### 5.1 StepRecord
+
+Each `reasonStep` iteration is recorded as a `StepRecord`, capturing the complete execution data for debugging and analysis:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| StepNumber | `int` | Sequential step counter |
+| Timestamp | `time.Time` | Step start time |
+| Messages | `[]Message` | LLM messages sent in this step |
+| TokensUsed | `int` | Tokens consumed in this step |
+| RawResponse | `string` | Full LLM response |
+| Action | `string` | Action type (tool_call, plan, spawn, complete, specialize, replan, text) |
+| Summary | `string` | Step summary |
+| ToolPath | `string` | VFS path (for tool_call actions) |
+| ToolInput | `string` | Tool input data |
+| ToolResult | `string` | Tool execution result |
+| ToolError | `string` | Tool error (if any) |
+
+### 5.2 StepWriter
+
+`StepWriter` persists `StepRecord` entries as NDJSON (one JSON object per line) to disk:
+
+```
+.rnix/data/steps/<uuid>/steps.jsonl
+```
+
+The directory is keyed by process UUID, enabling cross-session access to historical step data even after the daemon restarts.
+
+### 5.3 IPC Methods
+
+Two IPC methods expose step data:
+
+| Method | Type | Description |
+|--------|------|-------------|
+| `get_step_detail` | Request-Response | Retrieve a single step record by PID and step number |
+| `list_steps` | Request-Response | List all step summaries for a process |
+
+These methods power the Dashboard's history view and LLM conversation viewer.
 
 ---
 

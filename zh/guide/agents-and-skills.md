@@ -19,7 +19,7 @@ agents/code-analyst/
 ```yaml
 name: code-analyst
 description: "Code quality analysis agent"
-reasoning: linear           # linear（默认）或 ooda
+planning: true              # true（默认）或 false
 models:
   provider: claude          # claude, cursor, ollama, groq 等
   preferred: sonnet
@@ -41,7 +41,7 @@ mcp:
 |------|------|------|
 | `name` | string | 唯一标识符 |
 | `description` | string | 人类可读的描述 |
-| `reasoning` | string | 推理模式：`linear`（默认）或 `ooda` |
+| `planning` | bool | Planning 能力：`true`（默认）或 `false` |
 | `models.provider` | string | LLM 提供商名称 |
 | `models.preferred` | string | 首选模型 |
 | `models.fallback` | string | 备选模型/提供商 |
@@ -163,6 +163,6 @@ $ rnix skill list                     # 列出已安装的 Skill
 
 - [Skill 包管理](/zh/guide/skill-packages) — 安装/搜索/更新
 - [Token 经济](/zh/guide/token-economy) — 声誉与协同
-- [自主智能体](/zh/guide/autonomous-agents) — OODA 与干细胞模式
+- [自主智能体](/zh/guide/autonomous-agents) — 统一推理与干细胞模式
 - [MCP 集成](/zh/guide/mcp-integration) — MCP 服务器配置
 - [参考手册](/zh/reference/) — 完整的 agent.yaml 和 SKILL.md 字段参考

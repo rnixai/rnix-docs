@@ -146,15 +146,15 @@ $ rnix intent reset <node-id>
 
 ---
 
-## Intent + OODA Agents
+## Intent + Autonomous Agents
 
-The Intent System works naturally with [OODA agents](/guide/autonomous-agents) — each decomposed node can be executed by an autonomous agent that independently decides its approach. The Reconciler handles coordination while agents handle execution autonomously.
+The Intent System works naturally with [autonomous agents](/guide/autonomous-agents) — each decomposed node can be executed by an agent that independently decides its approach through the unified reasoning loop. The Reconciler handles coordination while agents handle execution autonomously.
 
 ---
 
 ## Related Documentation
 
 - [Compose Orchestration](/guide/compose) — Static DAG workflows
-- [Autonomous Agents](/guide/autonomous-agents) — OODA reasoning
+- [Autonomous Agents](/guide/autonomous-agents) — Unified reasoning loop
 - [AgentShell](/guide/agentshell) — Scripting-based orchestration
 - [Token Economy](/guide/token-economy) — Budget management

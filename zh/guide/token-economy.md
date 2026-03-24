@@ -157,6 +157,6 @@ Known effective Skill combinations:
 ## 相关文档
 
 - [Compose 编排](/zh/guide/compose) — 带预算的多智能体工作流
-- [自主智能体](/zh/guide/autonomous-agents) — OODA 与干细胞分化
+- [自主智能体](/zh/guide/autonomous-agents) — 统一推理与干细胞分化
 - [Agent 与 Skill](/zh/guide/agents-and-skills) — Agent 与 Skill 定义
 - [安全](/zh/guide/security) — 自适应免疫安全

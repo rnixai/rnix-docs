@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: Rnix
-  text: AI Agent Operating System
+  text: The AI-Era Unix
   tagline: Power AI agents with Unix philosophy — processes, filesystems, syscalls, debugging, and autonomous reasoning
   actions:
     - theme: brand
@@ -25,7 +25,7 @@ features:
     details: LLMs, filesystem, shell, and MCP tools are unified as VFS devices. Open/Read/Write/Close for all resources. Multi-provider LLM support with rnix serve OpenAI-compatible gateway.
   - icon: "\uD83E\uDDEC"
     title: Autonomous Agents
-    details: OODA reasoning loop for self-directed decision-making. Stem cell differentiation lets generic agents auto-specialize based on intent. Declarative intent system with reconciler.
+    details: Unified reasoning loop where LLM autonomously selects actions each step. Stem cell differentiation lets generic agents auto-specialize based on intent. Declarative intent system with reconciler.
   - icon: "\uD83D\uDD0D"
     title: Deep Debugging Toolkit
     details: "strace, gdb-style interactive debugger (attach/breakpoint/step/inspect), time-travel replay with fork-continue, distributed causal tracing, visual TUI dashboard, and agtest regression testing."

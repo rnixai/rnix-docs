@@ -19,7 +19,7 @@ const guideSidebar = [
       { text: 'AgentShell Scripting', link: '/guide/agentshell' },
       { text: 'Compose Orchestration', link: '/guide/compose' },
       { text: 'Intent System', link: '/guide/intent-system' },
-      { text: 'Autonomous Agents (OODA)', link: '/guide/autonomous-agents' },
+      { text: 'Autonomous Agents', link: '/guide/autonomous-agents' },
     ],
   },
   {
@@ -63,7 +63,7 @@ const zhGuideSidebar = [
       { text: 'AgentShell 脚本', link: '/zh/guide/agentshell' },
       { text: 'Compose 编排', link: '/zh/guide/compose' },
       { text: '意图系统', link: '/zh/guide/intent-system' },
-      { text: '自主智能体 (OODA)', link: '/zh/guide/autonomous-agents' },
+      { text: '自主智能体', link: '/zh/guide/autonomous-agents' },
     ],
   },
   {
@@ -94,7 +94,7 @@ const zhGuideSidebar = [
 
 export default defineConfig({
   title: 'Rnix',
-  description: 'AI Agent Operating System — Power agents with Unix philosophy',
+  description: 'The AI-Era Unix — Power agents with Unix philosophy',
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
@@ -199,6 +199,15 @@ export default defineConfig({
     footer: {
       message: 'Released under the MIT License.',
       copyright: 'Copyright &copy; 2026 Rnix Contributors',
+    },
+  },
+
+  vite: {
+    server: {
+      watch: {
+        usePolling: true,
+        interval: 300,
+      },
     },
   },
 })

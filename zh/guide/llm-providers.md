@@ -91,6 +91,23 @@ HTTP 提供商通过环境变量引用 API Key——密钥不会存储在配置�
   api_key_env: GROQ_API_KEY   # 运行时读取 $GROQ_API_KEY
 ```
 
+API Key 按以下优先级解析：
+
+1. **项目 `.env` 文件** — 当项目含 `.rnix/` 目录时从项目根目录加载（`.env` → `.env.local` → `.env.{RNIX_ENV}` → `.env.{RNIX_ENV}.local`）
+2. **Daemon 进程环境变量** — `os.Getenv` 兜底
+
+这意味着你可以为每个项目单独定义 API Key，而不会污染 daemon 的全局环境。详见[配置指南 > 环境文件](/zh/guide/configuration#环境文件-env)。
+
+### 项目级 Provider 覆盖
+
+项目可以通过在 `.rnix/` 中放置 `providers.yaml` 来覆盖或扩展全局 provider：
+
+```
+myproject/.rnix/providers.yaml
+```
+
+项目级 provider 与全局 provider **深度合并**——你可以只覆盖特定字段（如 `api_key_env` 或 `default_model`），无需重新定义整个 provider 列表。全局不存在的项目级 provider 会被添加为仅在该项目中可用的新 provider。
+
 ---
 
 ## LLM Serve 网关
