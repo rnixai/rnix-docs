@@ -21,6 +21,7 @@ providers:
 
   - name: cursor
     driver: cursor-cli
+    command: agent              # CLI binary name (default: "agent")
 
   - name: ollama
     driver: openai-compat
@@ -47,6 +48,21 @@ providers:
 | `claude-cli` | Invokes Claude Code CLI (`claude -p`) | Anthropic Claude |
 | `cursor-cli` | Invokes Cursor CLI (`agent --print`) | Cursor |
 | `openai-compat` | Calls OpenAI-compatible HTTP API endpoint | Ollama, Groq, DeepSeek, any OpenAI-compatible server |
+
+### CLI Command Alias
+
+CLI drivers invoke a binary to interact with the LLM. Use the `command` field to override the default binary name:
+
+| Driver | Default Command |
+|--------|----------------|
+| `claude-cli` | `claude` |
+| `cursor-cli` | `agent` |
+
+```yaml
+- name: cursor
+  driver: cursor-cli
+  command: cursor-agent   # Override default "agent"
+```
 
 ### Provider Resolution
 
@@ -117,17 +133,35 @@ Project providers are **deep-merged** with global providers — you can override
 `rnix serve` starts an OpenAI-compatible HTTP server that exposes all registered providers as standard API endpoints. External tools (VS Code extensions, web UIs, other applications) can consume LLM capabilities without understanding Rnix internals.
 
 ```bash
-$ rnix serve
+$ rnix serve --port 8080
 [serve] starting OpenAI-compatible API server on http://localhost:8080
 [serve] registered providers: claude, cursor, ollama, groq
-[serve] endpoints: /v1/chat/completions, /v1/models
+[serve] endpoints: /v1/chat/completions, /v1/models, /health
 ```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port` | `8080` | HTTP listen port |
+
+The server binds to `127.0.0.1` (localhost only). Request body size is limited to **4 MB**. On startup, the server runs health checks on all providers (3s timeout per provider).
 
 ### Endpoints
 
 #### POST /v1/chat/completions
 
 Standard OpenAI Chat Completions API. The `model` parameter routes to the corresponding VFS LLM driver:
+
+**Request body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `model` | `string` | Yes | Model identifier (provider name or `provider:model`) |
+| `messages` | `array` | Yes | Message array (`{role, content}`), at least 1 message |
+| `stream` | `bool` | No | Enable SSE streaming response |
+| `temperature` | `float64` | No | Sampling temperature |
+| `max_tokens` | `int` | No | Maximum tokens to generate |
 
 ```bash
 curl http://localhost:8080/v1/chat/completions \
@@ -139,33 +173,93 @@ curl http://localhost:8080/v1/chat/completions \
 ```
 
 **Model routing:**
-- `"ollama"` → `/dev/llm/ollama` → uses provider's `default_model`
-- `"groq:llama-3.3-70b"` → `/dev/llm/groq` with specific model
-- `"claude"` → `/dev/llm/claude`
+
+| Model String | Resolution |
+|-------------|------------|
+| `"ollama"` | `/dev/llm/ollama` → uses provider's `default_model` |
+| `"groq:llama-3.3-70b"` | `/dev/llm/groq` with explicit model |
+| `"llama-3.3-70b"` | Reverse lookup: finds a provider whose `default_model` matches |
+| `"unknown-model"` | Falls back to `default_provider`, input treated as model name |
+
+If no provider is found, returns `404` with available provider list.
 
 **Streaming** — set `"stream": true` for SSE responses:
 
 ```bash
 curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "ollama", "messages": [...], "stream": true}'
+  -d '{"model": "ollama", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
 ```
 
-Response format: `data: {"choices":[{"delta":{"content":"..."}}]}\n\n`
+Stream terminates with `data: [DONE]\n\n` per OpenAI SSE spec.
 
-#### GET /v1/models
-
-Lists all registered and healthy providers with available models:
+**Response format (non-streaming):**
 
 ```json
 {
+  "id": "chatcmpl-1234567890",
+  "object": "chat.completion",
+  "created": 1711600000,
+  "model": "ollama",
+  "choices": [
+    {
+      "index": 0,
+      "message": {"role": "assistant", "content": "Hello! How can I help?"},
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 25,
+    "total_tokens": 35
+  }
+}
+```
+
+#### GET /v1/models
+
+Lists all registered providers with available models. Unhealthy providers are excluded; unchecked providers are included. Each provider with a `default_model` generates two entries:
+
+```json
+{
+  "object": "list",
   "data": [
-    {"id": "claude", "object": "model", "owned_by": "anthropic"},
-    {"id": "ollama", "object": "model", "owned_by": "local"},
-    {"id": "groq", "object": "model", "owned_by": "groq"}
+    {"id": "claude", "object": "model", "created": 1711600000, "owned_by": "claude"},
+    {"id": "claude:haiku", "object": "model", "created": 1711600000, "owned_by": "claude"},
+    {"id": "ollama", "object": "model", "created": 1711600000, "owned_by": "ollama"},
+    {"id": "ollama:llama3", "object": "model", "created": 1711600000, "owned_by": "ollama"}
   ]
 }
 ```
+
+#### GET /health
+
+Health check endpoint for monitoring and load balancers:
+
+```json
+{"status": "ok", "providers": 4}
+```
+
+### Error Responses
+
+All errors follow the OpenAI error format:
+
+```json
+{
+  "error": {
+    "message": "Provider 'xyz' not found. Available providers: claude, cursor",
+    "type": "invalid_request_error",
+    "code": "model_not_found"
+  }
+}
+```
+
+| HTTP Status | Code | Scenario |
+|-------------|------|----------|
+| `400` | `invalid_request` | Invalid JSON, missing `model` or `messages` |
+| `404` | `model_not_found` | Provider not found |
+| `502` | `upstream_error` | LLM driver returned an error or empty response |
+| `504` | `timeout` | LLM request timed out |
 
 ### Architecture
 

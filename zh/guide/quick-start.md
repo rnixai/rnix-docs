@@ -41,7 +41,7 @@ go install github.com/rnixai/rnix/cmd/rnix@latest
 $ rnix version
 rnix v0.1.0
 commit:  cd9c568
-built:   2026-03-15T07:23:57Z
+built:   2026-03-29T07:23:57Z
 ```
 
 ### 初始化配置
@@ -269,6 +269,39 @@ $ rnix kill 1
 ```
 
 如果没有任何 `rnix` 实例运行（daemon 未启动），`rnix ps` 会输出 "No active processes."，`rnix kill` 会输出标准错误提示——不会崩溃或报连接错误。
+
+---
+
+## 常见问题
+
+### Daemon 无法启动
+
+如果 `rnix ps` 显示连接错误，daemon 可能卡住。强制重启：
+
+```bash
+$ rnix daemon stop
+$ rnix ps  # daemon 会在下次命令时自动重启
+```
+
+### LLM 命令未找到
+
+如果看到 `exec: "claude": executable file not found`，需要安装 Claude Code CLI：
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### /dev/shell 权限被拒绝
+
+Skill 必须在 `allowed-tools` 中声明 shell 权限。检查 SKILL.md frontmatter 包含：
+
+```yaml
+allowed-tools: /dev/fs /dev/shell
+```
+
+### 超时错误
+
+LLM 调用在配置的 `TimeoutMs` 后超时。可通过 `--max-steps` 调整，或检查到 LLM 提供商的网络连接。
 
 ---
 

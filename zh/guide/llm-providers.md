@@ -21,6 +21,7 @@ providers:
 
   - name: cursor
     driver: cursor-cli
+    command: agent              # CLI 二进制命令名（默认："agent"）
 
   - name: ollama
     driver: openai-compat
@@ -47,6 +48,21 @@ providers:
 | `claude-cli` | 调用 Claude Code CLI（`claude -p`） | Anthropic Claude |
 | `cursor-cli` | 调用 Cursor CLI（`agent --print`） | Cursor |
 | `openai-compat` | 调用 OpenAI 兼容的 HTTP API 端点 | Ollama、Groq、DeepSeek 及任何 OpenAI 兼容服务 |
+
+### CLI 命令别名
+
+CLI 驱动通过调用二进制命令与 LLM 交互。使用 `command` 字段覆盖默认命令名：
+
+| 驱动 | 默认命令 |
+|------|---------|
+| `claude-cli` | `claude` |
+| `cursor-cli` | `agent` |
+
+```yaml
+- name: cursor
+  driver: cursor-cli
+  command: cursor-agent   # 覆盖默认的 "agent"
+```
 
 ### 提供商解析
 
@@ -117,17 +133,35 @@ myproject/.rnix/providers.yaml
 `rnix serve` 启动一个 OpenAI 兼容的 HTTP 服务器，将所有已注册的提供商暴露为标准 API 端点。外部工具（VS Code 扩展、Web UI、其他应用）无需了解 Rnix 内部细节即可使用 LLM 能力。
 
 ```bash
-$ rnix serve
+$ rnix serve --port 8080
 [serve] starting OpenAI-compatible API server on http://localhost:8080
 [serve] registered providers: claude, cursor, ollama, groq
-[serve] endpoints: /v1/chat/completions, /v1/models
+[serve] endpoints: /v1/chat/completions, /v1/models, /health
 ```
+
+**命令行标志：**
+
+| 标志 | 默认值 | 说明 |
+|------|--------|------|
+| `--port` | `8080` | HTTP 监听端口 |
+
+服务器绑定到 `127.0.0.1`（仅本地访问）。请求体大小限制为 **4 MB**。启动时会对所有提供商执行健康检查（每个 3 秒超时）。
 
 ### 端点
 
 #### POST /v1/chat/completions
 
 标准 OpenAI Chat Completions API。`model` 参数路由到对应的 VFS LLM 驱动：
+
+**请求体字段：**
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `model` | `string` | 是 | 模型标识符（提供商名或 `provider:model`） |
+| `messages` | `array` | 是 | 消息数组（`{role, content}`），至少 1 条 |
+| `stream` | `bool` | 否 | 启用 SSE 流式响应 |
+| `temperature` | `float64` | 否 | 采样温度 |
+| `max_tokens` | `int` | 否 | 最大生成 token 数 |
 
 ```bash
 curl http://localhost:8080/v1/chat/completions \
@@ -139,33 +173,93 @@ curl http://localhost:8080/v1/chat/completions \
 ```
 
 **模型路由：**
-- `"ollama"` → `/dev/llm/ollama` → 使用提供商的 `default_model`
-- `"groq:llama-3.3-70b"` → `/dev/llm/groq` 指定具体模型
-- `"claude"` → `/dev/llm/claude`
+
+| model 值 | 解析方式 |
+|----------|---------|
+| `"ollama"` | `/dev/llm/ollama` → 使用提供商的 `default_model` |
+| `"groq:llama-3.3-70b"` | `/dev/llm/groq` 并指定具体模型 |
+| `"llama-3.3-70b"` | 反向查找：找到 `default_model` 匹配的提供商 |
+| `"unknown"` | 回退到 `default_provider`，输入视为模型名 |
+
+如果找不到提供商，返回 `404` 并附带可用提供商列表。
 
 **流式响应** — 设置 `"stream": true` 获取 SSE 响应：
 
 ```bash
 curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "ollama", "messages": [...], "stream": true}'
+  -d '{"model": "ollama", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
 ```
 
-响应格式：`data: {"choices":[{"delta":{"content":"..."}}]}\n\n`
+流式响应以 `data: [DONE]\n\n` 结尾（符合 OpenAI SSE 规范）。
 
-#### GET /v1/models
-
-列出所有已注册且健康的提供商及可用模型：
+**响应格式（非流式）：**
 
 ```json
 {
+  "id": "chatcmpl-1234567890",
+  "object": "chat.completion",
+  "created": 1711600000,
+  "model": "ollama",
+  "choices": [
+    {
+      "index": 0,
+      "message": {"role": "assistant", "content": "Hello! How can I help?"},
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 25,
+    "total_tokens": 35
+  }
+}
+```
+
+#### GET /v1/models
+
+列出所有已注册的提供商及可用模型。不健康的提供商会被排除；未检查的提供商会被包含。设置了 `default_model` 的提供商会生成两个条目：
+
+```json
+{
+  "object": "list",
   "data": [
-    {"id": "claude", "object": "model", "owned_by": "anthropic"},
-    {"id": "ollama", "object": "model", "owned_by": "local"},
-    {"id": "groq", "object": "model", "owned_by": "groq"}
+    {"id": "claude", "object": "model", "created": 1711600000, "owned_by": "claude"},
+    {"id": "claude:haiku", "object": "model", "created": 1711600000, "owned_by": "claude"},
+    {"id": "ollama", "object": "model", "created": 1711600000, "owned_by": "ollama"},
+    {"id": "ollama:llama3", "object": "model", "created": 1711600000, "owned_by": "ollama"}
   ]
 }
 ```
+
+#### GET /health
+
+健康检查端点，用于监控和负载均衡：
+
+```json
+{"status": "ok", "providers": 4}
+```
+
+### 错误响应
+
+所有错误遵循 OpenAI 错误格式：
+
+```json
+{
+  "error": {
+    "message": "Provider 'xyz' not found. Available providers: claude, cursor",
+    "type": "invalid_request_error",
+    "code": "model_not_found"
+  }
+}
+```
+
+| HTTP 状态码 | 错误码 | 场景 |
+|------------|--------|------|
+| `400` | `invalid_request` | JSON 无效、缺少 `model` 或 `messages` |
+| `404` | `model_not_found` | 提供商不存在 |
+| `502` | `upstream_error` | LLM 驱动返回错误或空响应 |
+| `504` | `timeout` | LLM 请求超时 |
 
 ### 架构
 

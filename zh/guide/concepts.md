@@ -35,6 +35,18 @@ Created ──→ Running ──→ Zombie ──→ Dead
    │           │ /超时/Kill │  资源释放
 ```
 
+```mermaid
+stateDiagram-v2
+    [*] --> Created: Spawn()
+    Created --> Running: Start()
+    Running --> Zombie: Terminate()
+    Zombie --> Dead: Reap()
+    Dead --> [*]
+
+    note right of Running: 推理循环执行中
+    note right of Zombie: 等待 Wait/Reap
+```
+
 **状态说明：**
 
 - **Created（已创建）** — 进程对象已分配，但推理循环尚未开始

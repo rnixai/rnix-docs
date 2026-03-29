@@ -19,18 +19,17 @@ hero:
 features:
   - icon: "\u2699\uFE0F"
     title: Everything is a Process
-    details: Each agent execution is a process with its own PID, state machine, FD table, threads, and coroutines. IPC messaging, pipes, signals, and process groups for multi-agent collaboration.
+    details: Each agent is a process with PID, state machine, FD table, and IPC. Unix-native lifecycle management.
   - icon: "\uD83D\uDCC1"
     title: Everything is a File
-    details: LLMs, filesystem, shell, and MCP tools are unified as VFS devices. Open/Read/Write/Close for all resources. Multi-provider LLM support with rnix serve OpenAI-compatible gateway.
+    details: LLMs, filesystem, shell, and MCP tools are unified VFS devices. Multi-provider LLM gateway included.
   - icon: "\uD83E\uDDEC"
     title: Autonomous Agents
-    details: Unified reasoning loop where LLM autonomously selects actions each step. Stem cell differentiation lets generic agents auto-specialize based on intent. Declarative intent system with reconciler.
+    details: LLM-driven reasoning loop with stem cell differentiation, declarative intent decomposition, and reconciler.
   - icon: "\uD83D\uDD0D"
-    title: Deep Debugging Toolkit
-    details: "strace, gdb-style interactive debugger (attach/breakpoint/step/inspect), time-travel replay with fork-continue, distributed causal tracing, visual TUI dashboard, and agtest regression testing."
-  - icon: "\uD83D\uDECD\uFE0F"
+    title: Deep Debugging
+    details: strace, gdb-style debugger, time-travel replay, distributed tracing, and TUI dashboard.
+  - icon: "\uD83D\u6DCD\uFE0F"
     title: More in the Guide
-    details: "Compose & AgentShell, Token Economy & Security, MCP integration, and the full platform — start with [Quick Start](/guide/quick-start) or [Core Concepts](/guide/concepts)."
     link: /guide/quick-start
 ---

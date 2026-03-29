@@ -68,6 +68,7 @@ providers:
 
   - name: cursor
     driver: cursor-cli
+    command: agent              # CLI 二进制命令名（默认："agent"）
 
   - name: groq
     driver: openai-compat
@@ -95,6 +96,7 @@ providers:
 | `default_provider` | `string` | 未指定时使用的默认提供商（默认：`claude`） |
 | `providers[].name` | `string` | 提供商名称，映射到 `/dev/llm/<name>` |
 | `providers[].driver` | `string` | 驱动类型：`claude-cli`、`cursor-cli` 或 `openai-compat` |
+| `providers[].command` | `string` | CLI 驱动的二进制命令名覆盖（如 `agent`、`claude`、`/usr/local/bin/claude`） |
 | `providers[].default_model` | `string` | 默认模型名称 |
 | `providers[].base_url` | `string` | API 基础 URL（用于 `openai-compat` 驱动） |
 | `providers[].api_key_env` | `string` | API 密钥的环境变量名 |
@@ -106,6 +108,28 @@ providers:
 | `claude-cli` | 调用 Claude Code CLI（`claude -p`） | Anthropic Claude |
 | `cursor-cli` | 调用 Cursor CLI（`agent --print`） | Cursor |
 | `openai-compat` | 调用 OpenAI 兼容 HTTP API 端点 | Ollama、Groq、DeepSeek、任何 OpenAI 兼容服务 |
+
+### CLI 命令别名
+
+CLI 驱动（`claude-cli`、`cursor-cli`）通过调用二进制命令与 LLM 交互。默认命令名如下：
+
+| 驱动 | 默认命令 |
+|------|---------|
+| `claude-cli` | `claude` |
+| `cursor-cli` | `agent` |
+
+使用 `command` 字段覆盖二进制命令名——适用于 CLI 安装在非标准路径或使用不同名称的情况：
+
+```yaml
+providers:
+  - name: cursor
+    driver: cursor-cli
+    command: cursor-agent        # 覆盖默认的 "agent"
+
+  - name: claude
+    driver: claude-cli
+    command: /usr/local/bin/claude   # 完整路径覆盖
+```
 
 ### 提供商解析优先级
 

@@ -51,6 +51,15 @@ analyzer ──→ doc-gen ──→ checker      # Linear
     A ←─ C ─→ B                       # C blocks both; A, B parallel after C
 ```
 
+```mermaid
+graph LR
+    analyzer --> doc-gen --> checker
+
+    style analyzer fill:#e1f5fe
+    style doc-gen fill:#e8f5e9
+    style checker fill:#fff3e0
+```
+
 ---
 
 ## Agent Fields
@@ -107,6 +116,56 @@ agents:
 ```
 
 Post-execution SLA evaluation feeds into the [Reputation System](/guide/token-economy).
+
+---
+
+## Result Injection
+
+Upstream agent output is automatically injected into downstream agent context. When agent B depends on agent A, A's final result is prepended to B's system prompt as a tool message:
+
+```
+[Upstream Result from analyzer]
+---
+<analyzer's output here>
+---
+```
+
+This allows downstream agents to build on upstream results without explicit plumbing.
+
+## Error Handling
+
+| Scenario | Behavior |
+|----------|----------|
+| Agent fails (exit code 1) | Downstream agents are cancelled, workflow marked as failed |
+| Agent timeout | Configured `timeout` exceeded → agent killed with SIGTERM |
+| Agent exceeds budget | Exit code 2, treated same as failure |
+| All retries exhausted | Agent marked permanently failed, downstream cancelled |
+
+Set `max_retries` to automatically retry failed agents:
+
+```yaml
+agents:
+  flaky-analyzer:
+    intent: "Analyze code"
+    max_retries: 3    # retry up to 3 times on failure
+```
+
+## Compose File Reference
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `version` | string | — | Compose spec version (`"1.0"`) |
+| `intent` | string | — | Workflow description (shown in CLI output) |
+| `model` | string | — | Default model for all agents |
+| `budget_pool` | object | — | Shared token budget configuration |
+| `agents` | map | — | Agent definitions (key = agent name) |
+
+### Budget Pool Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `total` | int | — | Total token budget across all agents |
+| `allocation` | string | `priority` | Allocation strategy: `priority`, `equal`, or `proportional` |
 
 ---
 

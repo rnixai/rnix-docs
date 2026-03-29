@@ -51,6 +51,15 @@ analyzer ──→ doc-gen ──→ checker      # 线性
     A ←─ C ─→ B                       # C 阻塞两者；C 完成后 A、B 并行
 ```
 
+```mermaid
+graph LR
+    analyzer --> doc-gen --> checker
+
+    style analyzer fill:#e1f5fe
+    style doc-gen fill:#e8f5e9
+    style checker fill:#fff3e0
+```
+
 ---
 
 ## Agent 字段
@@ -107,6 +116,56 @@ agents:
 ```
 
 执行完成后的 SLA 评估结果会反馈到[声誉系统](/zh/guide/token-economy)。
+
+---
+
+## 结果注入
+
+上游智能体输出自动注入到下游智能体上下文。当智能体 B 依赖智能体 A 时，A 的最终结果作为 tool message 添加到 B 的 system prompt：
+
+```
+[上游结果：analyzer]
+---
+<analyzer 的输出内容>
+---
+```
+
+这样下游智能体可以在上游结果基础上继续工作，无需手动传递。
+
+## 错误处理
+
+| 场景 | 行为 |
+|------|------|
+| 智能体失败（退出码 1） | 下游智能体被取消，工作流标记为失败 |
+| 智能体超时 | 超过配置的 `timeout` → SIGTERM 终止 |
+| 智能体超出预算 | 退出码 2，与失败相同处理 |
+| 所有重试耗尽 | 智能体标记为永久失败，下游取消 |
+
+设置 `max_retries` 自动重试失败的智能体：
+
+```yaml
+agents:
+  flaky-analyzer:
+    intent: "分析代码"
+    max_retries: 3    # 失败时最多重试 3 次
+```
+
+## Compose 文件参考
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `version` | string | — | Compose 规范版本（`"1.0"`） |
+| `intent` | string | — | 工作流描述（显示在 CLI 输出中） |
+| `model` | string | — | 所有智能体的默认模型 |
+| `budget_pool` | object | — | 共享 token 预算配置 |
+| `agents` | map | — | 智能体定义（key = 智能体名称） |
+
+### Budget Pool 字段
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `total` | int | — | 所有智能体的总 token 预算 |
+| `allocation` | string | `priority` | 分配策略：`priority`、`equal` 或 `proportional` |
 
 ---
 

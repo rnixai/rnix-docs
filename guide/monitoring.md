@@ -146,7 +146,7 @@ Services defined in `init.yaml` start in dependency order, with supervisors moni
 ```bash
 $ rnix daemon status
 status:  running
-version: 0.5.0
+version: 0.1.0
 socket:  /run/user/1000/rnix/rnix.sock
 procs:   2 active / 5 total
 providers: claude (healthy), ollama (healthy)

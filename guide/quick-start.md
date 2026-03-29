@@ -39,7 +39,7 @@ Verify:
 $ rnix version
 rnix v0.1.0
 commit:  cd9c568
-built:   2026-03-15T07:23:57Z
+built:   2026-03-29T07:23:57Z
 ```
 
 ### Build from Source
@@ -197,6 +197,39 @@ $ rnix serve
 $ curl http://localhost:8080/v1/chat/completions \
   -d '{"model": "claude", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
+
+---
+
+## Troubleshooting
+
+### Daemon won't start
+
+If `rnix ps` shows connection errors, the daemon may be stuck. Force restart:
+
+```bash
+$ rnix daemon stop
+$ rnix ps  # daemon auto-restarts on next command
+```
+
+### LLM command not found
+
+If you see `exec: "claude": executable file not found`, install the Claude Code CLI:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### Permission denied on /dev/shell
+
+Skills must declare shell access in `allowed-tools`. Check your SKILL.md frontmatter includes:
+
+```yaml
+allowed-tools: /dev/fs /dev/shell
+```
+
+### Timeout errors
+
+LLM calls timeout after the configured `TimeoutMs`. Increase with `--max-steps` or check your network connection to the LLM provider.
 
 ---
 

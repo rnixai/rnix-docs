@@ -68,6 +68,7 @@ providers:
 
   - name: cursor
     driver: cursor-cli
+    command: agent              # CLI binary name (default: "agent")
 
   - name: groq
     driver: openai-compat
@@ -95,6 +96,7 @@ providers:
 | `default_provider` | `string` | Default provider when none specified (default: `claude`) |
 | `providers[].name` | `string` | Provider name, maps to `/dev/llm/<name>` |
 | `providers[].driver` | `string` | Driver type: `claude-cli`, `cursor-cli`, or `openai-compat` |
+| `providers[].command` | `string` | CLI binary name override for CLI drivers (e.g., `agent`, `claude`, `/usr/local/bin/claude`) |
 | `providers[].default_model` | `string` | Default model name |
 | `providers[].base_url` | `string` | API base URL (for `openai-compat` driver) |
 | `providers[].api_key_env` | `string` | Environment variable name for API key |
@@ -106,6 +108,28 @@ providers:
 | `claude-cli` | Invokes Claude Code CLI (`claude -p`) | Anthropic Claude |
 | `cursor-cli` | Invokes Cursor CLI (`agent --print`) | Cursor |
 | `openai-compat` | Calls OpenAI-compatible HTTP API | Ollama, Groq, DeepSeek, any OpenAI-compatible endpoint |
+
+### CLI Command Alias
+
+CLI drivers (`claude-cli`, `cursor-cli`) invoke a binary to interact with the LLM. The default binary names are:
+
+| Driver | Default Command |
+|--------|----------------|
+| `claude-cli` | `claude` |
+| `cursor-cli` | `agent` |
+
+Use the `command` field to override the binary name — useful when the CLI is installed at a non-standard path or under a different name:
+
+```yaml
+providers:
+  - name: cursor
+    driver: cursor-cli
+    command: cursor-agent        # Override default "agent"
+
+  - name: claude
+    driver: claude-cli
+    command: /usr/local/bin/claude   # Full path override
+```
 
 ### Provider Resolution Priority
 

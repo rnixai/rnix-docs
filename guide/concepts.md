@@ -37,6 +37,18 @@ Created ──→ Running ──→ Zombie ──→ Dead
    │           │ Kill      │
 ```
 
+```mermaid
+stateDiagram-v2
+    [*] --> Created: Spawn()
+    Created --> Running: Start()
+    Running --> Zombie: Terminate()
+    Zombie --> Dead: Reap()
+    Dead --> [*]
+
+    note right of Running: Reasoning loop executing
+    note right of Zombie: Awaiting Wait/Reap
+```
+
 **State descriptions:**
 
 - **Created** — Process object allocated, but reasoning loop has not started
