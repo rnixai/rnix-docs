@@ -88,12 +88,13 @@ Press `Enter` on a process in the tree to open the detail panel:
 
 ### Prompt View
 
-Press `p` on a selected process to view the complete prompt:
+Press `p` on a selected step in the Timeline to inspect the LLM prompt at that point. The Prompt Viewer has three tabs:
 
-- System prompt content
-- Message history with role indicators
-- Token count per message segment
-- Formatted for readability with syntax highlighting
+- **Messages**: Conversation history with role indicators (system, user, assistant, tool). For CLI driver processes (Claude CLI, Cursor CLI), the initial user intent is automatically seeded as the first message.
+- **System**: Full system prompt content loaded for this process, including agent instructions and skill bodies.
+- **Tools**: Details of the tool invoked at this step — name, description, path/parameters, input JSON, result output, error (if any), and execution duration. This information is sourced from the StepRecord, matching what the Timeline displays.
+
+Navigate between tabs with `←`/`→` or click the tab headers. Step through the timeline with `↑`/`↓` to compare prompts across steps.
 
 ### Intent Tree Panel
 
