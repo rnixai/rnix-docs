@@ -134,33 +134,109 @@ Press `m` to toggle the multi-agent evaluation view:
 
 ---
 
-## History View
+## Unified Process Tree (with History)
 
-Press `h` to switch to history view mode. Browse ended processes:
+The Agent Tree pane shows **all** processes — running, completed, and failed — in a single unified view. There is no separate history mode; dead processes appear alongside active ones.
 
-- Process list sorted by completion time
-- PID, UUID, provider/model, exit code, tokens used, elapsed time
-- Select a historical process to view its:
-  - Full step recording (StepRecord)
-  - Context at completion
-  - LLM conversation history
+- Columns: PID, state indicator (`●` running, `✓` done, `✕` failed, `⏸` paused), agent/model, tokens, elapsed, exit code, reason
+- Summary bar: Running / Done / Failed counts, total tokens, average lifetime
+- Sort modes: by time (newest first, active before dead), by PID, or by state
+- Historical processes are loaded from persisted data in `.rnix/data/steps/<uuid>/proc-info.json`
+- Dead subtrees can be collapsed/expanded for cleaner navigation
+- Select any process (alive or dead) to view its full observation data:
+  - **Detail panel** — PID, UUID, provider/model, state, skills, tokens
+  - **Timeline** — events loaded from `events.jsonl` on disk
+  - **Heatmap** — context snapshot from `ctx-profile.json`
+  - **Steps/LLM** — reasoning steps from `steps.jsonl` + system prompt from `process-meta.json`
 
 ### LLM Conversation Viewer
 
-Press `c` on a selected process (running or historical) to view the full LLM conversation:
+Press `L` (Shift+L) on a selected process (running or historical) to enter the full-screen LLM conversation viewer:
 
-- Complete message exchange with the LLM
-- Role indicators (system, user, assistant, tool)
-- Token count per message
-- Timestamp and step correlation
+- Step-by-step navigation (`h`/`l` or `←`/`→`) through reasoning steps
+- Each step shows the complete LLM request and response
+- Role indicators (system, user, assistant, tool) with token counts
+- For historical (dead) processes, data is loaded from `steps.jsonl` on disk
+- Step list panel shows action type, token count, and duration per step
+- Press `Esc` to return to the previous view
+
+---
+
+## Debug Mode
+
+Press `d` to enter debug mode — a dedicated view combining real-time strace events with context profiling:
+
+- **Strace pane** — live syscall event stream (Open, Read, Write, Close) with timing and device annotations
+- **Context profile pane** — segment-level context heatmap and budget analysis
+- **Device latency stats** — per-device average latency and error counts
+- For historical processes, events are loaded from `events.jsonl` on disk
+
+### Debug Mode Keybindings
+
+| Key | Action |
+|-----|--------|
+| `j`/`k` | Navigate events |
+| `s` | Toggle strace stream |
+| `S` (Shift+S) | Toggle step-mode display |
+| `f` | Filter events by category |
+| `v` | Expand event detail |
+| `Tab` | Switch between strace and context panes |
+| `d` or `Esc` | Exit debug mode |
 
 ---
 
 ## Navigation
 
+### Pane Navigation
+
+| Key | Action |
+|-----|--------|
+| `1`–`8` | Jump directly to pane by number |
+| `Tab` | Cycle focus to next pane |
+| `Shift+Tab` | Cycle focus to previous pane |
+| `z` | Expand focused pane / restore layout |
+
+### Scrolling (Tree, Timeline, History)
+
+| Key | Action |
+|-----|--------|
+| `j`/`↓` | Move down one item |
+| `k`/`↑` | Move up one item |
+| `PgDn` | Page down |
+| `PgUp` | Page up |
+| `g`/`Home` | Jump to top |
+| `G`/`End` | Jump to bottom |
+
+### Timeline-Specific
+
+| Key | Action |
+|-----|--------|
+| `v`/`Enter` | Expand step detail (L2) |
+| `V` (Shift+V) | Debug detail (L3) |
+| `e` | Expand all visible steps |
+| `E` (Shift+E) | Collapse all visible steps |
+| `n` | Jump to next error |
+| `N` (Shift+N) | Jump to previous error |
+| `P` (Shift+P) | Open prompt viewer for selected step |
+| `f` | Enter filter mode |
+
+### Filter Mode (press `f` in Timeline)
+
+| Key | Action |
+|-----|--------|
+| `T` | Toggle tool_call steps |
+| `P` | Toggle plan steps |
+| `A` | Toggle text steps |
+| `C` | Toggle complete steps |
+| `S` | Toggle spawn steps |
+| `R` | Toggle replan steps |
+| `Z` | Toggle specialize steps |
+| `*` | Enable all |
+| `Esc` | Exit filter mode |
+
 ### Top to Dashboard Navigation
 
-From `rnix top`, press `d` to switch directly to the dashboard, carrying the current process selection. From dashboard, press `t` to return to `rnix top`.
+From `rnix top`, press `d` to switch directly to the dashboard, carrying the current process selection.
 
 ---
 
@@ -168,25 +244,14 @@ From `rnix top`, press `d` to switch directly to the dashboard, carrying the cur
 
 | Key | Action |
 |-----|--------|
-| `↑`/`↓` | Navigate agent tree |
-| `Enter` | Select agent / drill into detail |
-| `Tab` | Switch between panes |
-| `k` | Kill selected process |
-| `g` | Attach gdb to selected process |
+| `K` (Shift+K) | Kill selected process |
+| `R` (Shift+R) | Resume suspended process |
 | `l` | View log for selected process |
-| `r` | Start recording selected process |
-| `p` | View prompt for selected process |
-| `c` | View LLM conversation for selected process |
-| `i` | Toggle Intent Tree panel |
-| `s` | Toggle Security Anomaly panel |
-| `t` | Toggle Distributed Tracing panel |
-| `m` | Toggle Multi-Agent Evaluation panel |
-| `h` | Switch to History view |
-| `v` | Cycle view modes (Default → Expanded → Fullscreen) |
-| `d` | Switch to Default view |
-| `e` | Switch to Expanded view |
-| `f` | Filter timeline by category / switch to Fullscreen |
-| `+`/`-` | Zoom timeline |
+| `r` | Toggle recording for selected process |
+| `a` | Toggle alerts panel |
+| `L` (Shift+L) | Open LLM conversation viewer |
+| `d` | Enter Debug mode |
+| `?` | Show keyboard shortcut help overlay |
 | `q` | Quit dashboard |
 
 Selecting an agent in the tree **links** all panels to show that agent's data.

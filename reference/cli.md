@@ -532,7 +532,46 @@ $ rnix compose down
 $ rnix compose down -f my-workflow.yaml --json
 ```
 
-### 4.19 rnix apply \<intent\> — Declarative Intent Decomposition
+### 4.19 rnix suspend \<pid\> — Suspend Agent Process
+
+Suspend a running agent process by sending SIGPAUSE.
+
+```
+Usage: rnix suspend <pid>
+Arguments: <pid> — Process ID (exactly 1 argument)
+```
+
+**Success Output:**
+
+```
+[kernel] PID 1: signal sent (SIGPAUSE)
+```
+
+### 4.20 rnix resume \<pid|uuid\> — Resume Suspended Process
+
+Resume a suspended agent process from its checkpoint.
+
+```
+Usage: rnix resume <pid|uuid>
+Arguments: <pid|uuid> — Process ID or UUID (exactly 1 argument)
+```
+
+Supports both PID (for running daemon processes) and UUID (for resuming from persisted checkpoints).
+
+### 4.21 rnix heartbeat — Heartbeat Monitor
+
+Heartbeat monitor management.
+
+**Subcommand: `rnix heartbeat status`**
+
+Show heartbeat monitor status for all active processes.
+
+```
+Usage: rnix heartbeat status
+Arguments: None (cobra.NoArgs)
+```
+
+### 4.22 rnix apply \<intent\> — Declarative Intent Decomposition
 
 Declare a high-level intent. The system decomposes it into a sub-intent tree (Intent Tree), each sub-intent maps to one or more agent processes.
 
@@ -558,7 +597,7 @@ $ rnix apply "build a REST API" --yes
 $ rnix apply "add comments feature" --update intent-1
 ```
 
-### 4.20 rnix intent — Intent Management
+### 4.23 rnix intent — Intent Management
 
 Commands for managing declarative intent trees.
 
@@ -588,7 +627,7 @@ $ rnix intent status intent-1
 $ rnix intent list --json
 ```
 
-### 4.21 rnix skill — Skill Package Management
+### 4.24 rnix skill — Skill Package Management
 
 Install, update, and manage skills from the community registry.
 
@@ -641,7 +680,7 @@ $ rnix skill update
 $ rnix skill list
 ```
 
-### 4.22 rnix run \<script.ash\> — AgentShell Script Runner
+### 4.25 rnix run \<script.ash\> — AgentShell Script Runner
 
 Read and execute an AgentShell script file. Supports shebang (`#!/usr/bin/env rnix run`) for direct execution.
 
@@ -667,7 +706,7 @@ $ rnix run deploy.ash --env staging
 $ ./deploy.ash  # with shebang and chmod +x
 ```
 
-### 4.23 rnix serve — OpenAI-Compatible HTTP Gateway
+### 4.26 rnix serve — OpenAI-Compatible HTTP Gateway
 
 Start an OpenAI-compatible HTTP server that exposes registered LLM providers as standard API endpoints.
 
@@ -691,7 +730,7 @@ $ rnix serve --port 3000
 Serving 2 providers on http://127.0.0.1:3000
 ```
 
-### 4.24 rnix agtest \[file-or-dir\] — Agent Behavior Testing
+### 4.27 rnix agtest \[file-or-dir\] — Agent Behavior Testing
 
 Run declarative agent behavior regression tests defined in YAML files.
 
@@ -728,7 +767,7 @@ $ rnix agtest test.yaml --dry-run
 $ rnix agtest tests/ --timeout 120000 --json
 ```
 
-### 4.25 rnix reputation \[agent\] — Agent Reputation Scores
+### 4.28 rnix reputation \[agent\] — Agent Reputation Scores
 
 Show reputation scores based on historical SLA evaluation results. Without arguments, lists all agents in a table. With an agent name, shows detailed information.
 
@@ -756,7 +795,7 @@ Total Records: 15
 Trend: improving
 ```
 
-### 4.26 rnix lineage \<pid\> — Stem Agent Differentiation Lineage
+### 4.29 rnix lineage \<pid\> — Stem Agent Differentiation Lineage
 
 Show the complete differentiation path from stem agent to current specialized form. Displays each skill loading step with timestamp and trigger reason.
 
@@ -782,7 +821,7 @@ Lineage for PID 42
     Source: specialize
 ```
 
-### 4.27 rnix topology — Collaboration Topology
+### 4.30 rnix topology — Collaboration Topology
 
 Show agent collaboration topology and reinforced paths.
 
@@ -812,7 +851,7 @@ FROM                 TO                   SPAWN  MSG  TOTAL  REINFORCED
 code-analyst         test-writer              5    2      7  *
 ```
 
-### 4.28 rnix synergy — Skill Synergy Combinations
+### 4.31 rnix synergy — Skill Synergy Combinations
 
 Skill synergy combination management.
 
@@ -844,7 +883,7 @@ $ rnix synergy list
 $ rnix synergy list --json
 ```
 
-### 4.29 rnix immune — Adaptive Immune Security
+### 4.32 rnix immune — Adaptive Immune Security
 
 Adaptive immune security management.
 
@@ -1000,15 +1039,7 @@ Default: localhost:8080
 
 OpenAI-compatible HTTP server. Endpoints: `/v1/chat/completions` (sync + SSE streaming), `/v1/models`. The model parameter supports `provider:model` composite format routing.
 
-### 9.13 rnix providers — Provider Management
-
-```
-Usage: rnix providers status
-```
-
-Shows health status, driver type, default model, and latency for all registered LLM providers.
-
-### 9.14 rnix immune — Security Monitoring
+### 9.13 rnix immune — Security Monitoring
 
 ```
 Usage: rnix immune status
@@ -1016,7 +1047,7 @@ Usage: rnix immune status
 
 Shows Immune Daemon status: monitored process count, active alerts, suspended processes, and threat memory entries.
 
-### 9.15 rnix reputation — Reputation System
+### 9.14 rnix reputation — Reputation System
 
 ```
 Usage: rnix reputation [agent-name]
@@ -1024,7 +1055,7 @@ Usage: rnix reputation [agent-name]
 
 View historical performance of Agent templates: success rate, token efficiency, SLA compliance, reputation score.
 
-### 9.16 rnix lineage — Differentiation Lineage
+### 9.15 rnix lineage — Differentiation Lineage
 
 ```
 Usage: rnix lineage <pid>
@@ -1032,7 +1063,7 @@ Usage: rnix lineage <pid>
 
 View the complete differentiation path of a stem agent: base → auto-matched Skills → runtime-loaded Skills.
 
-### 9.17 rnix topology — Collaboration Topology
+### 9.16 rnix topology — Collaboration Topology
 
 ```
 Usage: rnix topology
@@ -1040,7 +1071,7 @@ Usage: rnix topology
 
 Shows agent collaboration topology: collaboration frequency, capability overlap, and reinforced paths.
 
-### 9.18 rnix synergy — Skill Synergy
+### 9.17 rnix synergy — Skill Synergy
 
 ```
 Usage: rnix synergy list
@@ -1068,14 +1099,54 @@ Dynamically registered via `providers.yaml`. One VFS path per provider:
 |------|-------------|-------------|
 | `/dev/llm/claude` | CLI | Claude Code CLI |
 | `/dev/llm/cursor` | CLI | Cursor CLI |
+| `/dev/llm/qwen` | CLI | Qwen Code CLI |
 | `/dev/llm/ollama` | HTTP API | Ollama (local) |
 | `/dev/llm/groq` | HTTP API | Groq Cloud |
 | `/dev/llm/deepseek` | HTTP API | DeepSeek API |
+| `/dev/llm/gemini` | Native API | Google Gemini |
+| `/dev/llm/openai` | Native API | OpenAI GPT-4, GPT-4o |
+| `/dev/llm/anthropic-api` | Native API | Claude (via Anthropic SDK) |
 | `/dev/llm/<custom>` | HTTP API | Any OpenAI-compatible API |
 
 ### 10.2 /mnt/mcp/* — MCP Mount Points
 
 Auto-mounted during Spawn, format `/mnt/mcp/{pid}-{serverName}`. Sub-paths map to MCP protocol operations (see VFS Path Specification §2 for MCP sub-path table).
+
+### 10.3 /dev/memory/* — Memory Devices
+
+Persistent knowledge management for agents. Three sub-devices:
+
+| Path | Description |
+|------|-------------|
+| `/dev/memory/commit` | Write persistent knowledge entries (add/replace/remove/snapshot/capacity) |
+| `/dev/memory/recall` | Search historical conversations and extracted knowledge (read-only) |
+| `/dev/memory/profile` | Manage user profile (role, preferences, expertise) |
+
+See [VFS Path Specification](/reference/vfs) for detailed request formats.
+
+### 10.4 /dev/tasks — Task Management
+
+Dynamic task management for agents. Supports `task_create`, `task_update`, and `task_list` operations.
+
+### 10.5 /dev/tty — Interactive User Q&A
+
+Allows agents to ask the user questions during execution. Questions are forwarded via IPC and block until a response is received.
+
+### 10.6 /dev/skills/manage — Dynamic Skill Management
+
+Runtime skill lifecycle management. Agents can create, modify, or delete skills programmatically.
+
+### 10.7 /dev/web — Web Access
+
+Web access capabilities: URL fetching with HTML-to-markdown conversion and web search with domain filtering.
+
+### 10.8 /dev/lsp — LSP Code Intelligence
+
+Language Server Protocol integration for code intelligence. Supports `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, and more.
+
+### 10.9 /dev/cron — Scheduled Jobs
+
+Manages scheduled recurring jobs. When a job triggers, it spawns a new agent process with the configured intent.
 
 ---
 

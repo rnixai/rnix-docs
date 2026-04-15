@@ -532,7 +532,46 @@ $ rnix compose down
 $ rnix compose down -f my-workflow.yaml --json
 ```
 
-### 4.19 rnix apply \<intent\> — 声明式意图分解
+### 4.19 rnix suspend \<pid\> — 挂起智能体进程
+
+挂起运行中的智能体进程，发送 SIGPAUSE 信号。
+
+```
+用法：rnix suspend <pid>
+参数：<pid> — 进程 ID（恰好 1 个参数）
+```
+
+**成功输出：**
+
+```
+[kernel] PID 1: signal sent (SIGPAUSE)
+```
+
+### 4.20 rnix resume \<pid|uuid\> — 恢复已挂起进程
+
+从检查点恢复已挂起的智能体进程。
+
+```
+用法：rnix resume <pid|uuid>
+参数：<pid|uuid> — 进程 ID 或 UUID（恰好 1 个参数）
+```
+
+支持 PID（运行中的 daemon 进程）和 UUID（从持久化检查点恢复）。
+
+### 4.21 rnix heartbeat — 心跳监控
+
+心跳监控管理。
+
+**子命令：`rnix heartbeat status`**
+
+显示所有活跃进程的心跳监控状态。
+
+```
+用法：rnix heartbeat status
+参数：无 (cobra.NoArgs)
+```
+
+### 4.22 rnix apply \<intent\> — 声明式意图分解
 
 声明一个高层意图。系统将其分解为子意图树（Intent Tree），每个子意图映射到一个或多个智能体进程。
 
@@ -558,7 +597,7 @@ $ rnix apply "build a REST API" --yes
 $ rnix apply "add comments feature" --update intent-1
 ```
 
-### 4.20 rnix intent — 意图管理
+### 4.23 rnix intent — 意图管理
 
 用于管理声明式意图树的命令。
 
@@ -588,7 +627,7 @@ $ rnix intent status intent-1
 $ rnix intent list --json
 ```
 
-### 4.21 rnix skill — 技能包管理
+### 4.24 rnix skill — 技能包管理
 
 从社区注册中心安装、更新和管理技能。
 
@@ -641,7 +680,7 @@ $ rnix skill update
 $ rnix skill list
 ```
 
-### 4.22 rnix run \<script.ash\> — AgentShell 脚本运行器
+### 4.25 rnix run \<script.ash\> — AgentShell 脚本运行器
 
 读取并执行 AgentShell 脚本文件。支持 shebang（`#!/usr/bin/env rnix run`）直接执行。
 
@@ -667,7 +706,7 @@ $ rnix run deploy.ash --env staging
 $ ./deploy.ash  # 配合 shebang 和 chmod +x
 ```
 
-### 4.23 rnix serve — OpenAI 兼容 HTTP 网关
+### 4.26 rnix serve — OpenAI 兼容 HTTP 网关
 
 启动 OpenAI 兼容的 HTTP 服务器，将已注册的 LLM 提供商公开为标准 API 端点。
 
@@ -691,7 +730,7 @@ $ rnix serve --port 3000
 Serving 2 providers on http://127.0.0.1:3000
 ```
 
-### 4.24 rnix agtest \[file-or-dir\] — 智能体行为测试
+### 4.27 rnix agtest \[file-or-dir\] — 智能体行为测试
 
 运行以 YAML 文件定义的声明式智能体行为回归测试。
 
@@ -728,7 +767,7 @@ $ rnix agtest test.yaml --dry-run
 $ rnix agtest tests/ --timeout 120000 --json
 ```
 
-### 4.25 rnix reputation \[agent\] — 智能体信誉评分
+### 4.28 rnix reputation \[agent\] — 智能体信誉评分
 
 显示基于历史 SLA 评估结果的信誉评分。不带参数时以表格列出所有智能体。带智能体名称时显示详细信息。
 
@@ -756,7 +795,7 @@ Total Records: 15
 Trend: improving
 ```
 
-### 4.26 rnix lineage \<pid\> — 干细胞智能体分化谱系
+### 4.29 rnix lineage \<pid\> — 干细胞智能体分化谱系
 
 显示从干细胞智能体到当前特化形态的完整分化路径。显示每个技能加载步骤的时间戳和触发原因。
 
@@ -782,7 +821,7 @@ Lineage for PID 42
     Source: specialize
 ```
 
-### 4.27 rnix topology — 协作拓扑
+### 4.30 rnix topology — 协作拓扑
 
 显示智能体协作拓扑和强化路径。
 
@@ -812,7 +851,7 @@ FROM                 TO                   SPAWN  MSG  TOTAL  REINFORCED
 code-analyst         test-writer              5    2      7  *
 ```
 
-### 4.28 rnix synergy — 技能协同组合
+### 4.31 rnix synergy — 技能协同组合
 
 技能协同组合管理。
 
@@ -844,7 +883,7 @@ $ rnix synergy list
 $ rnix synergy list --json
 ```
 
-### 4.29 rnix immune — 自适应免疫安全
+### 4.32 rnix immune — 自适应免疫安全
 
 自适应免疫安全管理。
 
@@ -1000,14 +1039,6 @@ LLM 驱动的意图分解 + Reconciler 持续调和。支持增量更新。
 
 OpenAI 兼容 HTTP 服务器。端点：`/v1/chat/completions`（同步 + SSE 流式）、`/v1/models`。model 参数支持 `provider:model` 复合格式路由。
 
-### 9.13 rnix providers — Provider 管理
-
-```
-用法: rnix providers status
-```
-
-显示所有已注册 LLM provider 的健康状态、驱动类型、默认模型和延迟。
-
 ### 9.14 rnix immune — 安全监控
 
 ```
@@ -1068,9 +1099,13 @@ OpenAI 兼容 HTTP 服务器。端点：`/v1/chat/completions`（同步 + SSE �
 |------|---------|------|
 | `/dev/llm/claude` | CLI | Claude Code CLI |
 | `/dev/llm/cursor` | CLI | Cursor CLI |
+| `/dev/llm/qwen` | CLI | Qwen Code CLI |
 | `/dev/llm/ollama` | HTTP API | Ollama (本地) |
 | `/dev/llm/groq` | HTTP API | Groq Cloud |
 | `/dev/llm/deepseek` | HTTP API | DeepSeek API |
+| `/dev/llm/gemini` | 原生 API | Google Gemini |
+| `/dev/llm/openai` | 官方 SDK | OpenAI GPT-4/GPT-4o |
+| `/dev/llm/anthropic-api` | 官方 SDK | Anthropic Claude (API) |
 | `/dev/llm/<custom>` | HTTP API | 任意 OpenAI 兼容 API |
 
 ### 10.2 /mnt/mcp/* — MCP 挂载点

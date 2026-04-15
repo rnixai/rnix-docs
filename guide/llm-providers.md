@@ -39,6 +39,25 @@ providers:
     base_url: https://api.deepseek.com/v1
     api_key_env: DEEPSEEK_API_KEY
     default_model: deepseek-chat
+
+  - name: gemini
+    driver: gemini
+    api_key_env: GOOGLE_API_KEY
+    default_model: gemini-2.0-flash
+
+  - name: openai
+    driver: openai
+    api_key_env: OPENAI_API_KEY
+    default_model: gpt-4o
+
+  - name: anthropic-api
+    driver: anthropic
+    api_key_env: ANTHROPIC_API_KEY
+    default_model: claude-sonnet-4-20250514
+
+  - name: qwen
+    driver: qwen-cli
+    default_model: qwen3-coder
 ```
 
 ### Driver Types
@@ -48,6 +67,10 @@ providers:
 | `claude-cli` | Invokes Claude Code CLI (`claude -p`) | Anthropic Claude |
 | `cursor-cli` | Invokes Cursor CLI (`agent --print`) | Cursor |
 | `openai-compat` | Calls OpenAI-compatible HTTP API endpoint | Ollama, Groq, DeepSeek, any OpenAI-compatible server |
+| `qwen-cli` | Invokes Qwen Code CLI (`qwen --chat`) | Qwen Code |
+| `openai` | Official OpenAI SDK (`github.com/openai/openai-go/v3`) | OpenAI GPT-4, GPT-4o |
+| `gemini` | Native Gemini API (`google.golang.org/genai`) | Google Gemini |
+| `anthropic` | Official Anthropic SDK (`anthropic-sdk-go`) | Claude (via API, not CLI) |
 
 ### CLI Command Alias
 
@@ -57,6 +80,7 @@ CLI drivers invoke a binary to interact with the LLM. Use the `command` field to
 |--------|----------------|
 | `claude-cli` | `claude` |
 | `cursor-cli` | `agent` |
+| `qwen-cli` | `qwen` |
 
 ```yaml
 - name: cursor
@@ -95,6 +119,26 @@ cursor       cli     healthy   claude-3.5-sonnet  -
 ollama       http    healthy   llama3             45ms
 groq         http    healthy   llama-3.3-70b      120ms
 deepseek     http    offline   deepseek-chat      timeout
+```
+
+### Advanced Provider Options
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mode` | `string` | `"stream"` | Response mode: `"stream"` for SSE streaming, `"call"` for single-shot response |
+| `max_tokens` | `int` | `0` | Maximum output tokens per LLM call; `0` uses the API default |
+| `cost_per_token` | `float64` | `0` | Per-token cost in USD for budget tracking; `0` disables cost tracking |
+| `thinking_budget` | `int` | `0` | Thinking budget in tokens (`gemini` driver only); `0` disables thinking |
+| `extra_args` | `string[]` | `[]` | Additional CLI arguments passed to the binary (`claude-cli`, `cursor-cli`, `qwen-cli` only) |
+
+**Example** — Gemini with thinking budget:
+
+```yaml
+- name: gemini-thinking
+  driver: gemini
+  api_key_env: GOOGLE_API_KEY
+  default_model: gemini-2.5-pro
+  thinking_budget: 8192
 ```
 
 ### API Key Management

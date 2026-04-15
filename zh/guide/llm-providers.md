@@ -39,6 +39,25 @@ providers:
     base_url: https://api.deepseek.com/v1
     api_key_env: DEEPSEEK_API_KEY
     default_model: deepseek-chat
+
+  - name: gemini
+    driver: gemini
+    api_key_env: GOOGLE_API_KEY
+    default_model: gemini-2.0-flash
+
+  - name: openai
+    driver: openai
+    api_key_env: OPENAI_API_KEY
+    default_model: gpt-4o
+
+  - name: anthropic-api
+    driver: anthropic
+    api_key_env: ANTHROPIC_API_KEY
+    default_model: claude-sonnet-4-20250514
+
+  - name: qwen
+    driver: qwen-cli
+    default_model: qwen3-coder
 ```
 
 ### 驱动类型
@@ -48,6 +67,10 @@ providers:
 | `claude-cli` | 调用 Claude Code CLI（`claude -p`） | Anthropic Claude |
 | `cursor-cli` | 调用 Cursor CLI（`agent --print`） | Cursor |
 | `openai-compat` | 调用 OpenAI 兼容的 HTTP API 端点 | Ollama、Groq、DeepSeek 及任何 OpenAI 兼容服务 |
+| `qwen-cli` | 调用通义千问 Code CLI（`qwen --chat`） | Qwen Code |
+| `openai` | OpenAI 官方 SDK（`github.com/openai/openai-go/v3`） | OpenAI GPT-4、GPT-4o |
+| `gemini` | 原生 Gemini API（`google.golang.org/genai`） | Google Gemini |
+| `anthropic` | Anthropic 官方 SDK（`anthropic-sdk-go`） | Claude（通过 API，非 CLI） |
 
 ### CLI 命令别名
 
@@ -57,6 +80,7 @@ CLI 驱动通过调用二进制命令与 LLM 交互。使用 `command` 字段覆
 |------|---------|
 | `claude-cli` | `claude` |
 | `cursor-cli` | `agent` |
+| `qwen-cli` | `qwen` |
 
 ```yaml
 - name: cursor
@@ -95,6 +119,26 @@ cursor       cli     healthy   claude-3.5-sonnet  -
 ollama       http    healthy   llama3             45ms
 groq         http    healthy   llama-3.3-70b      120ms
 deepseek     http    offline   deepseek-chat      timeout
+```
+
+### 高级提供商选项
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `mode` | `string` | `"stream"` | 响应模式：`"stream"` 为 SSE 流式，`"call"` 为单次响应 |
+| `max_tokens` | `int` | `0` | 每次 LLM 调用的最大输出 token 数；`0` 使用 API 默认值 |
+| `cost_per_token` | `float64` | `0` | 每 token 成本（美元），用于预算追踪；`0` 禁用成本追踪 |
+| `thinking_budget` | `int` | `0` | 思考预算 token 数（仅 `gemini` 驱动）；`0` 禁用 |
+| `extra_args` | `string[]` | `[]` | 传递给 CLI 的额外参数（仅 `claude-cli`、`cursor-cli`、`qwen-cli`） |
+
+**示例** — 带思考预算的 Gemini：
+
+```yaml
+- name: gemini-thinking
+  driver: gemini
+  api_key_env: GOOGLE_API_KEY
+  default_model: gemini-2.5-pro
+  thinking_budget: 8192
 ```
 
 ### API Key 管理
