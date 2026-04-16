@@ -74,9 +74,20 @@ kern.SigBlock(pid, types.SIGTERM)
 kern.SigUnblock(pid, types.SIGTERM)  // delivers pending
 ```
 
-**SIGPAUSE/SIGRESUME**: The reasoning loop calls `WaitIfPaused()` at each step start. When paused, the agent blocks until SIGRESUME.
+**SIGPAUSE/SIGRESUME**: The reasoning loop calls `WaitIfPaused()` at each step start. When paused, the agent blocks until SIGRESUME. The `pausedAt` timestamp is recorded, and the dashboard freezes the elapsed timer at `PausedAt - CreatedAt`. The heartbeat monitor skips paused processes to avoid false stall detection.
 
 Signal delivery uses `resolveSignalDisposition` to atomically determine the dispatch path (blocked → pending / custom handler / default) within a single lock hold, preventing TOCTOU races.
+
+### SignalTree
+
+`SignalTree(pid, signal)` delivers a signal recursively to a process and all its living descendants, skipping zombie/dead processes. Returns the count of affected processes.
+
+```go
+affected, err := kern.SignalTree(pid, types.SIGPAUSE)  // Pause entire subtree
+affected, err := kern.SignalTree(pid, types.SIGRESUME)  // Resume entire subtree
+```
+
+Used by the dashboard `p` key for tree-wide pause/resume toggle. The IPC method `signal_tree` exposes this as a client-callable operation.
 
 ---
 

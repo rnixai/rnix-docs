@@ -52,7 +52,7 @@ stateDiagram-v2
 **State descriptions:**
 
 - **Created** — Process object allocated, but reasoning loop has not started
-- **Running** — Reasoning loop is executing, agent is thinking and using tools
+- **Running** — Reasoning loop is executing, agent is thinking and using tools. A running process can be paused via SIGPAUSE — the reasoning loop blocks until SIGRESUME, but the process remains in Running state.
 - **Zombie** — Reasoning has ended (completed normally, errored, timed out, or killed), waiting for parent process to call Wait for reclamation
 - **Dead** — All resources released, process removed from process table
 
@@ -98,6 +98,8 @@ Each process records its parent-child relationship through PPID (Parent Process 
 | PPID | Parent process PID |
 | Intent | User intent string, immutable after creation |
 | State | Current state (Created/Running/Zombie/Dead) |
+| IsPaused | Whether the process is paused (SIGPAUSE active, reasoning loop blocked) |
+| PausedAt | Timestamp when pause started; zero when not paused |
 | Skills | List of skill names owned by the process |
 | CtxID | Associated context space identifier |
 | FDTable | Process's open file descriptor table |

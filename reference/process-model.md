@@ -79,4 +79,22 @@ type ExitStatus struct {
 
 **Signal Delivery:** Uses `resolveSignalDisposition` to atomically determine the dispatch path within a single lock hold (blocked → pending / handler / default), avoiding TOCTOU races.
 
-**SIGPAUSE/SIGRESUME:** reasonStep calls `proc.WaitIfPaused()` at the start of each step; if `resumeCh` is non-nil, it blocks until Resume closes the channel.
+**SIGPAUSE/SIGRESUME:** reasonStep calls `proc.WaitIfPaused()` at the start of each step; if `resumeCh` is non-nil, it blocks until Resume closes the channel. If the process context is cancelled while paused (e.g., killed), the process exits with code 1 and reason `"context cancelled while paused"`.
+
+**SignalTree:** `SignalTree(pid, signal)` delivers a signal to the target process and all its living descendants recursively, skipping zombie/dead processes. Returns the count of affected processes. Used by the dashboard `p` key for tree-wide pause/resume.
+
+### 7.6 Pause State
+
+When a process receives SIGPAUSE, it enters a paused state while remaining in `StateRunning`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `resumeCh` | `chan struct{}` | `nil` = not paused; non-nil = paused, closed on Resume |
+| `pausedAt` | `time.Time` | Timestamp when `Pause()` was called; zero when not paused |
+
+**Key behaviors:**
+
+- **Elapsed time freezing**: The dashboard tree freezes the elapsed timer at `PausedAt - CreatedAt` while a process is paused, preventing the timer from ticking during intentional idle periods.
+- **Heartbeat monitor**: The heartbeat monitor explicitly skips paused processes. Since paused processes stop sending heartbeats (the reasoning loop is blocked), without this check the monitor would incorrectly flag them as stalled.
+- **Idempotent**: `Pause()` is idempotent (no-op if already paused); `Resume()` is idempotent (no-op if not paused).
+- **Display**: Paused processes show `⏸` (or `[P]` in ASCII mode) instead of the normal running state badge.

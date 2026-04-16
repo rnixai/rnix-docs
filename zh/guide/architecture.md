@@ -218,7 +218,8 @@ CLI 层                    内核层                   VFS/驱动层
 | sigHandlers | `map[Signal]SignalHandler` | 自定义信号处理器 |
 | blockedSignals | `map[Signal]struct{}` | 被阻塞的信号集 |
 | pendingSignals | `map[Signal]struct{}` | 待投递的信号集 |
-| resumeCh | `chan struct{}` | SIGPAUSE/SIGRESUME 协调 |
+| resumeCh | `chan struct{}` | SIGPAUSE/SIGRESUME 协调（`nil` = 未暂停） |
+| pausedAt | `time.Time` | 调用 Pause() 时的时间戳；未暂停时为零值 |
 | threads | `map[TID]*Thread` | 线程表 |
 | coroutines | `map[CoID]*Coroutine` | 协程表 |
 
@@ -295,7 +296,7 @@ go func() {
 1. **wg 追踪**：`wg.Add(1)` 在 goroutine 启动前调用，`wg.Done()` 通过 defer 确保执行。reapProcess 中 `wg.Wait()` 等待 goroutine 退出。
 2. **context.Cancel 取消**：Kill(SIGKILL) 调用 `proc.Cancel()`，reasonStep 循环在每个 step 开头检查 `proc.ctx.Done()`。
 3. **defer CloseAll**：goroutine 退出前关闭所有打开的 VFS 文件描述符。
-4. **SIGPAUSE/SIGRESUME**：reasonStep 在每个 step 开头调用 `proc.WaitIfPaused()`，如果 `resumeCh` 非 nil 则阻塞，直到 Resume 关闭 channel。
+4. **SIGPAUSE/SIGRESUME**：reasonStep 在每个 step 开头调用 `proc.WaitIfPaused()`，如果 `resumeCh` 非 nil 则阻塞，直到 Resume 关闭 channel。若进程在暂停期间上下文被取消（如被 SIGKILL），进程以退出码 1 和原因 `"context cancelled while paused"` 退出。`pausedAt` 字段记录暂停开始时间，使 Dashboard 能将 elapsed 计时器冻结在 `PausedAt - CreatedAt`。心跳监控器显式跳过暂停的进程，以避免误判为卡死。
 
 ### 2.5 资源释放顺序
 

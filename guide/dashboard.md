@@ -49,7 +49,7 @@ Cycle through modes with `v`. The current mode indicator appears in the status b
 
 Real-time display of all processes with parent-child relationships:
 
-- Process state indicators: `●` running, `◐` zombie, `○` dead
+- Process state indicators: `●` running, `⏸` paused, `◐` zombie, `○` dead
 - Token consumption per process
 - Current execution stage (step N/M)
 - Expand/collapse subtrees with arrow keys
@@ -88,7 +88,7 @@ Press `Enter` on a process in the tree to open the detail panel:
 
 ### Prompt View
 
-Press `p` on a selected step in the Timeline to inspect the LLM prompt at that point. The Prompt Viewer has three tabs:
+Press `P` (Shift+P) on a selected step in the Timeline to inspect the LLM prompt at that point. The Prompt Viewer has three tabs:
 
 - **Messages**: Conversation history with role indicators (system, user, assistant, tool). For CLI driver processes (Claude CLI, Cursor CLI), the initial user intent is automatically seeded as the first message.
 - **System**: Full system prompt content loaded for this process, including agent instructions and skill bodies.
@@ -139,6 +139,7 @@ Press `m` to toggle the multi-agent evaluation view:
 The Agent Tree pane shows **all** processes — running, completed, and failed — in a single unified view. There is no separate history mode; dead processes appear alongside active ones.
 
 - Columns: PID, state indicator (`●` running, `✓` done, `✕` failed, `⏸` paused), agent/model, tokens, elapsed, exit code, reason
+- **Elapsed time freezing**: when a process is paused (SIGPAUSE), its elapsed timer freezes at `PausedAt - CreatedAt` instead of continuing to advance. The timer resumes counting when the process is resumed (SIGRESUME).
 - Summary bar: Running / Done / Failed counts, total tokens, average lifetime
 - Sort modes: by time (newest first, active before dead), by PID, or by state
 - Historical processes are loaded from persisted data in `.rnix/data/steps/<uuid>/proc-info.json`
@@ -244,6 +245,7 @@ From `rnix top`, press `d` to switch directly to the dashboard, carrying the cur
 
 | Key | Action |
 |-----|--------|
+| `p` | Pause/resume process tree (toggle SIGPAUSE/SIGRESUME via SignalTree) |
 | `K` (Shift+K) | Kill selected process |
 | `R` (Shift+R) | Resume suspended process |
 | `l` | View log for selected process |

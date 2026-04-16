@@ -74,9 +74,20 @@ kern.SigBlock(pid, types.SIGTERM)
 kern.SigUnblock(pid, types.SIGTERM)  // 投递待处理的信号
 ```
 
-**SIGPAUSE/SIGRESUME**：推理循环在每步开始时调用 `WaitIfPaused()`。暂停后，智能体阻塞直到收到 SIGRESUME。
+**SIGPAUSE/SIGRESUME**：推理循环在每步开始时调用 `WaitIfPaused()`。暂停后，智能体阻塞直到收到 SIGRESUME。`pausedAt` 时间戳被记录，Dashboard 将 elapsed 计时器冻结在 `PausedAt - CreatedAt`。心跳监控器跳过暂停的进程，避免误判为卡死。
 
 信号投递使用 `resolveSignalDisposition` 在单次锁持有内原子性地确定分发路径（阻塞 → 待处理 / 自定义处理器 / 默认），防止 TOCTOU 竞态。
+
+### SignalTree
+
+`SignalTree(pid, signal)` 递归地向目标进程及其所有存活后代发送信号，跳过 zombie/dead 进程。返回受影响的进程数。
+
+```go
+affected, err := kern.SignalTree(pid, types.SIGPAUSE)  // 暂停整个子树
+affected, err := kern.SignalTree(pid, types.SIGRESUME)  // 恢复整个子树
+```
+
+Dashboard 的 `p` 键使用此功能实现树级暂停/恢复切换。IPC 方法 `signal_tree` 将此能力暴露为可供客户端调用的操作。
 
 ---
 

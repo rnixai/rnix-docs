@@ -369,7 +369,7 @@ Arguments: None (cobra.NoArgs)
 - **Timeline pane** — Scrollable event timeline with categorized syscall events (LLM, Tool, IPC, VFS, Error)
 - **Heatmap pane** — Context budget visualization with segment classification (system, skill, tool, user, assistant, leaked)
 
-**Navigation:** Use tab to switch panes, arrow keys to scroll within panes, `q` to quit.
+**Navigation:** Use tab to switch panes, arrow keys to scroll within panes, `p` to pause/resume the selected process tree, `q` to quit.
 
 ### 4.13 rnix record — Execution Recording
 
@@ -534,7 +534,7 @@ $ rnix compose down -f my-workflow.yaml --json
 
 ### 4.19 rnix suspend \<pid\> — Suspend Agent Process
 
-Suspend a running agent process by sending SIGPAUSE.
+Suspend a running agent process by sending SIGPAUSE. The reasoning loop pauses at the start of the next step and blocks until SIGRESUME is received. The process remains in `StateRunning` while paused — this is distinct from checkpoint-based suspension.
 
 ```
 Usage: rnix suspend <pid>
@@ -547,9 +547,11 @@ Arguments: <pid> — Process ID (exactly 1 argument)
 [kernel] PID 1: signal sent (SIGPAUSE)
 ```
 
+**Note:** To pause/resume an entire process tree (including descendants), use the dashboard `p` key which calls `SignalTree`.
+
 ### 4.20 rnix resume \<pid|uuid\> — Resume Suspended Process
 
-Resume a suspended agent process from its checkpoint.
+Resume a suspended agent process from its checkpoint. This command is for checkpoint-based resume (from `StateSuspended`), not for unpausing a SIGPAUSE-paused process — use SIGRESUME for that (via dashboard `p` key or `rnix kill <pid>` with signal 5).
 
 ```
 Usage: rnix resume <pid|uuid>
@@ -560,7 +562,7 @@ Supports both PID (for running daemon processes) and UUID (for resuming from per
 
 ### 4.21 rnix heartbeat — Heartbeat Monitor
 
-Heartbeat monitor management.
+Heartbeat monitor management. The monitor tracks liveness of running processes by checking heartbeat timestamps. Paused processes (SIGPAUSE active) are explicitly skipped — they intentionally stop sending heartbeats while the reasoning loop is blocked.
 
 **Subcommand: `rnix heartbeat status`**
 

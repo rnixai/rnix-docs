@@ -29,6 +29,16 @@ Tokens: 4,797 | Elapsed: 8.3s
 - `s` — attach strace
 - `q` — quit
 
+Paused processes (`⏸`) appear with their elapsed timer frozen at the moment of pause.
+
+---
+
+## Heartbeat Monitor
+
+The heartbeat monitor tracks process liveness by checking heartbeat timestamps. If a running process stops sending heartbeats for longer than its step timeout, it may be flagged as stalled.
+
+**Paused process handling:** The monitor explicitly skips processes in the paused state (SIGPAUSE active). Since paused processes intentionally stop their reasoning loop, they stop sending heartbeats — without this exemption, the monitor would incorrectly flag them as stalled and attempt intervention.
+
 ---
 
 ## rnix log — Reasoning Logs

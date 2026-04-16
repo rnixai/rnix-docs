@@ -218,7 +218,8 @@ CLI Layer                Kernel Layer              VFS/Driver Layer
 | sigHandlers | `map[Signal]SignalHandler` | Custom signal handlers |
 | blockedSignals | `map[Signal]struct{}` | Blocked signal set |
 | pendingSignals | `map[Signal]struct{}` | Pending signal set |
-| resumeCh | `chan struct{}` | SIGPAUSE/SIGRESUME coordination |
+| resumeCh | `chan struct{}` | SIGPAUSE/SIGRESUME coordination (`nil` = not paused) |
+| pausedAt | `time.Time` | Timestamp when Pause() was called; zero if not paused |
 | threads | `map[TID]*Thread` | Thread table |
 | coroutines | `map[CoID]*Coroutine` | Coroutine table |
 
@@ -295,7 +296,7 @@ Key constraints:
 1. **wg tracking**: `wg.Add(1)` is called before goroutine launch; `wg.Done()` is ensured via defer. `wg.Wait()` in reapProcess waits for goroutine exit.
 2. **context.Cancel cancellation**: Kill(SIGKILL) calls `proc.Cancel()`; the reasonStep loop checks `proc.ctx.Done()` at the start of each step.
 3. **defer CloseAll**: All open VFS file descriptors are closed before goroutine exit.
-4. **SIGPAUSE/SIGRESUME**: reasonStep calls `proc.WaitIfPaused()` at the start of each step; if `resumeCh` is non-nil, it blocks until Resume closes the channel.
+4. **SIGPAUSE/SIGRESUME**: reasonStep calls `proc.WaitIfPaused()` at the start of each step; if `resumeCh` is non-nil, it blocks until Resume closes the channel. If the process context is cancelled while paused (e.g., killed via SIGKILL), the process exits with code 1 and reason `"context cancelled while paused"`. The `pausedAt` field records when the pause started, enabling the dashboard to freeze the elapsed timer at `PausedAt - CreatedAt`. The heartbeat monitor explicitly skips paused processes to avoid false stall detection.
 
 ### 2.5 Resource Release Order
 

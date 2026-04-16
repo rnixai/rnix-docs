@@ -67,14 +67,35 @@ type ExitStatus struct {
 
 ### 7.5 Signal 定义
 
-| 常量 | 值 | 说明 |
-|------|-----|------|
-| `SIGTERM` | `1` | 终止信号（优雅关闭） |
-| `SIGKILL` | `2` | 强制杀死 |
+| 常量 | 值 | 可阻塞 | 说明 |
+|------|-----|--------|------|
+| `SIGTERM` | `1` | 是 | 终止信号（优雅关闭） |
+| `SIGKILL` | `2` | 否 | 强制杀死 |
+| `SIGINT` | `3` | 是 | 中断信号 |
+| `SIGPAUSE` | `4` | 是 | 暂停推理循环 |
+| `SIGRESUME` | `5` | 是 | 恢复已暂停的推理循环 |
 
-**有效性检查：** `Signal.Valid()` 方法检查信号值是否为 SIGTERM 或 SIGKILL。
+**信号投递：** 使用 `resolveSignalDisposition` 在单次锁持有中原子地确定分发路径（阻塞 → 挂起 / 自定义处理器 / 默认），避免 TOCTOU 竞争。
 
-**Kill 行为：** 调用 `proc.Cancel()` 取消 context，导致推理 goroutine 中的 LLM 调用被中断。`SIGPAUSE` 暂停推理循环；`SIGRESUME` 恢复已暂停的循环。
+**SIGPAUSE/SIGRESUME：** reasonStep 在每步开始时调用 `proc.WaitIfPaused()`；若 `resumeCh` 非 nil，则阻塞直到 Resume 关闭该 channel。若进程在暂停期间被取消上下文（如被 kill），进程以退出码 1 和原因 `"context cancelled while paused"` 退出。
+
+**SignalTree：** `SignalTree(pid, signal)` 递归地向目标进程及其所有存活后代发送信号，跳过 zombie/dead 进程。返回受影响的进程数。用于 Dashboard 的 `p` 键实现树级暂停/恢复。
+
+### 7.6 暂停状态
+
+当进程收到 SIGPAUSE 后，进入暂停状态，但仍保持在 `StateRunning`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `resumeCh` | `chan struct{}` | `nil` = 未暂停；非 nil = 已暂停，Resume 时关闭 |
+| `pausedAt` | `time.Time` | 调用 `Pause()` 时的时间戳；未暂停时为零值 |
+
+**关键行为：**
+
+- **耗时冻结**：Dashboard 进程树在进程暂停时将 elapsed 计时器冻结在 `PausedAt - CreatedAt`，防止在有意空闲期间计时器继续走动。
+- **心跳监控器**：心跳监控器显式跳过暂停的进程。由于暂停的进程停止发送心跳（推理循环被阻塞），若不做此检查，监控器会错误地将它们标记为卡死。
+- **幂等性**：`Pause()` 是幂等的（已暂停时为 no-op）；`Resume()` 是幂等的（未暂停时为 no-op）。
+- **显示**：暂停的进程显示 `⏸`（ASCII 模式下为 `[P]`），而非正常的运行状态标记。
 
 ---
 

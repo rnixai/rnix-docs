@@ -79,6 +79,9 @@ IPC communication uses the NDJSON (Newline Delimited JSON) format, one JSON obje
 | `list_procs` | Request-Response | — | Gets the list of all active processes |
 | `list_all_procs` | Request-Response | — | Gets the list of all processes including history |
 | `kill` | Request-Response | `KillRequest` | Sends a signal to a process |
+| `signal_tree` | Request-Response | `SignalTreeRequest` | Sends a signal to a process and all descendants |
+| `resume` | Request-Response | `ResumeRequest` | Resumes a suspended process from checkpoint |
+| `list_events` | Request-Response | `ListEventsRequest` | Lists events for a process (from disk for dead processes) |
 | `attach_debug` | Streaming | `AttachDebugRequest` | Subscribes to a SyscallEvent stream |
 | `get_step_detail` | Request-Response | `StepDetailRequest` | Retrieves a single step record |
 | `list_steps` | Request-Response | `ListStepsRequest` | Lists all step summaries for a process |
@@ -96,6 +99,22 @@ IPC communication uses the NDJSON (Newline Delimited JSON) format, one JSON obje
 ```json
 {"pid": 1, "signal": 1}
 ```
+
+**SignalTreeRequest:**
+
+```json
+{"pid": 1, "signal": 4}
+```
+
+`signal` defaults to SIGPAUSE (4) if omitted. Resolves PID from UUID if `uuid` field is provided. Response: `{"affected": 3}` — number of processes that received the signal.
+
+**ResumeRequest:**
+
+```json
+{"uuid": "01912345-6789-7abc-..."}
+```
+
+Resumes a suspended process from its checkpoint. Response: `{"pid": 5, "uuid": "...", "resumed_from_step": 3}`.
 
 **AttachDebugRequest:**
 
@@ -189,6 +208,17 @@ Server → Client:  {"type":"complete","payload":{"event":"complete","pid":1,"re
 
 （Connection closed; IPC Server automatically calls kern.Reap(pid) to clean up the Zombie process）
 ```
+
+### 5.9 ProcInfoWire Pause Fields
+
+The `ProcInfoWire` struct (used for IPC serialization of process info in `list_procs` and `list_all_procs`) includes pause state fields:
+
+| Field | Type | JSON | Description |
+|-------|------|------|-------------|
+| `is_paused` | `bool` | `"is_paused,omitempty"` | Whether the process is currently paused |
+| `paused_at_ms` | `int64` | `"paused_at_ms,omitempty"` | Unix millisecond timestamp when pause started (0 if not paused) |
+
+These fields enable clients (CLI, dashboard) to display pause state and compute frozen elapsed time without additional round-trips.
 
 ### 5.8 AttachDebug Streaming Protocol Example
 

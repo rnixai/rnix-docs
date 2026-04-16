@@ -50,7 +50,7 @@ stateDiagram-v2
 **状态说明：**
 
 - **Created（已创建）** — 进程对象已分配，但推理循环尚未开始
-- **Running（运行中）** — 推理循环正在执行，智能体正在思考和使用工具
+- **Running（运行中）** — 推理循环正在执行，智能体正在思考和使用工具。运行中的进程可以通过 SIGPAUSE 暂停——推理循环阻塞直到收到 SIGRESUME，但进程状态仍为 Running。
 - **Zombie（僵尸）** — 推理已结束（正常完成、出错、超时或被 Kill），等待父进程调用 Wait 回收
 - **Dead（死亡）** — 所有资源已释放，进程从进程表中移除
 
@@ -96,6 +96,8 @@ CLI 输出示例：
 | PPID | 父进程 PID |
 | Intent | 用户意图字符串，创建后不可变 |
 | State | 当前状态（Created/Running/Zombie/Dead） |
+| IsPaused | 进程是否处于暂停状态（SIGPAUSE 生效，推理循环阻塞） |
+| PausedAt | 暂停开始的时间戳；未暂停时为零值 |
 | Skills | 进程拥有的 Skill 名称列表 |
 | CtxID | 关联的上下文空间标识符 |
 | FDTable | 进程打开的文件描述符表 |

@@ -79,6 +79,9 @@ IPC 通信使用 NDJSON（Newline Delimited JSON）格式，每行一个 JSON �
 | `list_procs` | 请求-响应 | — | 获取所有活跃进程列表 |
 | `list_all_procs` | 请求-响应 | — | 获取所有进程列表（含历史记录） |
 | `kill` | 请求-响应 | `KillRequest` | 发送信号到进程 |
+| `signal_tree` | 请求-响应 | `SignalTreeRequest` | 向进程及其所有后代发送信号 |
+| `resume` | 请求-响应 | `ResumeRequest` | 从检查点恢复挂起的进程 |
+| `list_events` | 请求-响应 | `ListEventsRequest` | 列出进程事件（已结束进程从磁盘加载） |
 | `attach_debug` | 流式 | `AttachDebugRequest` | 订阅 SyscallEvent 流 |
 | `get_step_detail` | 请求-响应 | `StepDetailRequest` | 检索单个步骤记录 |
 | `list_steps` | 请求-响应 | `ListStepsRequest` | 列出进程的所有步骤摘要 |
@@ -96,6 +99,22 @@ IPC 通信使用 NDJSON（Newline Delimited JSON）格式，每行一个 JSON �
 ```json
 {"pid": 1, "signal": 1}
 ```
+
+**SignalTreeRequest：**
+
+```json
+{"pid": 1, "signal": 4}
+```
+
+`signal` 省略时默认为 SIGPAUSE(4)。若提供 `uuid` 字段则从 UUID 解析 PID。响应：`{"affected": 3}` — 收到信号的进程数。
+
+**ResumeRequest：**
+
+```json
+{"uuid": "01912345-6789-7abc-..."}
+```
+
+从检查点恢复挂起的进程。响应：`{"pid": 5, "uuid": "...", "resumed_from_step": 3}`。
 
 **AttachDebugRequest：**
 
@@ -204,6 +223,17 @@ Server → Client:  {"type":"eof"}
 
 （进程退出 → DebugChan 关闭 → range 循环结束 → 发送 eof → 连接关闭）
 ```
+
+### 5.9 ProcInfoWire 暂停字段
+
+`ProcInfoWire` 结构体（用于 `list_procs` 和 `list_all_procs` 中进程信息的 IPC 序列化）包含暂停状态字段：
+
+| 字段 | 类型 | JSON | 说明 |
+|------|------|------|------|
+| `is_paused` | `bool` | `"is_paused,omitempty"` | 进程是否当前处于暂停状态 |
+| `paused_at_ms` | `int64` | `"paused_at_ms,omitempty"` | 暂停开始的 Unix 毫秒时间戳（未暂停时为 0） |
+
+这些字段使客户端（CLI、Dashboard）能够显示暂停状态并计算冻结的 elapsed 时间，无需额外通信往返。
 
 ---
 

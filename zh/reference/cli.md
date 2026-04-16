@@ -369,7 +369,7 @@ gdb> continue
 - **时间线窗格** — 可滚动的事件时间线，按系统调用事件分类（LLM、Tool、IPC、VFS、Error）
 - **热力图窗格** — 上下文预算可视化，含段分类（system、skill、tool、user、assistant、leaked）
 
-**导航：** 使用 Tab 切换窗格，方向键在窗格内滚动，`q` 退出。
+**导航：** 使用 Tab 切换窗格，方向键在窗格内滚动，`p` 暂停/恢复选中的进程树，`q` 退出。
 
 ### 4.13 rnix record — 执行录制
 
@@ -534,7 +534,7 @@ $ rnix compose down -f my-workflow.yaml --json
 
 ### 4.19 rnix suspend \<pid\> — 挂起智能体进程
 
-挂起运行中的智能体进程，发送 SIGPAUSE 信号。
+通过发送 SIGPAUSE 信号暂停运行中的智能体进程。推理循环在下一步开始时暂停并阻塞，直到收到 SIGRESUME。进程在暂停期间仍保持 `StateRunning` 状态——这与基于检查点的挂起不同。
 
 ```
 用法：rnix suspend <pid>
@@ -547,9 +547,11 @@ $ rnix compose down -f my-workflow.yaml --json
 [kernel] PID 1: signal sent (SIGPAUSE)
 ```
 
+**注意：** 要暂停/恢复整个进程树（包括后代进程），请使用 Dashboard 的 `p` 键，它会调用 `SignalTree`。
+
 ### 4.20 rnix resume \<pid|uuid\> — 恢复已挂起进程
 
-从检查点恢复已挂起的智能体进程。
+从检查点恢复已挂起的智能体进程。此命令用于基于检查点的恢复（从 `StateSuspended`），而非恢复 SIGPAUSE 暂停的进程——后者请使用 SIGRESUME（通过 Dashboard `p` 键或 `rnix kill <pid>` 发送信号 5）。
 
 ```
 用法：rnix resume <pid|uuid>
@@ -560,7 +562,7 @@ $ rnix compose down -f my-workflow.yaml --json
 
 ### 4.21 rnix heartbeat — 心跳监控
 
-心跳监控管理。
+心跳监控管理。监控器通过检查心跳时间戳来追踪运行中进程的活性。暂停的进程（SIGPAUSE 生效）会被显式跳过——它们在推理循环阻塞期间有意停止发送心跳。
 
 **子命令：`rnix heartbeat status`**
 
