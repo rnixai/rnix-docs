@@ -128,7 +128,7 @@ deepseek     http    offline   deepseek-chat      timeout
 | `mode` | `string` | `"stream"` | 响应模式：`"stream"` 为 SSE 流式，`"call"` 为单次响应 |
 | `max_tokens` | `int` | `0` | 每次 LLM 调用的最大输出 token 数；`0` 使用 API 默认值 |
 | `cost_per_token` | `float64` | `0` | 每 token 成本（美元），用于预算追踪；`0` 禁用成本追踪 |
-| `thinking_budget` | `int` | `0` | 思考预算 token 数（仅 `gemini` 驱动）；`0` 禁用 |
+| `thinking_budget` | `int` | `0` | 思考预算 token 数（`gemini`、`anthropic` 和 `openai-compat` 驱动）；`0` 禁用 |
 | `extra_args` | `string[]` | `[]` | 传递给 CLI 的额外参数（仅 `claude-cli`、`cursor-cli`、`qwen-cli`） |
 
 **示例** — 带思考预算的 Gemini：
@@ -139,6 +139,17 @@ deepseek     http    offline   deepseek-chat      timeout
   api_key_env: GOOGLE_API_KEY
   default_model: gemini-2.5-pro
   thinking_budget: 8192
+```
+
+**示例** — DeepSeek V4 扩展推理：
+
+```yaml
+- name: deepseek-think
+  driver: openai-compat
+  base_url: https://api.deepseek.com/v1
+  api_key_env: DEEPSEEK_API_KEY
+  default_model: deepseek-reasoner
+  thinking_budget: 16384
 ```
 
 ### API Key 管理
@@ -167,6 +178,45 @@ myproject/.rnix/providers.yaml
 ```
 
 项目级 provider 与全局 provider **深度合并**——你可以只覆盖特定字段（如 `api_key_env` 或 `default_model`），无需重新定义整个 provider 列表。全局不存在的项目级 provider 会被添加为仅在该项目中可用的新 provider。
+
+---
+
+## 提示词缓存
+
+### Anthropic 原生缓存
+
+使用 `anthropic` 驱动时，Rnix 会自动在三个位置注入 `cache_control` 断点，以最大化跨推理步骤的缓存复用：
+
+1. **系统提示词** — 完整的 Agent 系统提示（指令 + Skills）
+2. **工具定义** — 所有已注册的 VFS 设备 Schema
+3. **最近用户轮次** — 最新的用户消息
+
+这符合 Anthropic 针对 agentic 工作负载的推荐缓存策略。无需额外配置——只要使用 `anthropic` 驱动且模型支持缓存，缓存就会自动生效。
+
+**缓存命中率语义** — 仪表盘在时间线中展示每步的缓存命中率。`anthropic` 驱动的计算公式为：
+
+```
+命中率 = CacheReadInputTokens / (input_tokens + CacheReadInputTokens)
+```
+
+`openai-compat` 和 CLI 驱动的计算公式为：
+
+```
+命中率 = cached_tokens / input_tokens   （OpenAI 惯例：input 已包含 cached）
+```
+
+详见[可视化仪表盘](/zh/guide/dashboard#追踪时间线面板)中的时间线显示。
+
+### 启用 Anthropic 驱动
+
+```yaml
+- name: anthropic-api
+  driver: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  default_model: claude-sonnet-4-20250514
+```
+
+在环境变量或项目 `.env` 文件中设置 `ANTHROPIC_API_KEY`。
 
 ---
 

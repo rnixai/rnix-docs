@@ -14,9 +14,9 @@ $ rnix dashboard
 ┌─ Agent Tree ──────────┬─ Tracing Timeline ─────────────────────┐
 │                        │                                        │
 │ ● PID 1 (running)      │ [0.0s]─────[3.8s]─────[8.0s]──[10.5s]│
-│   ├─ PID 5 analyst ●   │  ██████    Open Read Write Close      │
-│   ├─ PID 6 doc-gen ◐   │       ████████ LLM call (5.2s)        │
-│   └─ PID 7 checker ○   │                    ██ tool call        │
+│   ├─ ● PID 5 analyst   │  ██████    Open Read Write Close      │
+│   ├─ ⏸ PID 6 doc-gen   │       ████████ LLM call (5.2s)        │
+│   └─ ○ PID 7 checker   │                    ██ tool call        │
 │                        │                                        │
 ├────────────────────────┼────────────────────────────────────────┤
 │ Context Heatmap        │ Details                                │
@@ -49,20 +49,27 @@ Cycle through modes with `v`. The current mode indicator appears in the status b
 
 Real-time display of all processes with parent-child relationships:
 
-- Process state indicators: `●` running, `⏸` paused, `◐` zombie, `○` dead
+- Process state indicators: `●` running, `⏸` paused, `◐` zombie, `✕` failed, `○` dead
 - Token consumption per process
 - Current execution stage (step N/M)
 - Expand/collapse subtrees with arrow keys
 - Shows process UUID alongside PID for unique identification
+- **Subtree pause/resume**: select a parent process and toggle pause to affect the entire subtree
 
 ### Tracing Timeline Pane
 
 Horizontal timeline showing syscall events for the selected agent (or entire Compose workflow):
 
+- **Default sort: ascending** — steps are displayed oldest-first, matching debug reading order. Press `o` to toggle between ascending and descending.
 - **Three-level detail**: press `Enter` on an event to drill down:
   - Level 1: Event category (LLM / Tool / IPC / VFS)
   - Level 2: Event parameters and timing
   - Level 3: Full request/response payload
+- **Tool call aggregation (toolAggGroup)**: 3+ consecutive steps with the same tool are folded into a group (`▶`). Press `Enter` on the group header to expand; press again to collapse. `[`/`]` jump between groups.
+- **Cache hit rate column**: each LLM step shows a cache hit % computed with driver-aware semantics (see [LLM Providers](/guide/llm-providers#prompt-caching)).
+- **Dynamic context window**: the timeline header shows the context window size for the current model.
+- **Stall intensity rendering**: stalled steps show visual intensity indicators — color-coded by duration and severity
+- **EXIT severity**: uses authoritative `ExitCode` from the process for exit event coloring
 - Zoom in/out with `+`/`-`
 - Scroll with left/right arrows
 - Filter by category: `f` → LLM / Tool / IPC / VFS
@@ -85,6 +92,20 @@ Press `Enter` on a process in the tree to open the detail panel:
 - Token usage and budget
 - Current step and execution progress
 - MCP mount information
+- **Heartbeat status**: live, stalled, or paused indicator with stall intensity for degraded processes
+- **Pause duration**: for suspended processes, shows elapsed pause time
+
+### Stall Intensity Rendering
+
+When a process stalls (stops sending heartbeats but hasn't exceeded timeout), the detail panel renders visual indicators:
+
+| Level | Indicator | Meaning |
+|-------|-----------|---------|
+| **Normal** | Green pulse | Heartbeat received within threshold |
+| **Stall Warning** | Yellow pulse | Heartbeat overdue, process may be stuck on a long operation |
+| **Stall Critical** | Red pulse | Heartbeat significantly overdue, may require intervention |
+
+Stall detection is passive (warn-only) — the dashboard reports status but does not automatically intervene.
 
 ### Prompt View
 
@@ -136,19 +157,23 @@ Press `m` to toggle the multi-agent evaluation view:
 
 ## Unified Process Tree (with History)
 
-The Agent Tree pane shows **all** processes — running, completed, and failed — in a single unified view. There is no separate history mode; dead processes appear alongside active ones.
+The Agent Tree pane shows **all** processes — running, completed, failed, and suspended — in a single unified view. There is no separate history mode; dead processes appear alongside active ones.
 
-- Columns: PID, state indicator (`●` running, `✓` done, `✕` failed, `⏸` paused), agent/model, tokens, elapsed, exit code, reason
+- Columns: PID, state indicator (`●` running, `⏸` paused, `✓` done, `✕` failed), agent/model, tokens, elapsed, exit code, reason
 - **Elapsed time freezing**: when a process is paused (SIGPAUSE), its elapsed timer freezes at `PausedAt - CreatedAt` instead of continuing to advance. The timer resumes counting when the process is resumed (SIGRESUME).
-- Summary bar: Running / Done / Failed counts, total tokens, average lifetime
+- Summary bar: Running / Done / Failed / Suspended counts, total tokens, average lifetime
 - Sort modes: by time (newest first, active before dead), by PID, or by state
 - Historical processes are loaded from persisted data in `.rnix/data/steps/<uuid>/proc-info.json`
 - Dead subtrees can be collapsed/expanded for cleaner navigation
 - Select any process (alive or dead) to view its full observation data:
-  - **Detail panel** — PID, UUID, provider/model, state, skills, tokens
+  - **Detail panel** — PID, UUID, provider/model, state, skills, tokens, heartbeat status
   - **Timeline** — events loaded from `events.jsonl` on disk
   - **Heatmap** — context snapshot from `ctx-profile.json`
   - **Steps/LLM** — reasoning steps from `steps.jsonl` + system prompt from `process-meta.json`
+
+### Resumable Process Listing
+
+Press `R` (Shift+R) to filter the tree to show only resumable processes — Suspended, Zombie, and Dead processes with persisted data on disk. From this view, press `Enter` on a process to resume it.
 
 ### LLM Conversation Viewer
 
@@ -188,6 +213,21 @@ Press `d` to enter debug mode — a dedicated view combining real-time strace ev
 
 ## Navigation
 
+### V2.1 Key Bindings
+
+The dashboard follows V2.1 navigation conventions:
+
+| Key | Context | Action |
+|-----|---------|--------|
+| `j`/`↓` | Tree, Timeline, History | Move down one visible row (skips collapsed group internals) |
+| `k`/`↑` | Tree, Timeline, History | Move up one visible row |
+| `Enter` | Timeline | **Context-aware**: on group header → toggle fold; on leaf → drill-in (Level 2 expand) |
+| `[` | Timeline | Dual-mode: no search → jump to previous group; search active → previous match |
+| `]` | Timeline | Dual-mode: no search → jump to next group; search active → next match |
+| `e` | Timeline | Expand all steps — **sticky**: new steps auto-expand |
+| `E` (Shift+E) | Timeline | Expand errors-only — sticky mode showing only error steps |
+| `C` | Timeline | Collapse all steps |
+
 ### Pane Navigation
 
 | Key | Action |
@@ -212,10 +252,15 @@ Press `d` to enter debug mode — a dedicated view combining real-time strace ev
 
 | Key | Action |
 |-----|--------|
-| `v`/`Enter` | Expand step detail (L2) |
+| `Enter` | Context-aware: fold toggle or drill-in |
+| `v` | Expand step detail (L2) |
 | `V` (Shift+V) | Debug detail (L3) |
-| `e` | Expand all visible steps |
-| `E` (Shift+E) | Collapse all visible steps |
+| `e` | Expand all — sticky |
+| `E` (Shift+E) | Expand errors-only — sticky |
+| `C` | Collapse all |
+| `o` | Toggle sort direction (ascending ↑ default / descending ↓) |
+| `[` | Jump to previous group / search match |
+| `]` | Jump to next group / search match |
 | `n` | Jump to next error |
 | `N` (Shift+N) | Jump to previous error |
 | `P` (Shift+P) | Open prompt viewer for selected step |
@@ -245,9 +290,10 @@ From `rnix top`, press `d` to switch directly to the dashboard, carrying the cur
 
 | Key | Action |
 |-----|--------|
-| `p` | Pause/resume process tree (toggle SIGPAUSE/SIGRESUME via SignalTree) |
+| `p` | Pause/resume selected process (toggle SIGPAUSE/SIGRESUME) |
+| `P` (Shift+P) | Pause/resume entire subtree (SignalTree with propagation) |
 | `K` (Shift+K) | Kill selected process |
-| `R` (Shift+R) | Resume suspended process |
+| `R` (Shift+R) | Resume suspended process (from persisted state) |
 | `l` | View log for selected process |
 | `r` | Toggle recording for selected process |
 | `a` | Toggle alerts panel |
@@ -289,8 +335,9 @@ Provides the same multi-pane view with full navigation through historical data, 
 
 ## Related Documentation
 
+- [Process Resume](/guide/process-resume) — Pause, resume, and process recovery
 - [Debugging](/guide/debugging) — strace and gdb
 - [Distributed Tracing](/guide/distributed-tracing) — Trace IDs and blame analysis
 - [Time-Travel Debugging](/guide/time-travel) — Recording and replay
-- [Monitoring](/guide/monitoring) — rnix top process monitor
+- [Monitoring](/guide/monitoring) — rnix top, heartbeat monitor, and supervisor trees
 - [Security](/guide/security) — Immune system configuration

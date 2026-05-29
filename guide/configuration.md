@@ -1,44 +1,82 @@
 # Configuration Guide
 
-Rnix uses a two-tier configuration system with YAML files, agent definitions, and skill definitions. Run `rnix init` to bootstrap the configuration environment.
+Rnix uses a layered configuration system with YAML files, agent definitions, and skill definitions. Run `rnix init` to bootstrap the configuration environment.
 
 ---
 
-## Two-Tier Configuration
+## Configuration Model
 
-Rnix follows a **global + project** configuration model:
+Rnix configuration has two independent dimensions:
+
+### 1. Config Layering (XDG-style)
+
+YAML config files (`providers.yaml`, `config.yaml`, `web-search.yaml`) follow a **global + project** two-tier model:
 
 | Tier | Location | Purpose |
 |------|----------|---------|
-| **Global** | `~/.config/rnix/` (or `$XDG_CONFIG_HOME/rnix/`) | User-wide defaults, shared agents and skills |
-| **Project** | `<project>/.rnix/` | Project-specific overrides and definitions |
+| **Global** | `~/.config/rnix/` (or `$XDG_CONFIG_HOME/rnix/`) | User-wide defaults |
+| **Project** | `<project>/.rnix/` | Project-specific overrides |
+
+YAML files deep-merge: project values override global values.
+
+### 2. Skill Storage (agentskills.io 2×2 model)
+
+Skills follow the [agentskills.io](https://agentskills.io/) specification's dual-scope × dual-namespace model. Rnix implements **two namespaces per scope**:
+
+| | Native Namespace (Rnix) | Agents Namespace (agentskills.io) |
+|---|---|---|
+| **Project scope** | `<project>/.rnix/skills/` | `<project>/.agents/skills/` |
+| **User scope** | `~/.config/rnix/skills/` | `~/.agents/skills/` |
+
+- **Native namespace** (`.rnix/skills/`, `~/.config/rnix/skills/`): Rnix-specific skills, highest priority within each scope
+- **Agents namespace** (`.agents/skills/`, `~/.agents/skills/`): Follows the agentskills.io cross-tool standard — skills placed here are visible to Cursor, OpenCode, Windsurf, and other compatible tools
+
+Priority: `project/native > project/agents > user/native > user/agents`. See [Skill Packages](/guide/skill-packages) for the full resolution model.
 
 ### Directory Structure
 
 ```
-~/.config/rnix/              ← Global (created by rnix init)
-├── providers.yaml           ← LLM provider definitions
-├── config.yaml              ← Global configuration
-├── agents/                  ← Global agent definitions
+~/.config/rnix/                  ← Global config (created by rnix init)
+├── providers.yaml
+├── config.yaml
+├── web-search.yaml
+├── agents/                      ← Global agent definitions
 │   └── code-analyst/
 │       ├── agent.yaml
 │       └── instructions.md
-└── skills/                  ← Global skill definitions
-    └── code-analysis/
-        └── SKILL.md
+├── skills/                      ← User skills (native namespace)
+│   └── code-analysis/
+│       └── SKILL.md
+└── data/
 
-<project>/.rnix/             ← Project (created by rnix init in project dir)
-├── providers.yaml           ← Project provider overrides (optional)
-├── config.yaml              ← Project configuration (optional)
-├── agents/                  ← Project-specific agents
-├── skills/                  ← Project-specific skills
-└── data/                    ← Runtime data (records, traces)
+~/.agents/skills/                ← User skills (agents namespace, agentskills.io standard)
+└── web-research/                ←   Shared with Cursor, OpenCode, etc.
+    └── SKILL.md
+
+<project>/.rnix/                  ← Project config (created by rnix init)
+├── providers.yaml
+├── config.yaml
+├── init.yaml
+├── compose.yaml
+├── web-search.yaml
+├── agents/                      ← Project agent definitions
+├── skills/                      ← Project skills (native namespace)
+├── state/                       ← Runtime state (trust marker, etc.)
+├── data/
+└── steps/
+
+<project>/.agents/skills/        ← Project skills (agents namespace, agentskills.io standard)
+└── shared-util/                 ←   Shared across tools in the project
+    └── SKILL.md
 ```
+
+> **Note**: `~/.agents/skills/` and `.agents/skills/` are **not** created by `rnix init`. They are created on first use (`rnix skill install --shared`). This follows agentskills.io convention where the `.agents/` directory belongs to the ecosystem, not any single tool.
 
 ### Merge Rules
 
-- **YAML files** (`providers.yaml`, `config.yaml`): Deep merge — project-level values override global-level
-- **Resource directories** (`agents/`, `skills/`): Shadow — project-level definitions with the same name completely shadow global-level
+- **YAML files** (`providers.yaml`, `config.yaml`, `web-search.yaml`): Deep merge — project overrides global
+- **Agent directories** (`agents/`): Shadow — project agent with same name completely replaces global agent
+- **Skill directories** (`skills/`): Shadow with 2×2 priority — `project/native > project/agents > user/native > user/agents`. Winning copy completely replaces shadowed copies.
 
 ### Initialization
 
@@ -47,9 +85,37 @@ Rnix follows a **global + project** configuration model:
 $ rnix init
 [init] created ~/.config/rnix/
 [init] created .rnix/
+
+# With MCP example configurations
+$ rnix init --with-mcp-examples
+[init] created ~/.config/rnix/
+[init] created .rnix/
+[init] added agents/playwright-demo/ with MCP Playwright config
+[init] added agents/github-assistant/ with MCP GitHub config
 ```
 
-`rnix init` is idempotent — it skips existing files and directories.
+`rnix init` is idempotent — it skips existing files and directories. `--with-mcp-examples` runs preflight checks to verify required binaries (e.g., `npx`) are available before creating example configs.
+
+---
+
+## config.yaml — Global Configuration
+
+Located at `~/.config/rnix/config.yaml` (global) and optionally `.rnix/config.yaml` (project override).
+
+### Garbage Collection
+
+```yaml
+gc:
+  retention_days: 30      # Delete dead_at entries older than N days; 0 = disabled
+  max_entries: 500        # Keep at most N history entries; 0 = disabled
+  interval_seconds: 3600  # Background scan period (min 60, default 1h)
+```
+
+- `retention_days` and `max_entries` are combined — hitting either triggers cleanup
+- Set both to 0 to disable the GC daemon entirely
+- Running and Suspended processes are permanently exempt
+
+See [Process Resume](/guide/process-resume#garbage-collection) for GC CLI usage.
 
 ---
 
@@ -96,7 +162,7 @@ providers:
 | `default_provider` | `string` | Default provider when none specified (default: `claude`) |
 | `providers[].name` | `string` | Provider name, maps to `/dev/llm/<name>` |
 | `providers[].driver` | `string` | Driver type: `claude-cli`, `cursor-cli`, or `openai-compat` |
-| `providers[].command` | `string` | CLI binary name override for CLI drivers (e.g., `agent`, `claude`, `/usr/local/bin/claude`) |
+| `providers[].command` | `string` | CLI binary name override for CLI drivers |
 | `providers[].default_model` | `string` | Default model name |
 | `providers[].base_url` | `string` | API base URL (for `openai-compat` driver) |
 | `providers[].api_key_env` | `string` | Environment variable name for API key |
@@ -109,31 +175,7 @@ providers:
 | `cursor-cli` | Invokes Cursor CLI (`agent --print`) | Cursor |
 | `openai-compat` | Calls OpenAI-compatible HTTP API | Ollama, Groq, DeepSeek, any OpenAI-compatible endpoint |
 
-### CLI Command Alias
-
-CLI drivers (`claude-cli`, `cursor-cli`) invoke a binary to interact with the LLM. The default binary names are:
-
-| Driver | Default Command |
-|--------|----------------|
-| `claude-cli` | `claude` |
-| `cursor-cli` | `agent` |
-
-Use the `command` field to override the binary name — useful when the CLI is installed at a non-standard path or under a different name:
-
-```yaml
-providers:
-  - name: cursor
-    driver: cursor-cli
-    command: cursor-agent        # Override default "agent"
-
-  - name: claude
-    driver: claude-cli
-    command: /usr/local/bin/claude   # Full path override
-```
-
 ### Provider Resolution Priority
-
-When spawning an agent, the LLM provider is resolved in this order:
 
 1. `--provider` CLI flag (highest priority)
 2. `agent.yaml` → `models.provider` field
@@ -149,20 +191,35 @@ When spawning an agent, the LLM provider is resolved in this order:
 
 ### API Key Management
 
-API keys are referenced via environment variables — never stored directly in config files:
+API keys are referenced via environment variables — never stored directly in config files. Resolved from project `.env` files first, then daemon process environment.
+
+---
+
+## web-search.yaml — Web Search Backends
+
+Configure search backends for the `/dev/web` device. Located at `~/.config/rnix/web-search.yaml` (global) or `.rnix/web-search.yaml` (project, takes priority).
 
 ```yaml
-- name: groq
-  driver: openai-compat
-  api_key_env: GROQ_API_KEY   # Reads $GROQ_API_KEY at runtime
+version: "1"
+default_backend: tavily
+backends:
+  - name: tavily
+    driver: tavily
+    api_key_env: TAVILY_API_KEY
+    max_results: 5
+    search_depth: basic
+
+  - name: exa
+    driver: exa
+    api_key_env: EXA_API_KEY
+    num_results: 5
+
+  - name: local-searxng
+    driver: searxng
+    base_url: http://localhost:8888
 ```
 
-API keys are resolved from the following sources (in priority order):
-
-1. **Project `.env` files** (if project has `.rnix/` directory)
-2. **Daemon process environment** (`os.Getenv`)
-
-See [Environment Files](#environment-files-env) below for details.
+The project file fully overrides the global file (no merging). See [Web Search](/guide/web-search) for backend details and quick-start options.
 
 ---
 
@@ -171,8 +228,6 @@ See [Environment Files](#environment-files-env) below for details.
 Rnix supports project-level `.env` files for managing API keys and other environment variables without polluting the daemon's process environment.
 
 ### Loading Order
-
-When a spawn request specifies a project directory (containing `.rnix/`), the daemon loads `.env` files from the project root in this order (later files override earlier):
 
 1. `.env` — Base environment
 2. `.env.local` — Local overrides (gitignore this)
@@ -184,59 +239,18 @@ When a spawn request specifies a project directory (containing `.rnix/`), the da
 The `RNIX_ENV` environment variable selects which environment-specific files to load. Default: `development`.
 
 ```bash
-# Use production environment
 RNIX_ENV=production rnix "deploy the service"
-
-# Default (development)
-rnix "analyze code quality"
-```
-
-Valid values: alphanumeric characters, hyphens, and underscores (`^[a-zA-Z0-9_-]+$`).
-
-### Syntax
-
-```bash
-# Key=Value (unquoted)
-API_KEY=sk-xxx
-
-# Double-quoted (supports \n, \t, \\, \" escapes)
-PROMPT="Hello\nWorld"
-
-# Single-quoted (literal, no escapes)
-REGEX='foo\.bar'
-
-# Empty value
-EMPTY_VAR=
-
-# Comments
-# This is a comment
-API_KEY=value  # Inline comment
-
-# Optional export prefix
-export DATABASE_URL=postgres://localhost/mydb
 ```
 
 ### Project Isolation
 
 Each spawn request generates an independent environment snapshot from `.env` files. Variables are **not** written to `os.Setenv` — different projects' environments are fully isolated, even when sharing the same daemon.
 
-### Example
-
-```
-myproject/
-├── .rnix/
-│   └── providers.yaml    ← Project provider overrides
-├── .env                   ← API_KEY=dev-key
-├── .env.local             ← API_KEY=my-local-key (gitignored)
-├── .env.production        ← API_KEY=prod-key
-└── .gitignore             ← *.local, .env.local
-```
-
 ---
 
 ## init.yaml — Bootstrap Services
 
-This file defines services that start automatically when the daemon launches. Located at `~/.config/rnix/init.yaml` or `.rnix/init.yaml`.
+Defines services that start automatically when the daemon launches. Located at `.rnix/init.yaml`.
 
 ```yaml
 version: "1.0"
@@ -278,7 +292,7 @@ services:
 
 ## compose.yaml — Multi-Agent Workflows
 
-Compose files define DAG-based multi-agent workflows. Located at `.rnix/compose.yaml` or project root.
+Compose files define DAG-based multi-agent workflows. Located at `.rnix/compose.yaml`.
 
 ```yaml
 version: "1.0"
@@ -328,6 +342,7 @@ agents:
 rnix compose up          # Run the workflow
 rnix compose up --json   # Run with JSON output
 rnix compose down        # Stop all compose processes
+rnix compose resume --node <name>  # Resume a failed DAG node
 ```
 
 ---
@@ -356,6 +371,8 @@ mcp:
       args: ["-y", "@anthropic/mcp-github"]
       env:
         GITHUB_TOKEN: "${GITHUB_TOKEN}"
+      timeout: 30s
+      max_output_tokens: 4096
 ```
 
 ### Fields
@@ -374,15 +391,30 @@ mcp:
 | `skills` | `[]string` | No | Referenced skill names |
 | `mcp` | `object` | No | MCP server configurations |
 
-### Shadow Resolution
+### MCP Server Config Fields
 
-When the same agent name exists in both project and global directories, the **project-level definition completely shadows the global one**. There is no merging at the agent level.
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `command` | `string` | Yes | Executable to launch the MCP server |
+| `args` | `[]string` | No | Command-line arguments |
+| `env` | `map[string]string` | No | Environment variables (`${VAR}` expansion) |
+| `timeout` | `duration` | No | Per-server timeout (default: `30s`) |
+| `max_output_tokens` | `int` | No | Max tokens per tool output |
 
 ---
 
 ## Skill Definition — SKILL.md
 
-Skills are defined as `SKILL.md` files in `skills/<name>/` (global: `~/.config/rnix/skills/`, project: `.rnix/skills/`).
+Skills are defined as `SKILL.md` files following the [agentskills.io](https://agentskills.io/) standard. Storage uses a four-path model (project/user × native/agents namespace):
+
+| Path | Scope | Namespace | Priority |
+|------|-------|-----------|----------|
+| `<project>/.rnix/skills/` | project | native | 1 (highest) |
+| `<project>/.agents/skills/` | project | agents | 2 |
+| `~/.config/rnix/skills/` | user | native | 3 |
+| `~/.agents/skills/` | user | agents | 4 (lowest) |
+
+See [Skill Packages](/guide/skill-packages) for the full multi-scope management model.
 
 ```markdown
 ---
@@ -390,7 +422,7 @@ name: code-analysis
 description: >
   Analyze code quality, identify bugs, performance issues
   and security vulnerabilities.
-allowed-tools: /dev/fs /dev/shell
+allowed-tools: /dev/fs /dev/shell /dev/web
 metadata:
   author: rnix
   version: "1.0"
@@ -428,10 +460,10 @@ The `allowed-tools` field is the core of Rnix's permission model. A skill can on
 | `/dev/fs` | Host filesystem read/write |
 | `/dev/shell` | Shell command execution |
 | `/dev/llm/<provider>` | LLM inference |
+| `/dev/web` | Web search and fetch |
+| `/mnt/mcp/*` | MCP server tools |
 
-When multiple skills are loaded by an agent, their `allowed-tools` are **unioned** — the agent can access any device permitted by any of its skills.
-
-Empty `allowed-tools` means **no restrictions** (can access all devices).
+When multiple skills are loaded by an agent, their `allowed-tools` are **unioned** — the agent can access any device permitted by any of its skills. Empty `allowed-tools` means **no restrictions** (can access all devices).
 
 ---
 
@@ -443,6 +475,9 @@ Empty `allowed-tools` means **no restrictions** (can access all devices).
 | `RNIX_ASCII` | Set to `1` to force ASCII mode (disable Unicode glyphs) |
 | `XDG_CONFIG_HOME` | Override global config directory (default: `~/.config`) |
 | `XDG_RUNTIME_DIR` | Used to determine socket path |
+| `TAVILY_API_KEY` | Tavily search API key (auto-detected for `/dev/web`) |
+| `EXA_API_KEY` | Exa search API key (auto-detected for `/dev/web`) |
+| `RNIX_SEARCH_URL` | SearXNG instance URL (auto-detected for `/dev/web`) |
 
 ## Socket Path
 
@@ -459,5 +494,9 @@ Directory permissions: `0700` (current user only).
 
 - [Quick Start](/guide/quick-start) — Installation and first run
 - [LLM Providers](/guide/llm-providers) — Provider details and serve gateway
+- [Web Search](/guide/web-search) — Search backend configuration
+- [Skill Packages](/guide/skill-packages) — Multi-scope skill management
+- [Process Resume](/guide/process-resume) — GC configuration and process recovery
+- [MCP Integration](/guide/mcp-integration) — MCP server configuration
 - [Core Concepts](/guide/concepts) — Process, VFS, Agent/Skill model
 - [Reference Manual](/reference/) — Complete API and CLI reference

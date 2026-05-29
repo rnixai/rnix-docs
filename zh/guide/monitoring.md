@@ -1,150 +1,186 @@
-# Rnix 系统监控工具
+# 监控与 Supervisor
 
-## 概述
+实时进程监控、分类推理日志、Token 预算管理、心跳监控器、Supervisor 树和 init 引导。
 
-`monitor.sh` 是一个用于持续监控 Rnix daemon 运行状态的脚本，每 30 秒报告一次系统状态摘要。
+---
 
-## 功能
-
-- **Daemon 状态**: 检查 daemon 是否运行中
-- **进程信息**: 显示 daemon 的 PID、内存使用（RSS/VSZ）
-- **管理进程**: 统计当前管理的进程数量
-- **系统资源**: 监控整体 CPU 和内存使用率
-- **日志记录**: 所有状态报告都被记录到日志文件
-
-## 使用方法
-
-### 基本启动
+## rnix top — 实时监控器
 
 ```bash
-./scripts/monitor.sh
+$ rnix top
 ```
 
-### 后台运行
+```
+rnix top — 实时监控器                                    刷新间隔: 1s
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PID  PPID  STATE     AGENT         TOKENS   ELAPSED  INTENT
+1    0     running   code-analyst  2,340    4.5s     分析代码质量
+2    1     running   default       890      2.1s     检查依赖
+3    0     zombie    —             1,567    8.3s     安全扫描
+4    0     paused    doc-writer    450      1.2s     生成文档（已暂停）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+进程: 4 | 运行中: 2 | 僵尸: 1 | 已暂停: 1
+Token: 5,247 | 运行时间: 8.3s
+```
+
+**交互操作：**
+- 使用方向键导航
+- `k` — 杀死选中进程
+- `d` — 查看进程详情（切换到 Dashboard）
+- `s` — 附加 strace 跟踪
+- `p` — 暂停/恢复选中进程
+- `q` — 退出
+
+已暂停的进程（`⏸`）显示时其运行计时器冻结在暂停时刻。心跳监控器会跳过已暂停的进程——它们有意停止发送心跳。
+
+---
+
+## 心跳监控器
+
+心跳监控器通过心跳时间戳追踪进程活性。它以**被动（仅警告）模式**运行——检测卡死但不自动干预。
+
+### 设计哲学
+
+心跳监控是观察性的，而非干预性的：
+
+- **仅警告**：报告卡死状态，但不杀死、重启或以其他方式修改进程
+- **不自动恢复**：Supervisor 树负责崩溃恢复；心跳是检测层
+- **暂停进程豁免**：处于 SIGPAUSE 状态的进程被显式跳过——它们有意停止了推理循环
+
+### 卡死检测
+
+| 状态 | 条件 | Dashboard 指示器 |
+|------|------|------------------|
+| **健康** | 最后一次心跳在步骤超时时间内 | 绿色脉冲 |
+| **卡死警告** | 心跳逾期，但在宽限期内 | 黄色脉冲 |
+| **卡死严重** | 心跳严重逾期 | 红色脉冲（带强度） |
+
+卡死强度在 Dashboard 详情面板中以颜色编码的视觉指示器呈现。
+
+### Script-Runner 心跳
+
+Script-runner 进程在其整个生命周期内维护心跳——而不仅仅是在活跃执行期间。这可以防止在脚本步骤之间的空闲期产生虚假的卡死检测。
+
+---
+
+## Daemon 状态
 
 ```bash
-./scripts/monitor.sh > /dev/null 2>&1 &
+$ rnix daemon status
+[daemon] status: running
+[daemon] pid: 12345
+[daemon] socket: /run/user/1000/rnix/rnix.sock
+[daemon] version: rnix v0.10.0 (commit: abc1234, built: 2026-05-28)
+[daemon] uptime: 3h 22m
+[daemon] processes: 5 running, 2 suspended, 12 history
 ```
 
-或使用 nohup：
+Daemon 报告内容：
+- **版本**：三源回退（构建信息 → VERSION 文件 → git describe）
+- **构建元数据**：提交哈希和构建时间戳
+- **进程计数**：运行中、已暂停和历史（Dead/Zombie）进程数量
+
+---
+
+## rnix log — 推理日志
+
+查看 Agent 的推理过程，输出按类别分类：
 
 ```bash
-nohup ./scripts/monitor.sh &
+$ rnix log <pid>
+[think] 正在分析 main.go 文件结构...
+[tool]  Open(/dev/fs/./src/main.go) → 读取 2,048 字节
+[think] 在错误处理中发现 3 个潜在问题...
+[tool]  Open(/dev/shell) → 运行 "golangci-lint run ./..."
+[output] ## 代码质量报告
+          1. 第 45 行缺少错误包装...
 ```
 
-### 查看日志
+**分类：**
+- `[think]` — LLM 推理（内部思考）
+- `[tool]` — 工具调用（VFS 操作）
+- `[output]` — 最终用户输出
+
+**过滤：**
 
 ```bash
-tail -f logs/rnix-monitor.log          # 实时查看
-cat logs/rnix-monitor.log              # 查看完整日志
-grep "Daemon" logs/rnix-monitor.log    # 过滤特定内容
+rnix log <pid> --filter think    # 仅推理
+rnix log <pid> --filter tool     # 仅工具调用
+rnix log <pid> --filter output   # 仅输出
 ```
 
-## 输出示例
+---
 
-```
-═══════════════════════════════════════════
-[2026-03-04 15:30:45] Rnix 系统监控报告
-═══════════════════════════════════════════
-▸ Daemon 状态: ✓ 运行中
-▸ Daemon 进程: PID=12345 | RSS=25MB | VSZ=150MB
-▸ 管理进程数: 8
-▸ 系统资源: CPU=12.5% | MEM=45.2%
-═══════════════════════════════════════════
+## Token 预算管理
+
+为每个 Agent 或工作流设置 Token 限制：
+
+**Agent 级别**（`agent.yaml`）：
+```yaml
+context_budget: 8192
 ```
 
-## 状态解释
+**工作流级别**（`compose.yaml`）：
+```yaml
+agents:
+  analyzer:
+    intent: "分析代码"
+    context_budget: 4096
+```
 
-| 状态 | 含义 |
+**CLI 覆盖：**
+```bash
+rnix -i "分析代码" --max-tokens 10000
+```
+
+---
+
+## Supervisor 树
+
+Supervisor 树为关键 Agent 进程提供自动崩溃恢复：
+
+### 重启策略
+
+| 策略 | 行为 |
 |------|------|
-| ✓ 运行中 | Daemon 正常运行，可响应请求 |
-| ⚠ Socket 存在但无响应 | 进程可能崩溃或卡死 |
-| ✗ 离线 | Daemon 未运行 |
+| `one_for_one` | 仅重启失败的进程 |
+| `one_for_all` | 一个进程失败时重启组内所有进程 |
+| `rest_for_one` | 重启失败的进程及其之后启动的所有进程 |
 
-## 配置选项
+### 配置
 
-### 修改监控间隔
+在 `init.yaml` 中定义 Supervisor 树：
 
-编辑脚本中的睡眠时间（默认 30 秒）：
+```yaml
+services:
+  critical-worker:
+    intent: "处理传入任务"
+    restart: always
+    max_restarts: 5
+    restart_strategy: one_for_one
 
-```bash
-sleep 30  # 改为其他值，如 sleep 60 表示 60 秒
+  dependent-worker:
+    intent: "后处理结果"
+    restart: on-failure
+    depends_on:
+      - critical-worker
 ```
 
-### 修改日志目录
+### Supervisor 行为
 
-设置环境变量：
+- **`always`**：任何退出（成功或失败）都重启
+- **`on-failure`**：仅在非零退出码时重启
+- **`no`**：永不重启（默认）
+- **`max_restarts`**：daemon 会话内的重启尝试上限
 
-```bash
-export RNIX_LOG_DIR=/var/log/rnix
-./scripts/monitor.sh
-```
+Supervisor 与心跳监控器集成——重启的进程会自动重新注册其心跳。
 
-## 停止监控
+---
 
-按 `Ctrl+C` 即可停止监控脚本。
+## 相关文档
 
-## 故障排除
-
-### 权限问题
-
-```bash
-chmod +x ./scripts/monitor.sh
-```
-
-### Socket 路径问题
-
-如果监控无法连接到 daemon，检查 socket 路径：
-
-```bash
-# 查看实际 socket 路径
-echo $XDG_RUNTIME_DIR/rnix/rnix.sock
-# 或
-ls -la /tmp/rnix-$(id -u)/
-```
-
-### Daemon 无法启动
-
-```bash
-# 查看 daemon 状态
-rnix daemon status
-
-# 手动停止后重启
-rnix daemon stop
-rnix -i "test"   # 会自动启动新 daemon
-```
-
-## 与其他工具集成
-
-### 发送告警（示例）
-
-修改脚本的 `check_daemon_status` 函数以添加告警逻辑：
-
-```bash
-if [ "$(check_daemon_status)" == "✗ 离线" ]; then
-    # 发送通知或重启 daemon
-    rnix -i "health check"  # 自动启动 daemon
-fi
-```
-
-## 心跳监控
-
-心跳监控器通过检查心跳时间戳来追踪进程活性。如果运行中的进程在超过步骤超时时间后仍未发送心跳，可能被标记为卡死。
-
-**暂停进程处理：** 监控器显式跳过处于暂停状态（SIGPAUSE 生效）的进程。由于暂停的进程有意停止推理循环，它们不再发送心跳——如果没有此豁免，监控器会错误地将它们标记为卡死并尝试干预。
-
-## 相关命令
-
-```bash
-# 查看进程列表
-rnix ps
-
-# 查看特定进程
-rnix ps <pid>
-
-# 跟踪进程执行
-rnix strace <pid>
-
-# 杀死进程
-rnix kill <pid>
-```
+- [Dashboard](/zh/guide/dashboard) — 带心跳状态和卡死指示器的可视化监控
+- [进程恢复](/zh/guide/process-resume) — 暂停/恢复与进程恢复
+- [调试](/zh/guide/debugging) — strace 和 gdb 深度检查
+- [配置](/zh/guide/configuration) — init.yaml Supervisor 配置
+- [安全](/zh/guide/security) — 免疫系统异常检测

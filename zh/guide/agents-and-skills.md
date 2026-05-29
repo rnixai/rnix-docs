@@ -57,7 +57,18 @@ mcp:
 
 ## Skill 定义
 
-每个 Skill 存放在 `skills/<name>/SKILL.md`（全局：`~/.config/rnix/skills/`，项目：`.rnix/skills/`），采用 YAML frontmatter + Markdown 正文格式：
+Skill 遵循 [agentskills.io](https://agentskills.io/) 标准 —— YAML frontmatter + Markdown 正文，存放在 `SKILL.md` 中。Rnix 通过 `ResolveSkillScopes` 以四路径模型（项目/用户 × native/agents）解析 Skill：
+
+| 优先级 | 路径 | 范围 | 命名空间 |
+|--------|------|------|----------|
+| 1（最高） | `<project>/.rnix/skills/<name>/SKILL.md` | project | native |
+| 2 | `<project>/.agents/skills/<name>/SKILL.md` | project | agents |
+| 3 | `~/.config/rnix/skills/<name>/SKILL.md` | user | native |
+| 4（最低） | `~/.agents/skills/<name>/SKILL.md` | user | agents |
+
+解析规则：`project > user`（跨范围），`native > agents`（同范围）。优先级最高的副本**完全替换**所有被遮蔽的副本 —— 不做字段合并。被遮蔽的副本会触发 stderr 警告，但不会出现在 `skill list` 中。
+
+运行时加载使用 `SkillLoader`，它通过 `ResolveSkillScopes(cwd)` 按优先级顺序遍历这些路径。仅返回实际存在的目录；不存在的路径会被静默跳过。
 
 ```markdown
 ---
@@ -146,16 +157,37 @@ Skill 采用两阶段加载以提高效率：
 
 ## Skill 包管理
 
-从社区 Registry 安装、搜索和更新 Skill：
+从社区 Registry 安装、搜索、更新和列出 Skill，支持多范围管理：
 
 ```bash
-$ rnix skill install code-analysis    # 从 Registry 安装
-$ rnix skill search "security"        # 搜索可用 Skill
-$ rnix skill update code-analysis     # 更新到最新版本
-$ rnix skill list                     # 列出已安装的 Skill
+# 安装：writeScope 由 (global, shared) 标志组合决定
+$ rnix skill install code-analysis          # project/native（项目 .rnix/ 目录中）
+$ rnix skill install code-analysis -g       # user/native（~/.config/rnix/skills/）
+$ rnix skill install code-analysis --shared # agents 命名空间（.agents/skills/）
+
+# 列表：四路径去重视图
+$ rnix skill list              # 所有范围（6 列表格）
+$ rnix skill list -p           # 仅项目范围
+$ rnix skill list -g           # 仅用户范围
+$ rnix skill list --json       # JSON 格式，含 diagnostics 节点
+$ rnix skill list --quiet      # 仅名称，每行一个
+
+# 更新：写回到原始范围
+$ rnix skill update code-analysis    # 单个 Skill（原始范围）
+$ rnix skill update                  # 所有范围的全部社区 Skill
+
+# 搜索：仅查询远程 Registry
+$ rnix skill search "security"       # 按关键字搜索
 ```
 
-详见 [Skill 包管理](/zh/guide/skill-packages)。
+关键行为：
+- `-g` 和 `-p` 在 `skill list` 中**互斥**
+- 更新保留 Skill 的原始范围（不会跨范围迁移）
+- 被遮蔽的 Skill 仅以 stderr 警告形式出现，不会出现在 `skill list` 中
+- 内置 Skill（Rnix 自带）不参与批量 `skill update`
+- `skill search` 仅查询远程 Registry——不进行本地四路径扫描
+
+详见 [Skill 包管理](/zh/guide/skill-packages) 获取完整参考：祖先目录遍历、信任检查、宽松校验、跨工具兼容性和 JSON 诊断。
 
 ---
 

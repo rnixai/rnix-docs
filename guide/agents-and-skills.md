@@ -57,7 +57,20 @@ Plain Markdown file with the agent's role definition, injected as part of the LL
 
 ## Skill Definition
 
-Each skill lives in `skills/<name>/SKILL.md` (global: `~/.config/rnix/skills/`, project: `.rnix/skills/`) using YAML frontmatter + Markdown body:
+Skills follow the [agentskills.io](https://agentskills.io/) standard — YAML frontmatter + Markdown body in `SKILL.md`. Rnix resolves skills via `ResolveSkillScopes` through a four-path model (project/user × native/agents):
+
+| Priority | Path | Scope | Namespace |
+|----------|------|-------|-----------|
+| 1 (highest) | `<project>/.rnix/skills/<name>/SKILL.md` | project | native |
+| 2 | `<project>/.agents/skills/<name>/SKILL.md` | project | agents |
+| 3 | `~/.config/rnix/skills/<name>/SKILL.md` | user | native |
+| 4 (lowest) | `~/.agents/skills/<name>/SKILL.md` | user | agents |
+
+Resolution rules: `project > user` (cross-scope), `native > agents` (same-scope). The winning copy **completely replaces** all shadowed copies — no field merging. Shadowed copies trigger stderr warnings but are not visible in `skill list`.
+
+Runtime loading uses `SkillLoader` which walks these paths in priority order via `ResolveSkillScopes(cwd)`. Only existing directories are returned; non-existent paths are silently skipped.
+
+### SKILL.md Format
 
 ```markdown
 ---
@@ -146,16 +159,37 @@ Skills are loaded in two phases for efficiency:
 
 ## Skill Package Management
 
-Install, search, and update Skills from the community registry:
+Install, search, update, and list Skills from the community registry with multi-scope support:
 
 ```bash
-$ rnix skill install code-analysis    # Install from registry
-$ rnix skill search "security"        # Search available skills
-$ rnix skill update code-analysis     # Update to latest version
-$ rnix skill list                     # List installed skills
+# Install: writeScope determined by (global, shared) flag combination
+$ rnix skill install code-analysis          # project/native (in .rnix/ project)
+$ rnix skill install code-analysis -g       # user/native (~/.config/rnix/skills/)
+$ rnix skill install code-analysis --shared # agents namespace (.agents/skills/)
+
+# List: deduplicated view across four paths
+$ rnix skill list              # all scopes (6-column table)
+$ rnix skill list -p           # project scope only
+$ rnix skill list -g           # user scope only
+$ rnix skill list --json       # JSON with diagnostics node
+$ rnix skill list --quiet      # names only, one per line
+
+# Update: writes back to origin scope
+$ rnix skill update code-analysis    # single skill (origin scope)
+$ rnix skill update                  # all community skills across all scopes
+
+# Search: remote registry only
+$ rnix skill search "security"       # search by keyword
 ```
 
-See [Skill Packages](/guide/skill-packages) for details.
+Key behaviors:
+- `-g` and `-p` are **mutually exclusive** on `skill list`
+- Update preserves the skill's origin scope (does not migrate across scopes)
+- Shadowed skills appear only as stderr warnings, never in `skill list`
+- Builtin skills (shipped with Rnix) are excluded from bulk `skill update`
+- `skill search` only queries the remote registry — no local four-path scanning
+
+See [Skill Packages](/guide/skill-packages) for the complete reference: ancestor traversal, trust check, lenient validation, cross-tool compatibility, and JSON diagnostics.
 
 ---
 

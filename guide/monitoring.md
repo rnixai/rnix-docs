@@ -1,6 +1,6 @@
 # Monitoring & Supervisor
 
-Real-time process monitoring, categorized reasoning logs, token budget management, supervisor trees, and init bootstrap.
+Real-time process monitoring, categorized reasoning logs, token budget management, heartbeat monitor, supervisor trees, and init bootstrap.
 
 ---
 
@@ -13,31 +13,72 @@ $ rnix top
 ```
 rnix top — Real-time Monitor                        Refresh: 1s
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PID  PPID  STATE    AGENT         TOKENS   ELAPSED  INTENT
-1    0     running  code-analyst  2,340    4.5s     Analyze code quality
-2    1     running  default       890      2.1s     Check dependencies
-3    0     zombie   —             1,567    8.3s     Security scan
+PID  PPID  STATE     AGENT         TOKENS   ELAPSED  INTENT
+1    0     running   code-analyst  2,340    4.5s     Analyze code quality
+2    1     running   default       890      2.1s     Check dependencies
+3    0     zombie    —             1,567    8.3s     Security scan
+4    0     paused    doc-writer    450      1.2s     Generate docs (paused)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Processes: 3 | Running: 2 | Zombie: 1 | Dead: 0
-Tokens: 4,797 | Elapsed: 8.3s
+Processes: 4 | Running: 2 | Zombie: 1 | Paused: 1
+Tokens: 5,247 | Elapsed: 8.3s
 ```
 
 **Interactive operations:**
 - Navigate with arrow keys
 - `k` — kill selected process
-- `d` — view process details
+- `d` — view process details (switches to dashboard)
 - `s` — attach strace
+- `p` — pause/resume selected process
 - `q` — quit
 
-Paused processes (`⏸`) appear with their elapsed timer frozen at the moment of pause.
+Paused processes (`⏸`) appear with their elapsed timer frozen at the moment of pause. The heartbeat monitor skips paused processes — they intentionally stop sending heartbeats.
 
 ---
 
 ## Heartbeat Monitor
 
-The heartbeat monitor tracks process liveness by checking heartbeat timestamps. If a running process stops sending heartbeats for longer than its step timeout, it may be flagged as stalled.
+The heartbeat monitor tracks process liveness through heartbeat timestamps. It operates in **passive (warn-only) mode** — detecting stalls but never automatically intervening.
 
-**Paused process handling:** The monitor explicitly skips processes in the paused state (SIGPAUSE active). Since paused processes intentionally stop their reasoning loop, they stop sending heartbeats — without this exemption, the monitor would incorrectly flag them as stalled and attempt intervention.
+### Design Philosophy
+
+Heartbeat monitoring is observational, not interventional:
+
+- **Warn-only**: Reports stall conditions but does not kill, restart, or otherwise modify processes
+- **No auto-recovery**: Supervisor trees handle crash recovery; heartbeat is the detection layer
+- **Paused process exemption**: Processes in SIGPAUSE state are explicitly skipped — they've intentionally stopped their reasoning loop
+
+### Stall Detection
+
+| Status | Condition | Dashboard Indicator |
+|--------|-----------|---------------------|
+| **Healthy** | Last heartbeat within step timeout | Green pulse |
+| **Stall Warning** | Heartbeat overdue, within grace period | Yellow pulse |
+| **Stall Critical** | Heartbeat significantly overdue | Red pulse with intensity |
+
+Stall intensity is rendered in the Dashboard detail pane with color-coded visual indicators.
+
+### Script-Runner Heartbeats
+
+Script-runner processes maintain heartbeats for their full lifetime — not just during active execution. This prevents false stall detection during idle periods between script steps.
+
+---
+
+## Daemon Status
+
+```bash
+$ rnix daemon status
+[daemon] status: running
+[daemon] pid: 12345
+[daemon] socket: /run/user/1000/rnix/rnix.sock
+[daemon] version: rnix v0.10.0 (commit: abc1234, built: 2026-05-28)
+[daemon] uptime: 3h 22m
+[daemon] processes: 5 running, 2 suspended, 12 history
+```
+
+The daemon reports:
+- **Version**: Three-source fallback (build info → VERSION file → git describe)
+- **Build metadata**: Commit hash and build timestamp
+- **Process counts**: Running, suspended, and historical (dead/zombie) process counts
 
 ---
 
@@ -79,100 +120,67 @@ Set per-agent or per-workflow token limits:
 context_budget: 8192
 ```
 
-**Compose level** (`compose.yaml`):
+**Workflow level** (`compose.yaml`):
 ```yaml
-budget_pool:
-  total: 50000
-  allocation: priority
+agents:
+  analyzer:
+    intent: "Analyze code"
+    context_budget: 4096
 ```
 
 **CLI override:**
 ```bash
-rnix -i "Analyze code" --budget 5000
+rnix -i "Analyze code" --max-tokens 10000
 ```
-
-When budget is exceeded, the process exits with code 2 (`budget_exceeded`). See [Token Economy](/guide/token-economy) for budget pools, SLA, and reputation.
 
 ---
 
 ## Supervisor Trees
 
-Supervisor processes monitor child agents and automatically restart them on failure.
+Supervisor trees provide automatic crash recovery for critical agent processes:
 
 ### Restart Strategies
 
 | Strategy | Behavior |
 |----------|----------|
-| `one_for_one` | Only restart the crashed child |
-| `one_for_all` | Restart all children |
-| `rest_for_one` | Restart the crashed child and all started after it |
+| `one_for_one` | Restart only the failed process |
+| `one_for_all` | Restart all processes in the group when one fails |
+| `rest_for_one` | Restart the failed process and all processes started after it |
 
 ### Configuration
 
-```yaml
-# init.yaml
-version: "1.0"
-services:
-  monitor:
-    intent: "Monitor system health"
-    agent: "health-monitor"
-    restart: always
-    max_restarts: 3
+Define supervisor trees in `init.yaml`:
 
-  analyzer:
-    intent: "Continuous code analysis"
-    agent: "code-analyst"
+```yaml
+services:
+  critical-worker:
+    intent: "Process incoming tasks"
+    restart: always
+    max_restarts: 5
+    restart_strategy: one_for_one
+
+  dependent-worker:
+    intent: "Post-process results"
     restart: on-failure
     depends_on:
-      - monitor
+      - critical-worker
 ```
 
-### Restart Policies
+### Supervisor Behavior
 
-| Policy | When to Restart |
-|--------|-----------------|
-| `no` | Never (default) |
-| `always` | On any exit |
-| `on-failure` | Only on non-zero exit code |
+- **`always`**: Restart on any exit (success or failure)
+- **`on-failure`**: Restart only on non-zero exit
+- **`no`**: Never restart (default)
+- **`max_restarts`**: Cap on restart attempts within the daemon session
 
----
-
-## Init Bootstrap
-
-The daemon bootstrap sequence on startup:
-
-1. Parse `providers.yaml` → register LLM providers to VFS
-2. Parse `init.yaml` → start system services and supervisor trees
-3. Initialize Skill registry
-4. Start MCP service management
-5. Begin idle timeout monitoring
-
-Services defined in `init.yaml` start in dependency order, with supervisors monitoring their children.
-
----
-
-## Daemon Management
-
-```bash
-$ rnix daemon status
-status:  running
-version: 0.1.0
-socket:  /run/user/1000/rnix/rnix.sock
-procs:   2 active / 5 total
-providers: claude (healthy), ollama (healthy)
-
-$ rnix daemon stop
-daemon stopped
-```
-
-**Auto-start:** daemon starts on first `rnix` command.
-**Auto-stop:** exits after 60s with no active processes or connections.
+Supervisors integrate with the heartbeat monitor — restarted processes re-register their heartbeat automatically.
 
 ---
 
 ## Related Documentation
 
-- [Token Economy](/guide/token-economy) — Budget pools, SLA, reputation
-- [Security](/guide/security) — Immune daemon and anomaly detection
-- [Configuration](/guide/configuration) — init.yaml reference
-- [Debugging](/guide/debugging) — strace and gdb
+- [Dashboard](/guide/dashboard) — Visual monitoring with heartbeat status and stall indicators
+- [Process Resume](/guide/process-resume) — Pause/resume and process recovery
+- [Debugging](/guide/debugging) — strace and gdb for deep inspection
+- [Configuration](/guide/configuration) — init.yaml supervisor configuration
+- [Security](/guide/security) — Immune system anomaly detection

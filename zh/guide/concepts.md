@@ -21,6 +21,7 @@ Rnix 采用 daemon 架构管理进程：一个后台 daemon 持有唯一的内�
 | 状态机 | 进程状态 | Created → Running → Zombie → Dead |
 | Spawn | fork + exec | 创建并启动新进程 |
 | Kill | kill(2) 信号 | 向进程发送终止信号（SIGTERM/SIGKILL） |
+| Pause/Resume | SIGSTOP/SIGCONT | 暂停/恢复推理循环（SIGPAUSE/SIGRESUME） |
 | Wait | waitpid(2) | 等待进程结束并回收资源 |
 
 ### 进程生命周期
@@ -33,6 +34,12 @@ Created ──→ Running ──→ Zombie ──→ Dead
    │  Start()  │ Terminate │  Reap()
    │  开始推理  │ 完成/错误  │  Wait 回收
    │           │ /超时/Kill │  资源释放
+   │           │           │
+   │      SIGPAUSE         │
+   │      (循环阻塞)        │
+   │           │           │
+   │      SIGRESUME        │
+   │      (循环恢复)        │
 ```
 
 ```mermaid
@@ -50,11 +57,34 @@ stateDiagram-v2
 **状态说明：**
 
 - **Created（已创建）** — 进程对象已分配，但推理循环尚未开始
-- **Running（运行中）** — 推理循环正在执行，智能体正在思考和使用工具。运行中的进程可以通过 SIGPAUSE 暂停——推理循环阻塞直到收到 SIGRESUME，但进程状态仍为 Running。
+- **Running（运行中）** — 推理循环正在执行，智能体正在思考和使用工具。运行中的进程可以通过 SIGPAUSE 暂停——推理循环在下一个 I/O 边界处阻塞直到收到 SIGRESUME，但进程状态仍为 Running（`IsPaused = true`）。
+- **Suspended（已暂停）** — （Running 内的逻辑状态）进程通过 SIGPAUSE 暂停。推理循环阻塞，耗时计时器冻结，心跳监控跳过此进程。数据持久化到磁盘。daemon 重启后仍然存活。
 - **Zombie（僵尸）** — 推理已结束（正常完成、出错、超时或被 Kill），等待父进程调用 Wait 回收
-- **Dead（死亡）** — 所有资源已释放，进程从进程表中移除
+- **Dead（死亡）** — 所有资源已释放，进程从进程表中移除。**Dead 是冻结状态而非终态**——进程数据持久化在磁盘上（`.rnix/data/steps/<uuid>/`），直到 GC 清理。任何 Dead/Zombie 进程都可以通过 `rnix resume` 恢复。
 
-状态转移是严格单向的，不允许回退（例如不能从 Zombie 回到 Running）。
+状态转移在状态机内严格单向，不允许回退（例如不能从 Zombie 回到 Running）。**但请注意**，resume 不是状态转移——它基于历史数据 spawn 一个新进程，保持原有状态机契约不变。
+
+### Resume 设计哲学
+
+Rnix 将 Dead 视为冻结状态而非终态。进程退出后，观测数据保留在磁盘上：
+
+```
+.rnix/data/steps/<uuid>/
+├── steps.jsonl          # 推理步骤（LLM 请求/响应）
+├── events.jsonl         # Syscall 事件
+├── ctx-profile.json     # Context heatmap 快照
+├── process-meta.json    # System prompt + tool 定义
+├── proc-info.json       # 进程元数据
+└── checkpoint.json      # 周期性检查点（每 5 步 / 30s）
+```
+
+这使以下功能成为可能：
+
+- **`rnix resume <uuid>`** — 继续运行已死亡的进程，保持 UUID 不变
+- **`rnix resume --fork <uuid>`** — 从历史节点分叉探索，生成新 UUID
+- **Daemon 崩溃恢复** — 暂停的进程在 daemon 重启后自动恢复
+
+详见 [Process Resume](/guide/process-resume) 了解完整的 resume 工作流。
 
 ### 示例：完整的进程生命周期
 
@@ -116,15 +146,25 @@ CLI 输出示例：
 
 大多数 CLI 命令使用 PID 引用进程。UUID 用于内部数据持久化和 Dashboard 历史视图。
 
-### 进程历史
+### 进程历史与持久化
 
-进程退出时，会被记录到一个有界 FIFO 历史缓冲区中。这使系统能够保留最近结束进程的信息，用于：
+进程退出时，其完整的观测数据会被持久化到磁盘：
 
-- Dashboard 历史视图浏览
-- 步骤记录检索
-- 调试与分析
+- **proc-info.json**：进程元数据快照（PID、UUID、状态、provider、model、tokens、时间戳）
+- **steps.jsonl**：所有推理步骤，包含 LLM 请求/响应和工具调用
+- **events.jsonl**：完整的 syscall 事件追踪，用于调试
+- **ctx-profile.json**：上下文组成 heatmap 快照
+- **process-meta.json**：执行期间使用的 system prompt 和 tool 定义
+- **checkpoint.json**：周期性检查点（每 5 步 / 30s），用于快速 resume
 
-历史缓冲区有可配置的大小限制；缓冲区满时最早条目会被驱逐。
+这些持久化数据支持以下功能：
+
+- **Dashboard 历史浏览** — 查看已死亡进程的详情、时间线和 LLM 对话
+- **进程 resume** — 从持久化数据中恢复任何 Dead/Zombie/Suspended 进程
+- **跨会话连续性** — UUID v7 在 daemon 重启后仍能标识进程
+- **垃圾回收** — 可配置的保留策略（`gc.retention_days` + `gc.max_entries`），清理旧数据
+
+历史数据在 daemon 启动时通过 `LoadHistory()` 加载。Running 和 Suspended 进程永久豁免于 GC 清理。
 
 ---
 
@@ -225,7 +265,16 @@ skills:
 
 ### Skill：如何做 X
 
-Skill 定义了一项具体的程序性知识——它回答"如何做 X"这个问题。Skill 遵循 Agent Skills 行业标准，以 `SKILL.md` 文件表示，包含 YAML frontmatter（元数据 + 工具权限）和 Markdown 正文（操作指南）。Skill 存储在 `~/.config/rnix/skills/`（全局）或 `.rnix/skills/`（项目）：
+Skill 定义了一项具体的程序性知识——它回答"如何做 X"这个问题。Skill 遵循 Agent Skills 行业标准，以 `SKILL.md` 文件表示，包含 YAML frontmatter（元数据 + 工具权限）和 Markdown 正文（操作指南）。Skill 采用四路径模型存储（项目/用户 x native/agents 命名空间），由 `ResolveSkillScopes(cwd)` 解析：
+
+| 路径 | 作用域 | 命名空间 | 优先级 |
+|------|--------|----------|--------|
+| `<project>/.rnix/skills/` | project | native | 1（最高） |
+| `<project>/.agents/skills/` | project | agents | 2 |
+| `~/.config/rnix/skills/` | user | native | 3 |
+| `~/.agents/skills/` | user | agents | 4（最低） |
+
+解析规则：`project > user`（跨作用域），`native > agents`（同作用域内）。胜出的副本完全覆盖所有被遮蔽的副本。详见 [Skill Packages](/guide/skill-packages) 了解完整的管理模型。
 
 ```
 skills/code-analysis/

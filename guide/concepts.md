@@ -21,11 +21,12 @@ Rnix uses a daemon architecture for process management: a single background daem
 | State machine | Process states | Created → Running → Zombie → Dead |
 | Spawn | fork + exec | Create and start a new process |
 | Kill | kill(2) signal | Send termination signal (SIGTERM/SIGKILL) |
+| Pause/Resume | SIGSTOP/SIGCONT | Suspend reasoning loop (SIGPAUSE/SIGRESUME) |
 | Wait | waitpid(2) | Wait for process to finish and reclaim resources |
 
 ### Process Lifecycle
 
-A process transitions strictly through the following state machine from creation to destruction:
+A process transitions through the following state machine:
 
 ```
 Created ──→ Running ──→ Zombie ──→ Dead
@@ -35,6 +36,12 @@ Created ──→ Running ──→ Zombie ──→ Dead
    │  reasoning│ Error/    │  Resource
    │           │ Timeout/  │  release
    │           │ Kill      │
+   │           │           │
+   │      SIGPAUSE         │
+   │      (loop blocks)    │
+   │           │           │
+   │      SIGRESUME        │
+   │      (loop resumes)   │
 ```
 
 ```mermaid
@@ -52,11 +59,34 @@ stateDiagram-v2
 **State descriptions:**
 
 - **Created** — Process object allocated, but reasoning loop has not started
-- **Running** — Reasoning loop is executing, agent is thinking and using tools. A running process can be paused via SIGPAUSE — the reasoning loop blocks until SIGRESUME, but the process remains in Running state.
+- **Running** — Reasoning loop is executing, agent is thinking and using tools. A running process can be paused via SIGPAUSE — the reasoning loop blocks at the next I/O boundary until SIGRESUME, but the process remains in Running state (with `IsPaused = true`).
+- **Suspended** — (Logical state within Running) Process is paused via SIGPAUSE. The reasoning loop blocks, the elapsed timer freezes, and the heartbeat monitor skips this process. Data is persisted to disk. Survives daemon restarts.
 - **Zombie** — Reasoning has ended (completed normally, errored, timed out, or killed), waiting for parent process to call Wait for reclamation
-- **Dead** — All resources released, process removed from process table
+- **Dead** — All resources released, process removed from process table. **Dead is a frozen state, not terminal** — process data persists on disk (`.rnix/data/steps/<uuid>/`) until GC cleanup, and any Dead/Zombie process can be revived via `rnix resume`.
 
-State transitions are strictly one-directional; rollback is not allowed (e.g., cannot go from Zombie back to Running).
+State transitions are strictly one-directional within the state machine; rollback is not allowed (e.g., cannot go from Zombie back to Running). **However**, resume is not a state transition — it spawns a new process seeded from historical data, preserving the original state machine contract.
+
+### Resume Philosophy
+
+Rnix treats Dead as a frozen state rather than terminal. Process observation data remains on disk after exit:
+
+```
+.rnix/data/steps/<uuid>/
+├── steps.jsonl          # Reasoning steps (LLM requests/responses)
+├── events.jsonl         # Syscall events
+├── ctx-profile.json     # Context heatmap snapshot
+├── process-meta.json    # System prompt + tool definitions
+├── proc-info.json       # Process metadata
+└── checkpoint.json      # Periodic checkpoint (every 5 steps / 30s)
+```
+
+This enables:
+
+- **`rnix resume <uuid>`** — Continue a dead process with preserved UUID
+- **`rnix resume --fork <uuid>`** — Explore from a historical point with a new UUID
+- **Daemon crash recovery** — Suspended processes rehydrate on restart
+
+See [Process Resume](/guide/process-resume) for the full resume workflow.
 
 ### Example: Complete Process Lifecycle
 
@@ -118,15 +148,25 @@ Each process has two identifiers:
 
 In most CLI commands, PID is used for referencing processes. UUID is used internally for data persistence and in Dashboard history views.
 
-### Process History
+### Process History & Persistence
 
-When a process exits, it is recorded in a bounded FIFO history buffer. This allows the system to retain information about recently completed processes for:
+When a process exits, its complete observation data is persisted to disk:
 
-- Dashboard history view browsing
-- Step record retrieval
-- Debugging and analysis
+- **proc-info.json**: Process metadata snapshot (PID, UUID, state, provider, model, tokens, timestamps)
+- **steps.jsonl**: All reasoning steps with LLM requests/responses and tool calls
+- **events.jsonl**: Full syscall event trace for debugging
+- **ctx-profile.json**: Context composition heatmap snapshot
+- **process-meta.json**: System prompt and tool definitions used during execution
+- **checkpoint.json**: Periodic checkpoint (every 5 steps / 30s) for fast resume
 
-The history buffer has a configurable size limit; oldest entries are evicted when the buffer is full.
+This persistence enables:
+
+- **Dashboard history browsing** — view dead process details, timelines, and LLM conversations
+- **Process resume** — revive any Dead/Zombie/Suspended process from its persisted data
+- **Cross-session continuity** — UUID v7 identifies processes across daemon restarts
+- **Garbage collection** — configurable retention policy (`gc.retention_days` + `gc.max_entries`) for old data
+
+The history is loaded on daemon startup via `LoadHistory()`. Running and Suspended processes are permanently exempt from GC cleanup.
 
 ---
 
@@ -227,7 +267,16 @@ skills:
 
 ### Skill: How to Do X
 
-A Skill defines a specific piece of procedural knowledge — it answers the question "How to do X". Skills follow the Agent Skills industry standard, represented as `SKILL.md` files containing YAML frontmatter (metadata + tool permissions) and a Markdown body (operational guide). Skills are stored in `~/.config/rnix/skills/` (global) or `.rnix/skills/` (project):
+A Skill defines a specific piece of procedural knowledge — it answers the question "How to do X". Skills follow the Agent Skills industry standard, represented as `SKILL.md` files containing YAML frontmatter (metadata + tool permissions) and a Markdown body (operational guide). Skills are stored in a four-path model (project/user × native/agents namespace), resolved by `ResolveSkillScopes(cwd)`:
+
+| Path | Scope | Namespace | Priority |
+|------|-------|-----------|----------|
+| `<project>/.rnix/skills/` | project | native | 1 (highest) |
+| `<project>/.agents/skills/` | project | agents | 2 |
+| `~/.config/rnix/skills/` | user | native | 3 |
+| `~/.agents/skills/` | user | agents | 4 (lowest) |
+
+Resolution rules: `project > user` (cross-scope), `native > agents` (same-scope). The winning copy completely replaces all shadowed copies. See [Skill Packages](/guide/skill-packages) for the complete management model.
 
 ```
 skills/code-analysis/

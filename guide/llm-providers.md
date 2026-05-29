@@ -128,7 +128,7 @@ deepseek     http    offline   deepseek-chat      timeout
 | `mode` | `string` | `"stream"` | Response mode: `"stream"` for SSE streaming, `"call"` for single-shot response |
 | `max_tokens` | `int` | `0` | Maximum output tokens per LLM call; `0` uses the API default |
 | `cost_per_token` | `float64` | `0` | Per-token cost in USD for budget tracking; `0` disables cost tracking |
-| `thinking_budget` | `int` | `0` | Thinking budget in tokens (`gemini` driver only); `0` disables thinking |
+| `thinking_budget` | `int` | `0` | Thinking budget in tokens (`gemini`, `anthropic`, and `openai-compat` drivers); `0` disables thinking |
 | `extra_args` | `string[]` | `[]` | Additional CLI arguments passed to the binary (`claude-cli`, `cursor-cli`, `qwen-cli` only) |
 
 **Example** — Gemini with thinking budget:
@@ -140,6 +140,56 @@ deepseek     http    offline   deepseek-chat      timeout
   default_model: gemini-2.5-pro
   thinking_budget: 8192
 ```
+
+**Example** — DeepSeek V4 with extended reasoning:
+
+```yaml
+- name: deepseek-think
+  driver: openai-compat
+  base_url: https://api.deepseek.com/v1
+  api_key_env: DEEPSEEK_API_KEY
+  default_model: deepseek-reasoner
+  thinking_budget: 16384
+```
+
+---
+
+## Prompt Caching
+
+### Anthropic Native Caching
+
+When using the `anthropic` driver, Rnix automatically injects `cache_control` breakpoints at three positions to maximize cache reuse across reasoning steps:
+
+1. **System prompt** — the full agent system prompt (instructions + skills)
+2. **Tool definitions** — all registered VFS device schemas
+3. **Last user turn** — the most recent user message
+
+This maps to Anthropic's recommended caching strategy for agentic workloads. No configuration is required — caching activates whenever the `anthropic` driver is in use and the model supports it.
+
+**Cache hit rate semantics** — the dashboard reports per-step cache hit rate. For the `anthropic` driver, the formula is:
+
+```
+hit_rate = CacheReadInputTokens / (input_tokens + CacheReadInputTokens)
+```
+
+For `openai-compat` and CLI drivers, the formula is:
+
+```
+hit_rate = cached_tokens / input_tokens   (OpenAI convention: input includes cached)
+```
+
+See the [Dashboard](/guide/dashboard#tracing-timeline-pane) for how this is surfaced in the timeline.
+
+### Enabling the Anthropic Driver
+
+```yaml
+- name: anthropic-api
+  driver: anthropic
+  api_key_env: ANTHROPIC_API_KEY
+  default_model: claude-sonnet-4-20250514
+```
+
+Set `ANTHROPIC_API_KEY` in your environment or project `.env` file.
 
 ### API Key Management
 

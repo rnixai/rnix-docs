@@ -2,3 +2,4 @@
 .vitepress/.temp/
 node_modules/
 .vitepress/cache/
+.vitepress/config.mts
