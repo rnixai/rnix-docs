@@ -126,6 +126,80 @@ Modifiable parameters: model, system prompt, context messages, skill references,
 
 ---
 
+## Script-Runner Observability
+
+When agents execute AgentShell scripts (`.ash` files), Rnix emits structured events to `events.jsonl`, providing full visibility into script execution flow.
+
+### Event File
+
+Script events are written as NDJSON (newline-delimited JSON) to:
+
+```
+.rnix/data/steps/<process-uuid>/events.jsonl
+```
+
+Each line is a self-contained JSON object with immediate flush for real-time availability.
+
+### Event Types
+
+| Event | Trigger | Purpose |
+|-------|---------|---------|
+| `ScriptStmtBegin` | At every statement entry | Marks statement start (while, spawn, if, pipeline, export, etc.) |
+| `ScriptStmtEnd` | At every statement exit | Marks completion with success/error/stop status |
+| `ScriptSpawn` | Before `spawn` execution | Captures agent spawn intent |
+| `ScriptWhileIter` | Each while-loop iteration | Tracks iteration count (1-based) |
+| `ScriptCondition` | After condition evaluation in `if`/`while` | Records condition result (true/false) and operand values |
+
+### Event Schema
+
+```json
+{
+  "ts_ms": 1050.5,
+  "pid": 12345,
+  "syscall": "ScriptWhileIter",
+  "args": {
+    "line": 12,
+    "iteration": 1,
+    "condition": "$N != 5"
+  },
+  "dur_ms": 0,
+  "trace_id": "",
+  "span_id": ""
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `ts_ms` | Milliseconds since process start |
+| `pid` | Process ID |
+| `syscall` | Event type (one of the 5 Script* types) |
+| `args` | Event-specific metadata — always includes `line` (1-based source line) |
+| `dur_ms` | Always `0` for script events |
+
+### Dashboard Integration
+
+The Dashboard Timeline pane renders script events in real-time with formatted summaries:
+
+```
+L12 ▸ while                          (statement begin)
+L12 ↻ while iter=1 ($N != 5)        (loop iteration)
+L12 ? $N != 5 → T                   (condition evaluated true)
+L47 ↳ spawn "build hello" → $r      (agent spawn)
+L47 ✓ spawn                         (statement completed)
+```
+
+Events are fetched every ~500ms via IPC and deduplicated using a per-UUID watermark. Three or more consecutive same-type events are folded into collapsible groups to keep the timeline readable.
+
+### Viewing Events
+
+Events can be consumed through:
+
+1. **Dashboard** — Real-time Timeline pane with formatted display and aggregation
+2. **IPC** — `list_events` method returns all events for a process by PID or UUID
+3. **Direct file access** — Read `events.jsonl` from `.rnix/data/steps/<uuid>/`
+
+---
+
 ## Related Documentation
 
 - [Time-Travel Debugging](/guide/time-travel) — Record, replay, and fork-continue

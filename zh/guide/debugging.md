@@ -126,6 +126,80 @@ Budget changed: 8192 → 10000
 
 ---
 
+## 脚本运行器可观测性
+
+当智能体执行 AgentShell 脚本（`.ash` 文件）时，Rnix 会将结构化事件写入 `events.jsonl`，提供对脚本执行流程的完整可见性。
+
+### 事件文件
+
+脚本事件以 NDJSON（按行分隔的 JSON）格式写入：
+
+```
+.rnix/data/steps/<process-uuid>/events.jsonl
+```
+
+每行是一个自包含的 JSON 对象，写入后立即刷新以支持实时可用。
+
+### 事件类型
+
+| 事件 | 触发时机 | 用途 |
+|------|---------|------|
+| `ScriptStmtBegin` | 每个语句入口处 | 标记语句开始（while、spawn、if、pipeline、export 等） |
+| `ScriptStmtEnd` | 每个语句退出处 | 标记完成状态（成功/错误/停止） |
+| `ScriptSpawn` | `spawn` 执行前 | 捕获智能体生成意图 |
+| `ScriptWhileIter` | 每次 while 循环迭代 | 追踪迭代次数（从 1 开始） |
+| `ScriptCondition` | `if`/`while` 条件求值后 | 记录条件结果（true/false）和操作数值 |
+
+### 事件结构
+
+```json
+{
+  "ts_ms": 1050.5,
+  "pid": 12345,
+  "syscall": "ScriptWhileIter",
+  "args": {
+    "line": 12,
+    "iteration": 1,
+    "condition": "$N != 5"
+  },
+  "dur_ms": 0,
+  "trace_id": "",
+  "span_id": ""
+}
+```
+
+| 字段 | 描述 |
+|------|------|
+| `ts_ms` | 从进程启动算起的毫秒数 |
+| `pid` | 进程 ID |
+| `syscall` | 事件类型（5 种 Script* 类型之一） |
+| `args` | 事件特定的元数据 — 始终包含 `line`（基于 1 的源代码行号） |
+| `dur_ms` | 脚本事件始终为 `0` |
+
+### 仪表盘集成
+
+仪表盘的 Timeline 面板实时渲染带格式化摘要的脚本事件：
+
+```
+L12 ▸ while                          (语句开始)
+L12 ↻ while iter=1 ($N != 5)        (循环迭代)
+L12 ? $N != 5 → T                   (条件求值为 true)
+L47 ↳ spawn "build hello" → $r      (智能体生成)
+L47 ✓ spawn                         (语句完成)
+```
+
+事件每约 500ms 通过 IPC 获取并使用每 UUID 水位线进行去重。三个或更多连续的同类型事件会被折叠为可展开的分组，保持时间线的可读性。
+
+### 查看事件
+
+可通过以下方式消费事件：
+
+1. **仪表盘** — Timeline 面板的实时格式化显示与聚合
+2. **IPC** — `list_events` 方法返回指定进程的所有事件（按 PID 或 UUID）
+3. **直接文件访问** — 从 `.rnix/data/steps/<uuid>/` 读取 `events.jsonl`
+
+---
+
 ## 相关文档
 
 - [时间旅行调试](/zh/guide/time-travel) — 录制、回放与分叉继续

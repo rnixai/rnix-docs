@@ -2,12 +2,12 @@
 
 ### 1.1 概述
 
-Rnix 的内核接口按多个功能分类组织，共定义 45 个 syscall：
+Rnix 的内核接口按多个功能分类组织，共定义 46 个 syscall：
 
 | 功能分类 | Syscall 数量 | 职责 |
 |---------|-------------|------|
 | 进程管理（ProcessManager） | 5 | 进程创建、终止、等待、查询 |
-| 上下文管理（ContextManager） | 4 | 上下文空间分配、读写、释放 |
+| 上下文管理（ContextManager） | 5 | 上下文空间分配、读写、释放、压缩 |
 | 文件系统（FileSystem） | 5 | VFS 设备的打开、读写、关闭、元数据查询 |
 | 调试（Debugger） | 1 | Syscall 事件的自动记录与追踪 |
 | IPC（Send、Recv、Pipe 等） | 10 | 进程间消息传递与管道 |
@@ -364,6 +364,62 @@ err := ctxMgr.CtxWrite(cid, 0, []byte(msg)) // 追加消息
 ```go
 err := ctxMgr.CtxFree(cid)
 ```
+
+---
+
+#### CtxCompact
+
+通过摘要历史消息来压缩上下文，释放 token 和消息槽容量。
+
+```
+签名: Compact(pid PID, instructions string) (CompactResponse, error)
+```
+
+**参数：**
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| `pid` | `PID` | 目标进程 ID |
+| `instructions` | `string` | 可选的自定义摘要 LLM 指令（空值 = 使用默认提示词） |
+
+**返回值：** `(CompactResponse, error)`
+
+**CompactResponse 结构：**
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| `PreTokens` | `int` | 压缩前的 token 数 |
+| `PostTokens` | `int` | 压缩后的 token 数 |
+| `Restored` | `[]string` | 压缩后恢复的上下文项列表（文件、Skill、计划） |
+
+**触发方式：**
+
+| 触发类型 | 条件 | 配置字段 |
+|---------|-----------|-------------|
+| `token_threshold` | Token 使用率超过阈值 | `CompactThreshold`（默认：`80.0`%） |
+| `slot_threshold` | 消息槽使用率超过阈值 | `SlotCompactThreshold`（默认：`80.0`%） |
+| `precompact` | 即将到来的工具调用结果没有足够的消息槽 | 自动 |
+| `manual` | 通过 IPC `compact` 方法 | — |
+
+**行为：**
+
+1. 获取排他压缩锁（`TryLockCompact`）— 每个进程同一时间只能执行一次压缩
+2. 在读锁下收集所有消息
+3. 使用结构化的 9 段摘要提示词调用 LLM
+4. 插入 `[compact_boundary]` 标记消息
+5. 将 LLM 生成的摘要存储为新的对话基础
+6. 恢复压缩后上下文：最近读取的文件（最多 5 个，总计 50K tokens）、活跃 Skill（最多 25K tokens）和当前计划
+
+**配置：**
+
+| 字段 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `CompactThreshold` | `float64` | `80.0` | 触发自动压缩的 token 使用率阈值 |
+| `SlotCompactThreshold` | `float64` | `80.0` | 触发自动压缩的消息槽使用率阈值 |
+| `CompactTimeout` | `duration` | `30s` | 压缩 LLM 调用的超时时间 |
+| `BackpressureThreshold` | `float64` | `70.0` | 向上下文注入背压警告的消息槽使用率阈值 |
+
+**特性标志：** Feature Profile 中的 `compaction: true` 启用自动压缩。
 
 ---
 

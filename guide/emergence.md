@@ -101,7 +101,15 @@ Repeated intents are served faster through differentiation memory.
 **Mechanism chain:**
 - First encounter: full StemMatcher keyword scan → match → record intent→skills mapping in DiffMemory
 - Second encounter: DiffMemory lookup → instant recall, skip matching computation
-- DiffMemory persists as JSON Lines files, surviving daemon restarts
+- DiffMemory persists as append-only JSON Lines files, surviving daemon restarts
+
+**Persistence details:**
+- Each learned mapping is appended to `diffmemory.jsonl` immediately on record (within write lock)
+- On daemon startup, the file is replayed into the in-memory map (last-wins upsert for duplicate intents)
+- Corrupt lines are skipped with a warning — startup never fails due to partial corruption
+- Hit counts persist across restarts, preserving the reputation signal accumulated over time
+
+**Staleness validation:** On lookup, the current number of available skills is compared against the stored `available_count`. If they differ (skills were added or removed), the cached mapping is treated as a miss, forcing a fresh StemMatcher scan that produces an up-to-date mapping.
 
 **Capacity management:** LRU eviction (by lowest hit count, then oldest timestamp) keeps the memory bounded while retaining the most valuable mappings.
 

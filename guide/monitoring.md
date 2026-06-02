@@ -41,21 +41,47 @@ The heartbeat monitor tracks process liveness through heartbeat timestamps. It o
 
 ### Design Philosophy
 
-Heartbeat monitoring is observational, not interventional:
+Heartbeat monitoring is observational, not interventional. This is an intentional architectural decision: the daemon never takes destructive action based on heuristics.
 
-- **Warn-only**: Reports stall conditions but does not kill, restart, or otherwise modify processes
-- **No auto-recovery**: Supervisor trees handle crash recovery; heartbeat is the detection layer
+- **Warn-only**: Emits `ProcessStalled` events and log warnings, but does **not** auto-suspend, cancel steps, or terminate processes
+- **No auto-recovery**: Supervisor trees handle crash recovery; heartbeat is the detection layer only
 - **Paused process exemption**: Processes in SIGPAUSE state are explicitly skipped — they've intentionally stopped their reasoning loop
+- **Continuous observation**: Stall records persist until the process exits or heartbeat recovers — consecutive stall count grows without limit (5, 6, 7, ...) providing increasing severity signal
+
+### Stall Escalation Levels
+
+The monitor checks each process every 30 seconds (configurable). When a heartbeat gap exceeds the process's `StepTimeout`:
+
+| Level | Consecutive Stalls | Action Label | Actual Behavior |
+|-------|-------------------|--------------|-----------------|
+| **Warning** | 1–2 | `warn` | Log warning, emit `ProcessStalled` event |
+| **Elevated** | 3 | `cancel_step` | Log "(would cancel step, passive mode, no action)" |
+| **Critical** | 4+ | `suspend` | Log "(would suspend, passive mode, no action)" |
+
+All levels emit `ProcessStalled` events with the action label for Dashboard and observability consumption. No destructive action is taken at any level.
 
 ### Stall Detection
 
 | Status | Condition | Dashboard Indicator |
 |--------|-----------|---------------------|
 | **Healthy** | Last heartbeat within step timeout | Green pulse |
-| **Stall Warning** | Heartbeat overdue, within grace period | Yellow pulse |
-| **Stall Critical** | Heartbeat significantly overdue | Red pulse with intensity |
+| **Stall Warning** | 1–2 consecutive stalls | Yellow pulse |
+| **Stall Critical** | 3+ consecutive stalls | Red pulse with intensity bar |
 
-Stall intensity is rendered in the Dashboard detail pane with color-coded visual indicators.
+### Dashboard Stall Heatmap
+
+The Dashboard detail pane renders a visual stall intensity indicator:
+
+- **Color mapping**: `< 3` consecutive stalls → warning (yellow), `≥ 4` → error (red)
+- **Intensity bar**: Filled proportionally to `min(consecutiveStalls, 4) / 4`
+- **Live status**: Queried via IPC `heartbeat_status` method, which returns running state, check interval, total detections, and per-process stall details
+
+### Configuration
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `checkInterval` | `duration` | `30s` | How often to check all processes |
+| `StepTimeout` | `duration` | per-process | Heartbeat gap threshold for stall detection (`0` = disabled) |
 
 ### Script-Runner Heartbeats
 

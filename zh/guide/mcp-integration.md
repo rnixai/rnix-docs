@@ -96,22 +96,25 @@ mcp:
 
 当衍生（spawn）一个带 MCP 依赖的智能体时，Rnix 管理完整的挂载生命周期：
 
-### 1. Spawn 时自动挂载
+### 1. Spawn 时并发自动挂载
+
+智能体 manifest 中声明的所有 MCP 服务器**并发挂载** — 每个服务器在独立 goroutine 中连接，使用单条目锁，消除多 MCP 服务器依赖时的串行瓶颈。
 
 ```
 Spawn(intent, agent)
     │
-    ├── 对 agent.mcp.servers 中的每个 MCP 服务器：
+    ├── 对 agent.mcp.servers 中的每个 MCP 服务器（并发）：
     │     │
-    │     ├── 创建 transport（stdio）
-    │     ├── 建立连接（使用单服务器超时配置）
-    │     ├── 列出工具 → 注册为 ToolDef
-    │     ├── 注册 VFS 设备到 /mnt/mcp/{pid}-{serverName}
-    │     └── 将挂载路径添加到进程 AllowedDevices
+    │     ├── 预留占位符（MCPStatusConnecting）并获取单条目锁
+    │     ├── 建立 transport 连接（在跨路径锁之外，受 MountTimeout 约束）
+    │     ├── 成功：列出工具 → 注册 ToolDef → 完成 → 释放锁
+    │     └── 失败：删除占位符 → 关闭 transport → 释放锁
     │
-    ├── 成功：继续执行
-    └── 失败：回滚所有挂载，释放上下文，返回错误
+    ├── 全部成功：继续执行
+    └── 任一失败：回滚所有挂载，释放上下文，返回错误
 ```
+
+**单服务器挂载超时**默认为 5 秒（可通过 MCPConfig 中的 `MountTimeout` 配置）。每个挂载独立运行 — 慢速服务器不会阻塞其他挂载完成。
 
 ### 2. 引用计数挂载管理
 
@@ -134,13 +137,17 @@ Read(FD(5))                                    → 搜索结果
 Close(FD(5))                                   → ok
 ```
 
-### 4. 进程组隔离
+### 4. 进程组隔离与优雅关闭
 
-MCP transport 进程在独立的进程组中启动：
+MCP transport 进程在独立的进程组中启动，并具有平台特定的加固措施：
 
 - **信号隔离**：发往 Rnix daemon 的 SIGINT/SIGTERM 不会传播到 MCP 子进程
-- **干净关闭**：卸载挂载点时，进程组作为整体接收信号
-- **防止孤儿进程**：如果 daemon 崩溃，MCP 服务器由操作系统的进程组机制清理
+- **Linux 加固**：`Setpgid` + `Pdeathsig=SIGKILL` 确保即使 daemon 崩溃也能清理子进程
+- **两阶段优雅关闭**：卸载时，Rnix 先向整个进程组发送 `SIGTERM`，然后等待最多 5 秒让其干净退出。若服务器在宽限期内未终止，则发送 `SIGKILL` 强制回收
+- **防止孤儿进程**：操作系统进程组机制提供最后的清理保障
+- **幂等 Close**：`closed` 标志防止并发卸载时的重复 `Close()` 调用导致 panic
+
+daemon 关闭（`rnix daemon stop`）期间，`UnmountAll()` 会在内核退出前干净地拆除所有活跃的 MCP 挂载。
 
 ### 5. 退出时自动卸载
 

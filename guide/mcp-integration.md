@@ -96,22 +96,25 @@ Output truncation applies at the ToolDef level — results exceeding `max_output
 
 When an agent with MCP dependencies is spawned, Rnix manages the full mount lifecycle:
 
-### 1. Auto-Mount on Spawn
+### 1. Concurrent Auto-Mount on Spawn
+
+All MCP servers declared in an agent manifest are mounted **concurrently** — each server connects in its own goroutine with per-entry locking, eliminating serial bottlenecks when an agent depends on multiple MCP servers.
 
 ```
 Spawn(intent, agent)
     │
-    ├── For each MCP server in agent.mcp.servers:
+    ├── For each MCP server in agent.mcp.servers (concurrently):
     │     │
-    │     ├── Create transport (stdio)
-    │     ├── Connect (with per-server timeout)
-    │     ├── List tools → register as ToolDefs
-    │     ├── Register VFS device at /mnt/mcp/{pid}-{serverName}
-    │     └── Add mount path to process AllowedDevices
+    │     ├── Reserve placeholder (MCPStatusConnecting) with per-entry lock
+    │     ├── Connect transport (outside cross-path lock, bounded by MountTimeout)
+    │     ├── On success: List tools → register ToolDefs → finalize → release lock
+    │     └── On failure: delete placeholder → close transport → release lock
     │
-    ├── On success: continue with agent execution
-    └── On failure: rollback all mounts, free context, return error
+    ├── On all success: continue with agent execution
+    └── On any failure: rollback all mounts, free context, return error
 ```
+
+**Per-server mount timeout** defaults to 5 seconds (configurable via `MountTimeout` in MCPConfig). Each mount operates independently — a slow server does not block other mounts from completing.
 
 ### 2. Ref-Counted Mount Management
 
@@ -134,13 +137,17 @@ Read(FD(5))                                    → search results
 Close(FD(5))                                   → ok
 ```
 
-### 4. Process Group Isolation
+### 4. Process Group Isolation & Graceful Shutdown
 
-MCP transport processes are launched in isolated process groups:
+MCP transport processes are launched in isolated process groups with platform-specific hardening:
 
 - **Signal isolation**: SIGINT/SIGTERM to the Rnix daemon does not propagate to MCP child processes
-- **Clean shutdown**: On mount teardown, the process group is signaled as a unit
-- **Orphan prevention**: If the daemon crashes, MCP servers are cleaned up by the OS process group mechanism
+- **Linux hardening**: `Setpgid` + `Pdeathsig=SIGKILL` ensures child cleanup even on daemon crash
+- **Two-phase graceful shutdown**: On unmount, Rnix first sends `SIGTERM` to the entire process group, then waits up to 5 seconds for clean exit. If the server does not terminate within the grace period, `SIGKILL` is sent as a forced fallback
+- **Orphan prevention**: OS process group mechanism provides a last resort for cleanup
+- **Idempotent Close**: A `closed` flag prevents panics on redundant `Close()` calls during concurrent teardown
+
+During daemon shutdown (`rnix daemon stop`), `UnmountAll()` is called to cleanly tear down all active MCP mounts before the kernel exits.
 
 ### 5. Auto-Unmount on Exit
 

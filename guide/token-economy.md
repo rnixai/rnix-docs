@@ -66,6 +66,29 @@ Both triggers **self-suspend** the process (not terminate), meaning the process 
 
 Exit codes: 0 = normal, 1 = error, **2 = suspended** (budget/loop/turns), **3 = context full**.
 
+### Token Metering & Auto-Truncation
+
+Rnix implements per-device token limits on tool results, preventing any single tool call from consuming excessive context window capacity.
+
+**Per-Device Default Limits:**
+
+| Device | MaxResultTokens | Rationale |
+|--------|----------------|-----------|
+| `/dev/fs` (Filesystem) | 25,000 | Large file reads |
+| `/dev/shell` (Shell) | 30,000 | Verbose command output |
+| MCP Tools | 25,000 | External server results |
+| `/dev/lsp` (LSP) | 100,000 | Complex code intelligence |
+| `/dev/web` (Web) | 100,000 | Web page content |
+| `/dev/memory` (Memory) | 1,000–4,000 | Recall results |
+| `/dev/intent` (Intent) | 4,096–8,192 | Plan decomposition |
+| `/dev/skills` (Skills) | 1,000 | Skill discovery |
+
+When a tool result exceeds its `MaxResultTokens` limit, Rnix truncates the content using a binary search algorithm that correctly handles mixed ASCII and CJK text, and appends a truncation marker.
+
+**Token Estimation** uses a dual-mode algorithm: ASCII text at ~3.5 characters per token, CJK/non-ASCII at ~1.5 runes per token.
+
+**Context Compaction** complements token metering as a second line of defense. When total context usage reaches configurable thresholds (default 80% for both tokens and message slots), Rnix automatically compacts the conversation history. See [Context Compaction](/reference/syscalls#ctxcompact) for details.
+
 ---
 
 ## Contract SLA

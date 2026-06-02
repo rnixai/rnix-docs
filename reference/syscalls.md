@@ -2,12 +2,12 @@
 
 ### 1.1 Overview
 
-The Rnix kernel interface is organized into multiple functional categories, defining a total of 45 syscalls:
+The Rnix kernel interface is organized into multiple functional categories, defining a total of 46 syscalls:
 
 | Category | Syscall Count | Responsibilities |
 |---------|-------------|------|
 | Process Management (ProcessManager) | 5 | Process creation, termination, waiting, querying |
-| Context Management (ContextManager) | 4 | Context space allocation, read/write, release |
+| Context Management (ContextManager) | 5 | Context space allocation, read/write, release, compaction |
 | File System (FileSystem) | 5 | VFS device open, read/write, close, metadata query |
 | Debugging (Debugger) | 1 | Automatic recording and tracing of syscall events |
 | IPC (Send, Recv, Pipe, etc.) | 10 | Inter-process message passing and pipes |
@@ -364,6 +364,71 @@ Signature: CtxFree(cid CtxID) error
 ```go
 err := ctxMgr.CtxFree(cid)
 ```
+
+---
+
+#### CtxCompact
+
+Compacts the context by summarizing historical messages, freeing token and slot capacity.
+
+```
+Signature: Compact(pid PID, instructions string) (CompactResponse, error)
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|------|------|------|
+| `pid` | `PID` | Target process ID |
+| `instructions` | `string` | Optional custom instructions for the summarization LLM (empty = use default prompt) |
+
+**Return Value:** `(CompactResponse, error)`
+
+**CompactResponse Structure:**
+
+| Field | Type | Description |
+|------|------|------|
+| `PreTokens` | `int` | Token count before compaction |
+| `PostTokens` | `int` | Token count after compaction |
+| `Restored` | `[]string` | List of restored context items (files, skills, plan) |
+
+**Error Codes:**
+
+| Error Code | Trigger Condition |
+|--------|---------|
+| `NOT_FOUND` | Process does not exist |
+| `INTERNAL` | Compaction already in progress (concurrent lock), LLM summarization failed, or fewer than 2 messages in context |
+
+**Triggers:**
+
+Compaction can be triggered in four ways:
+
+| Trigger | Condition | Config Field |
+|---------|-----------|-------------|
+| `token_threshold` | Token usage exceeds threshold | `CompactThreshold` (default: `80.0`%) |
+| `slot_threshold` | Message slot usage exceeds threshold | `SlotCompactThreshold` (default: `80.0`%) |
+| `precompact` | Insufficient slots for upcoming tool call results | Automatic |
+| `manual` | Via IPC `compact` method | — |
+
+**Behavior:**
+
+1. Acquires exclusive compact lock (`TryLockCompact`) — only one compaction per process at a time
+2. Collects all messages under read lock
+3. Calls LLM with a structured 9-section summarization prompt
+4. Inserts `[compact_boundary]` marker message with pre-token count and trigger type
+5. Stores LLM-generated summary as the new conversation base
+6. Restores post-compact context: recently-read files (up to 5, 50K tokens total), active skills (up to 25K tokens), and current plan
+
+**Configuration:**
+
+| Field | Type | Default | Description |
+|------|------|--------|------|
+| `CompactThreshold` | `float64` | `80.0` | Token usage % to trigger automatic compaction |
+| `SlotCompactThreshold` | `float64` | `80.0` | Message slot usage % to trigger automatic compaction |
+| `CompactTimeout` | `duration` | `30s` | Timeout for the compact LLM call |
+| `BackpressureThreshold` | `float64` | `70.0` | Slot usage % to inject backpressure warning into context |
+
+**Feature Flag:** `compaction: true` in the feature profile enables automatic compaction.
 
 ---
 
