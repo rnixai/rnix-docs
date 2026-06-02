@@ -34,6 +34,52 @@ Rnix 不仅是一个智能体运行时——它是一个为**智能涌现**而�
 
 ---
 
+## 特性档案与消融
+
+特性档案直接映射到涌现堆栈的各层，支持受控的消融实验。每个档案激活到特定层的能力：
+
+```
+┌─────────────────────────────────────────────────┐
+│          涌现行为                               │  ← 仅 full（免疫）
+├─────────────────────────────────────────────────┤
+│          反馈闭环                               │  ← adaptive（stem_matcher、diff_memory、
+│          声誉 → 干细胞匹配重排序                 │     specialize、replan、discover_skill）
+│          协同 → 技能组合优先级                    │
+├─────────────────────────────────────────────────┤
+│          核心机制                               │  ← core（planning、spawn、compaction）
+├─────────────────────────────────────────────────┤
+│          基础设施                               │  ← baseline（仅 VFS + LLM）
+│          进程模型 · VFS · 统一推理循环           │
+└─────────────────────────────────────────────────┘
+```
+
+| 档案 | 激活的堆栈层 | 衡量内容 |
+|------|-------------|----------|
+| `baseline` | 仅基础设施 | 下界——裸 LLM + VFS 设备性能 |
+| `core` | 基础设施 + 核心机制 | 规划、子进程派生和上下文压缩的贡献 |
+| `adaptive` | 基础设施 + 核心 + 反馈闭环 | 运行时学习、技能获取和路径重规划的贡献 |
+| `full` | 所有层 | 包含免疫监控的完整系统（默认） |
+
+### 消融评估矩阵
+
+一次跨全部四个档案的评估即可量化每层的增量价值：
+
+```
+Task × Profile × Model → Score
+
+示例：
+  "Analyze kernel/kernel.go" × baseline × deepseek → 42
+  "Analyze kernel/kernel.go" × core     × deepseek → 67  (+25 来自规划/子进程)
+  "Analyze kernel/kernel.go" × adaptive × deepseek → 81  (+14 来自反馈闭环)
+  "Analyze kernel/kernel.go" × full     × deepseek → 83  (+2 来自免疫)
+```
+
+相邻档案之间的差值揭示了每个涌现层的边际贡献。使用 `custom` 模式进行更精细的实验——例如，仅启用 `diff_memory` 以将记忆加速从其他自适应机制中隔离出来。
+
+配置详情和预设矩阵参见[特性档案](/zh/guide/configuration#特性档案-feature-profile-)。
+
+---
+
 ## 五大涌现效应
 
 ### 1. 自然选择
@@ -136,6 +182,7 @@ graph TD
 
 ## 相关文档
 
+- [配置指南](/zh/guide/configuration#特性档案-feature-profile-) — 特性档案配置与预设矩阵
 - [自主智能体](/zh/guide/autonomous-agents) — 干细胞分化与统一推理
 - [Token 经济与声誉](/zh/guide/token-economy) — 预算池、声誉与协同
 - [安全与自愈](/zh/guide/security) — 免疫系统与神经可塑性

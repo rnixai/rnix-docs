@@ -102,6 +102,70 @@ $ rnix init --with-mcp-examples
 
 位于 `~/.config/rnix/config.yaml`（全局）和可选的 `.rnix/config.yaml`（项目覆盖）。
 
+### 特性档案（Feature Profile）
+
+特性档案控制运行时激活哪些涌现子系统。它们支持**消融实验**——选择性禁用能力，以衡量每一层对整体智能涌现的贡献。
+
+提供四个命名预设和一个 `custom` 模式，用于精细控制：
+
+| 档案 | 描述 |
+|------|------|
+| `baseline` | 仅基础设施——裸 LLM + VFS 设备。无规划、无子进程、无自适应机制。 |
+| `core` | 基础设施 + 核心机制——规划、子进程派生、上下文压缩。 |
+| `adaptive` | 核心 + 反馈闭环——运行时学习、技能获取、路径重规划。 |
+| `full` | 所有能力启用，包括免疫系统。**默认值。** |
+| `custom` | 逐项控制——未显式列出的 flag 默认为 `true`。 |
+
+**配置方式：**
+
+```yaml
+# .rnix/config.yaml 或 ~/.config/rnix/config.yaml
+features:
+  profile: full   # baseline | core | adaptive | full | custom
+  custom:         # 仅 profile=custom 时生效
+    planning: true
+    replan: false
+    specialize: true
+    discover_skill: true
+    spawn: true
+    diff_memory: false
+    stem_matcher: false
+    immune: true
+    compaction: true
+```
+
+**预设矩阵：**
+
+| 特性 | baseline | core | adaptive | full（默认） |
+|------|----------|------|----------|--------------|
+| `planning` | false | true | true | true |
+| `replan` | false | false | true | true |
+| `specialize` | false | false | true | true |
+| `discover_skill` | false | false | true | true |
+| `spawn` | false | true | true | true |
+| `diff_memory` | false | false | true | true |
+| `stem_matcher` | false | false | true | true |
+| `immune` | false | false | false | true |
+| `compaction` | false | true | true | true |
+
+**环境变量覆盖：**
+
+设置 `RNIX_FEATURE_PROFILE` 可覆盖配置文件中的设定。有效值：`baseline`、`core`、`adaptive`、`full`、`custom`。无效值会产生警告并回退到 `full`。
+
+```bash
+RNIX_FEATURE_PROFILE=baseline rnix "analyze this code"
+```
+
+**Custom 模式：**
+
+当 `profile: custom` 时，仅应用 `custom:` 下显式列出的 flag。未列出的 flag 默认为 `true`——custom 模式用于精准消融，而非全面禁用。
+
+**查看当前活跃档案：**
+
+使用 `rnix config show` 显示活跃的特性档案和各项 flag。详见 [CLI 参考](/zh/reference/cli#rnix-config)。
+
+参见[特性档案与消融](/zh/guide/emergence#特性档案与消融)了解档案如何映射到涌现堆栈。
+
 ### 垃圾回收（GC）
 
 ```yaml
@@ -423,6 +487,7 @@ metadata:
 |----------|-------------|
 | `RNIX_ENV` | 选择 `.env` 文件加载环境（默认：`development`） |
 | `RNIX_ASCII` | 设为 `1` 强制 ASCII 模式（禁用 Unicode） |
+| `RNIX_FEATURE_PROFILE` | 特性档案覆盖：`baseline`、`core`、`adaptive`、`full`、`custom` |
 | `XDG_CONFIG_HOME` | 覆盖全局配置目录（默认：`~/.config`） |
 | `XDG_RUNTIME_DIR` | 用于确定 socket 路径 |
 | `TAVILY_API_KEY` | Tavily 搜索 API 密钥（`/dev/web` 自动检测） |
@@ -448,5 +513,6 @@ Daemon socket 位置优先级：
 - [Skill 包管理](/zh/guide/skill-packages) — 多 scope skill 管理
 - [进程恢复](/zh/guide/process-resume) — GC 配置和进程恢复
 - [MCP 集成](/zh/guide/mcp-integration) — MCP 服务器配置
+- [智能涌现](/zh/guide/emergence) — 涌现架构与特性档案映射
 - [核心概念](/zh/guide/concepts) — 进程、VFS、Agent/Skill 模型
 - [参考手册](/zh/reference/) — 完整 API 和 CLI 参考

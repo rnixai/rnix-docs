@@ -102,6 +102,70 @@ $ rnix init --with-mcp-examples
 
 Located at `~/.config/rnix/config.yaml` (global) and optionally `.rnix/config.yaml` (project override).
 
+### Feature Profiles
+
+Feature profiles control which emergent subsystems are active at runtime. They enable **ablation experiments** — selectively disabling capabilities to measure each layer's contribution to overall intelligence emergence.
+
+There are four named presets and a `custom` mode for fine-grained control:
+
+| Profile | Description |
+|---------|-------------|
+| `baseline` | Foundation only — bare LLM + VFS devices. No planning, spawning, or adaptive mechanisms. |
+| `core` | Foundation + core mechanisms — planning, subprocess spawning, context compaction. |
+| `adaptive` | Core + feedback loops — runtime learning, skill acquisition, path re-planning. |
+| `full` | All capabilities enabled, including immune system. **Default.** |
+| `custom` | Per-flag control — any flag not explicitly listed defaults to `true`. |
+
+**Configuration:**
+
+```yaml
+# .rnix/config.yaml or ~/.config/rnix/config.yaml
+features:
+  profile: full   # baseline | core | adaptive | full | custom
+  custom:         # only used when profile is "custom"
+    planning: true
+    replan: false
+    specialize: true
+    discover_skill: true
+    spawn: true
+    diff_memory: false
+    stem_matcher: false
+    immune: true
+    compaction: true
+```
+
+**Preset Matrix:**
+
+| Feature | baseline | core | adaptive | full (default) |
+|---------|----------|------|----------|----------------|
+| `planning` | false | true | true | true |
+| `replan` | false | false | true | true |
+| `specialize` | false | false | true | true |
+| `discover_skill` | false | false | true | true |
+| `spawn` | false | true | true | true |
+| `diff_memory` | false | false | true | true |
+| `stem_matcher` | false | false | true | true |
+| `immune` | false | false | false | true |
+| `compaction` | false | true | true | true |
+
+**Environment Variable Override:**
+
+Set `RNIX_FEATURE_PROFILE` to override the config file setting. Valid values: `baseline`, `core`, `adaptive`, `full`, `custom`. Invalid values produce a warning and fall back to `full`.
+
+```bash
+RNIX_FEATURE_PROFILE=baseline rnix "analyze this code"
+```
+
+**Custom Mode:**
+
+When `profile: custom`, only the flags explicitly listed under `custom:` are applied. Unlisted flags default to `true` — custom mode is for surgical ablation, not wholesale disabling.
+
+**Inspecting the Active Profile:**
+
+Use `rnix config show` to display the active feature profile and flags. See [CLI Reference](/reference/cli#rnix-config) for details.
+
+See [Feature Profiles & Ablation](/guide/emergence#feature-profiles-ablation) for how profiles map to the emergence stack.
+
 ### Garbage Collection
 
 ```yaml
@@ -470,6 +534,7 @@ When multiple skills are loaded by an agent, their `allowed-tools` are **unioned
 |----------|-------------|
 | `RNIX_ENV` | Select environment for `.env` file loading (default: `development`) |
 | `RNIX_ASCII` | Set to `1` to force ASCII mode (disable Unicode glyphs) |
+| `RNIX_FEATURE_PROFILE` | Feature profile override: `baseline`, `core`, `adaptive`, `full`, `custom` |
 | `XDG_CONFIG_HOME` | Override global config directory (default: `~/.config`) |
 | `XDG_RUNTIME_DIR` | Used to determine socket path |
 | `TAVILY_API_KEY` | Tavily search API key (auto-detected for `/dev/web`) |
@@ -495,5 +560,6 @@ Directory permissions: `0700` (current user only).
 - [Skill Packages](/guide/skill-packages) — Multi-scope skill management
 - [Process Resume](/guide/process-resume) — GC configuration and process recovery
 - [MCP Integration](/guide/mcp-integration) — MCP server configuration
+- [Intelligence Emergence](/guide/emergence) — Emergent architecture and feature profile mapping
 - [Core Concepts](/guide/concepts) — Process, VFS, Agent/Skill model
 - [Reference Manual](/reference/) — Complete API and CLI reference

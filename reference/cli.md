@@ -954,6 +954,59 @@ $ rnix immune resume 42
 $ rnix immune similarity code-analyst
 ```
 
+### 4.33 rnix config — Configuration Management {#rnix-config}
+
+Inspect active daemon configuration.
+
+```
+Usage: rnix config [command]
+Subcommands:
+  show    Show active daemon configuration
+```
+
+**Subcommand: `rnix config show`**
+
+Display the active feature profile and individual feature flags. Attempts to connect to the running daemon first; falls back to reading the global config file (`~/.config/rnix/config.yaml`) if the daemon is not running.
+
+```
+Usage: rnix config show
+Arguments: None (cobra.NoArgs)
+```
+
+**Daemon Running — Output Example:**
+
+```
+Feature Profile: adaptive
+  compaction:     true
+  diff_memory:    true
+  discover_skill: true
+  immune:         false
+  planning:       true
+  replan:         true
+  spawn:          true
+  specialize:     true
+  stem_matcher:   true
+```
+
+**Daemon Not Running — Fallback Output Example:**
+
+```
+Feature Profile: full (from config, daemon not running)
+  compaction:     true
+  diff_memory:    true
+  discover_skill: true
+  immune:         true
+  planning:       true
+  replan:         true
+  spawn:          true
+  specialize:     true
+  stem_matcher:   true
+```
+
+Feature flags are always listed in alphabetical order.
+
+> **Note**: The feature profile can be overridden via the `RNIX_FEATURE_PROFILE` environment variable. See [Feature Profiles](/guide/configuration#feature-profiles) for configuration details.
+
 ---
 
 
@@ -1110,6 +1163,14 @@ Usage: rnix run <script.ash>
 ```
 
 Execute AgentShell script files. Supports shebang `#!/usr/bin/env rnix run`.
+
+### 9.20 rnix config — Configuration Management
+
+```
+Usage: rnix config show
+```
+
+Display active feature profile and flags. Connects to daemon for live state; falls back to global config file if daemon is not running.
 
 ---
 

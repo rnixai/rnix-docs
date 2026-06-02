@@ -35,6 +35,52 @@ Each layer builds on the one below. The foundation provides the process runtime;
 
 ---
 
+## Feature Profiles & Ablation
+
+Feature profiles map directly to the emergence stack layers, enabling controlled ablation experiments. Each profile activates capabilities up to a specific layer:
+
+```
+┌─────────────────────────────────────────────────┐
+│          Emergent Behaviors                     │  ← full only (immune)
+├─────────────────────────────────────────────────┤
+│          Feedback Loops                         │  ← adaptive (stem_matcher, diff_memory,
+│          Reputation → Stem Match re-ranking     │     specialize, replan, discover_skill)
+│          Synergy → Skill combination priority   │
+├─────────────────────────────────────────────────┤
+│          Core Mechanisms                        │  ← core (planning, spawn, compaction)
+├─────────────────────────────────────────────────┤
+│          Foundation                             │  ← baseline (VFS + LLM only)
+│          Process Model · VFS · Reasoning Loop   │
+└─────────────────────────────────────────────────┘
+```
+
+| Profile | Stack Layers Active | What It Measures |
+|---------|-------------------|------------------|
+| `baseline` | Foundation only | Lower bound — raw LLM + VFS device performance |
+| `core` | Foundation + Core Mechanisms | Contribution of planning, subprocess spawning, and context compaction |
+| `adaptive` | Foundation + Core + Feedback Loops | Contribution of runtime learning, skill acquisition, and path re-planning |
+| `full` | All layers | Complete system with immune monitoring (the default) |
+
+### Ablation Evaluation Matrix
+
+A single evaluation run across all four profiles quantifies each layer's incremental value:
+
+```
+Task × Profile × Model → Score
+
+Example:
+  "Analyze kernel/kernel.go" × baseline × deepseek → 42
+  "Analyze kernel/kernel.go" × core     × deepseek → 67  (+25 from planning/spawn)
+  "Analyze kernel/kernel.go" × adaptive × deepseek → 81  (+14 from feedback loops)
+  "Analyze kernel/kernel.go" × full     × deepseek → 83  (+2 from immune)
+```
+
+The delta between adjacent profiles reveals the marginal contribution of each emergence layer. Use `custom` mode for finer-grained experiments — e.g., enabling `diff_memory` alone to isolate memory acceleration from other adaptive mechanisms.
+
+See [Feature Profiles](/guide/configuration#feature-profiles) for configuration details and the preset matrix.
+
+---
+
 ## Five Emergent Effects
 
 ### 1. Natural Selection
@@ -137,6 +183,7 @@ This separation keeps the system predictable: observability components can never
 
 ## Related Documentation
 
+- [Configuration Guide](/guide/configuration#feature-profiles) — Feature profile configuration and preset matrix
 - [Autonomous Agents](/guide/autonomous-agents) — Stem cell differentiation and unified reasoning
 - [Token Economy & Reputation](/guide/token-economy) — Budget pools, reputation, and synergy
 - [Security & Self-Healing](/guide/security) — Immune system and neuroplasticity

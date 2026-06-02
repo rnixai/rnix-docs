@@ -954,6 +954,59 @@ $ rnix immune resume 42
 $ rnix immune similarity code-analyst
 ```
 
+### 4.33 rnix config — 配置管理
+
+查看活跃的 daemon 配置。
+
+```
+用法: rnix config [command]
+子命令:
+  show    显示活跃的 daemon 配置
+```
+
+**子命令：`rnix config show`**
+
+显示活跃的特性档案和各项特性 flag。优先连接运行中的 daemon；daemon 未运行时回退读取本地配置文件。
+
+```
+用法: rnix config show
+参数: 无 (cobra.NoArgs)
+```
+
+**Daemon 运行时输出示例：**
+
+```
+Feature Profile: adaptive
+  compaction:      true
+  diff_memory:     true
+  discover_skill:  true
+  immune:          false
+  planning:        true
+  replan:          true
+  spawn:           true
+  specialize:      true
+  stem_matcher:    true
+```
+
+**Daemon 未运行时回退输出示例：**
+
+```
+Feature Profile: full (from config, daemon not running)
+  compaction:      true
+  diff_memory:     true
+  discover_skill:  true
+  immune:          true
+  planning:        true
+  replan:          true
+  spawn:           true
+  specialize:      true
+  stem_matcher:    true
+```
+
+Feature flag 始终按字母序列出。
+
+> **注意**：特性档案可通过 `RNIX_FEATURE_PROFILE` 环境变量覆盖。详见[特性档案](/zh/guide/configuration#特性档案-feature-profile-)。
+
 ---
 
 
@@ -1110,6 +1163,14 @@ OpenAI 兼容 HTTP 服务器。端点：`/v1/chat/completions`（同步 + SSE �
 ```
 
 执行 AgentShell 脚本文件。支持 shebang `#!/usr/bin/env rnix run`。
+
+### 9.20 rnix config — 配置管理
+
+```
+用法: rnix config show
+```
+
+显示活跃的特性档案和各项 flag。连接 daemon 获取实时状态；daemon 未运行时回退读取配置文件。
 
 ---
 
