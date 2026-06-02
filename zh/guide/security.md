@@ -86,6 +86,25 @@ Mode: warn-only
 
 ---
 
+## Spawn 安全
+
+当智能体使用 `spawn` 工具创建子进程时，两道内核级守卫保障进程树的安全：
+
+**权限继承是单调的。** 子进程的 `AllowedDevices` 始终是父进程的子集——spawn 一个子进程永远无法**获得**父进程所不具备的能力。这堵死了「派生一个助手去获取被拒设备」的提权路径。
+
+**递归有深度上界。** 既然子进程无法通过被 spawn 而获得新权限，那么一个不断派生子进程去「获取」缺失设备的 LLM 本会无限递归下去。内核将 LLM 可达的进程树深度上限设为 **`MaxSpawnDepth`（8）**。超过该上限的 `spawn` 会被确定性地拒绝：
+
+```
+spawn rejected: maximum spawn depth 8 reached (current depth 8).
+Child processes inherit your device restrictions and cannot gain new
+permissions by spawning deeper. Use complete to report your results
+with the devices you have.
+```
+
+只有 LLM 发起的 `spawn` 调用才累积深度——`rnix resume`、`compose`、Supervisor 重启以及 CLI 启动的进程都从深度 0 开始，不受影响。在上限处的反复拒绝会喂给熔断器（fingerprint `INTERNAL|spawn`），因此失控的智能体会解开自己的调用链，而非空转。
+
+---
+
 ## 能力迁移
 
 当智能体失败且 Supervisor 重启也失败时，系统可以将**未完成的任务迁移**给相似的智能体。

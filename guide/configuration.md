@@ -6,7 +6,7 @@ Rnix uses a layered configuration system with YAML files, agent definitions, and
 
 ## Configuration Model
 
-Rnix configuration has two independent dimensions:
+Rnix configuration has three independent dimensions:
 
 ### 1. Config Layering (XDG-style)
 
@@ -33,6 +33,32 @@ Skills follow the [agentskills.io](https://agentskills.io/) specification's dual
 
 Priority: `project/native > project/agents > user/native > user/agents`. See [Skill Packages](/guide/skill-packages) for the full resolution model.
 
+### 3. Data Directory (sessions & history)
+
+Runtime artifacts — reasoning steps, checkpoints, `events.jsonl`, and resumable history — are **not** stored next to your config. They live in a single global **data directory**, resolved in this order:
+
+| Priority | Source | Resulting path |
+|----------|--------|----------------|
+| 1 | `RNIX_DATA_DIR` | the value, as-is |
+| 2 | `XDG_DATA_HOME` | `$XDG_DATA_HOME/rnix` |
+| 3 | (default) | `~/.local/share/rnix` |
+
+Under the data directory, every project gets its own subtree in a **project registry**, keyed by a deterministic, human-readable ID:
+
+```
+<data-dir>/
+└── projects/
+    ├── my-api-3f9a1c2b/         ← <sanitized-basename>-<hash8>
+    │   └── steps/
+    │       └── <uuid>/          ← events.jsonl, proc-info.json, checkpoints
+    └── another-repo-7c4e0d11/
+        └── steps/
+```
+
+The ID is `<sanitized-basename>-<hash8>`, where `hash8` is the first 4 bytes of `sha256(absolute-project-path)`. The hash keeps two projects that share a basename (e.g. two different `api/` folders) from colliding, while the basename keeps the directory readable. Centralizing data this way lets `rnix ps -a`, `rnix record`, `rnix replay`, and `rnix resume` enumerate history **across every project** from one root, and lets [garbage collection](#garbage-collection) apply `retention_days` / `max_entries` globally.
+
+> Older releases stored session data in a cwd-relative `<project>/.rnix/data/steps/`. That location is superseded by the global data directory — `.rnix/` now holds only config, state, and skills.
+
 ### Directory Structure
 
 ```
@@ -44,10 +70,9 @@ Priority: `project/native > project/agents > user/native > user/agents`. See [Sk
 │   └── code-analyst/
 │       ├── agent.yaml
 │       └── instructions.md
-├── skills/                      ← User skills (native namespace)
-│   └── code-analysis/
-│       └── SKILL.md
-└── data/
+└── skills/                      ← User skills (native namespace)
+    └── code-analysis/
+        └── SKILL.md
 
 ~/.agents/skills/                ← User skills (agents namespace, agentskills.io standard)
 └── web-research/                ←   Shared with Cursor, OpenCode, etc.
@@ -61,9 +86,8 @@ Priority: `project/native > project/agents > user/native > user/agents`. See [Sk
 ├── web-search.yaml
 ├── agents/                      ← Project agent definitions
 ├── skills/                      ← Project skills (native namespace)
-├── state/                       ← Runtime state (trust marker, etc.)
-├── data/
-└── steps/
+└── state/                       ← Runtime state (trust marker, etc.)
+                                 ← (session data lives in the global data dir — see "3. Data Directory")
 
 <project>/.agents/skills/        ← Project skills (agents namespace, agentskills.io standard)
 └── shared-util/                 ←   Shared across tools in the project

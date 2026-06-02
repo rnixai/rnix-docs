@@ -192,6 +192,54 @@ CLI drivers implement the `DriverMetaProvider` interface, exposing runtime metad
 
 This metadata is recorded in strace events (`claude_cli.resolve`, `claude_cli.capabilities`) and visible in the dashboard's process detail view.
 
+### Prompt Context Injection
+
+To save a startup round-trip, the `claude-cli` driver prepends a short `# Instructions` block to the first prompt whenever the process has a project directory or skills — so the model knows where it is and what skills it has without spending a tool call to discover them:
+
+```
+# Instructions
+
+Working directory: /path/to/project
+
+Accessible skill bundle: /path/to/project/.claude/skills/code-review, web-research
+
+# User request
+
+<the actual intent>
+```
+
+The skill bundle is also exposed to the CLI's own built-in tools via `--add-dir` (when that capability is present). If neither a project directory nor skills are set, the raw intent is sent unmodified.
+
+### Permission Mode
+
+The `claude-cli` driver runs under a configurable permission mode, set per provider in `providers.yaml`:
+
+```yaml
+providers:
+  claude:
+    driver: claude-cli
+    model: sonnet
+    permission_mode: bypassPermissions   # default
+```
+
+| Mode | Behavior |
+|------|----------|
+| `bypassPermissions` | Skip all permission confirmations (the daemon default) |
+| `acceptEdits` | Auto-accept file edits; other operations still confirm |
+| `plan` | Planning only — no real operations are executed |
+| `default` | Use the Claude CLI's native default behavior |
+
+**Why `bypassPermissions` is the daemon default — and safe here:** Rnix processes run under the daemon with no TTY, so an interactive CLI permission prompt would *block the process forever*. Permission control is instead enforced one layer below the CLI, by Rnix's VFS device allowlist (`allowed_tools`). If your installed CLI does **not** support `--permission-mode`, leave `permission_mode` empty so the flag is omitted.
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| Streaming partial messages never appear; output arrives all at once | Installed CLI lacks `--include-partial-messages` | `claude -p --help \| grep include-partial-messages`; update via `npm update -g @anthropic-ai/claude-code` |
+| Process hangs on its first LLM call, daemon log silent | `--permission-mode` unsupported → CLI shows a TTY prompt the daemon can't answer | Confirm with `claude -p --help \| grep permission-mode`; if absent, set `permission_mode: ""` (omit the flag) or update the CLI |
+| Spawn fails: `no claude-compatible CLI found in PATH: tried [claude openclaude]` | Binary not on PATH or any extended search path | Install (`npm install -g @anthropic-ai/claude-code`), verify with `which claude`, or pin `command: /full/path/claude` in `providers.yaml` |
+| Dashboard detail pane shows no `Binary:` / `Capabilities:` lines | The process isn't using a CLI driver (API drivers don't implement `DriverMetaProvider`) | Expected behavior — driver metadata is only shown for CLI drivers like `claude-cli` |
+
 ---
 
 ## Prompt Caching

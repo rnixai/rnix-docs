@@ -571,16 +571,21 @@ $ rnix compose down -f my-workflow.yaml --json
 
 **注意：** 要暂停/恢复整个进程树（包括后代进程），请使用 Dashboard 的 `p` 键，它会调用 `SignalTree`。
 
-### 4.20 rnix resume \<pid|uuid\> — 恢复已挂起进程
+### 4.20 rnix resume \<pid|uuid\> — 恢复进程
 
-从检查点恢复已挂起的智能体进程。此命令用于基于检查点的恢复（从 `StateSuspended`），而非恢复 SIGPAUSE 暂停的进程——后者请使用 SIGRESUME（通过 Dashboard `p` 键或 `rnix kill <pid>` 发送信号 5）。
+从检查点（`Suspended`）**或**历史（`Dead` / `Zombie` / `context_full` / 熔断）恢复一个进程。这是基于检查点/历史的恢复——与恢复 SIGPAUSE 暂停的进程**不同**；后者请使用 SIGRESUME（通过 Dashboard `p` 键或 `rnix kill <pid>` 发送信号 5）。
 
 ```
-用法：rnix resume <pid|uuid>
+用法：rnix resume [--fork] [--from-step N] <pid|uuid>
 参数：<pid|uuid> — 进程 ID 或 UUID（恰好 1 个参数）
 ```
 
-支持 PID（运行中的 daemon 进程）和 UUID（从持久化检查点恢复）。
+| 标志 | 说明 |
+|------|------|
+| `--fork` | 恢复为一个**新** UUID，而非继承原 UUID。分叉进程会记录 `origin_uuid` 血缘链接，因此原 UUID 仍可独立恢复（Git 式探索）。 |
+| `--from-step N` | 在恢复前将历史回放截断到第 `N` 步（*截断分叉*）。需要历史路径，且与检查点互斥——两者同时满足时返回 `ErrInvalid`。`0` 表示不截断。 |
+
+同时支持 PID（运行中的 daemon 进程）和 UUID（从持久化的检查点或历史恢复）。完整的恢复/分叉模型与 Dashboard 血缘视图详见[进程恢复](/zh/guide/process-resume)。
 
 ### 4.21 rnix heartbeat — 心跳监控
 
@@ -1009,6 +1014,68 @@ Feature flag 始终按字母序列出。
 
 ---
 
+### 4.34 rnix mcp — MCP 服务器检查 {#rnix-mcp}
+
+检查并验证运行中 daemon 上的 [Model Context Protocol](/zh/guide/mcp-integration)（MCP）服务器挂载。
+
+```
+用法：rnix mcp [command]
+子命令：
+  list           列出 daemon 上活动的 MCP 服务器挂载
+  test <name>    探测某个已配置的服务器（connect → tools/list → resources/list → prompts/list）
+  logs <name>    显示某个已挂载 MCP 服务器捕获的 stderr
+```
+
+**子命令：`rnix mcp list`**
+
+列出 daemon 当前持有的 MCP 挂载。这是纯读操作：daemon 未运行时打印友好的空列表并以 `0` 退出（与 `rnix ps` 一致）。
+
+```
+用法：rnix mcp list
+参数：无（cobra.NoArgs）
+```
+
+**子命令：`rnix mcp test <name>`**
+
+对 `mcp.yaml` 中声明的服务器执行一次性探测。探测会在 daemon 上启动一个全新 transport，依次走完四个阶段——`connect` / `tools_list` / `resources_list` / `prompts_list`——随后拆除，不在注册表中留下挂载。该命令**要求 daemon 处于运行状态**（transport 必须位于 daemon 的进程树中，以避免孤儿子进程），因此 daemon 未运行时以 `1` 退出。
+
+```
+用法：rnix mcp test <name>
+参数：<name> — mcp.yaml 中的 MCP 服务器名（恰好 1 个参数）
+```
+
+**子命令：`rnix mcp logs <name>`**
+
+打印某个已挂载 MCP 服务器子进程捕获的最近 256 行 stderr——当 MCP 工具开始失败时（例如 `npx error: ENOENT`、`chromium not found`）首先该查这里。与 `mcp list` 一样，这是纯读操作：daemon 未运行时打印提示并以 `0` 退出；未知/未挂载的服务器名以 `1` 退出，并附上可用服务器列表。
+
+```
+用法：rnix mcp logs <name>
+参数：<name> — 已挂载的 MCP 服务器名（恰好 1 个参数）
+```
+
+---
+
+### 4.35 rnix check — 子系统诊断 {#rnix-check}
+
+针对单个 rnix 子系统运行有针对性的环境/配置检查（目前为 `mcp`）。这与聚焦 LLM provider 健康的 `rnix doctor` 不同。
+
+```
+用法：rnix check [command]
+子命令：
+  mcp    验证 MCP 运行时前置条件（node、npx、可选 Chromium）
+```
+
+**子命令：`rnix check mcp`**
+
+检查主机是否具备运行 `mcp.yaml` 中声明的 MCP 服务器所需的二进制。默认探测 `node` + `npx`；若任一服务器引用了 `playwright`，则额外探测 Chromium 安装（`npx playwright install chromium`）。报告 `pass` / `warn` / `fail` 状态——`fail` 以 `1` 退出。
+
+```
+用法：rnix check mcp
+参数：无（cobra.NoArgs）
+```
+
+---
+
 
 ### 9.1 rnix top — 实时进程监控
 
@@ -1171,6 +1238,26 @@ OpenAI 兼容 HTTP 服务器。端点：`/v1/chat/completions`（同步 + SSE �
 ```
 
 显示活跃的特性档案和各项 flag。连接 daemon 获取实时状态；daemon 未运行时回退读取配置文件。
+
+---
+
+### 9.21 rnix mcp — MCP 服务器检查
+
+```
+用法：rnix mcp list | test <name> | logs <name>
+```
+
+检查 daemon 上的 MCP 挂载：`list` 列出活动挂载、`test` 对已配置服务器做 4 阶段探测、或 `logs` 查看服务器捕获的 stderr。详见 [§4.34](#rnix-mcp)。
+
+---
+
+### 9.22 rnix check — 子系统诊断
+
+```
+用法：rnix check mcp
+```
+
+验证某子系统的主机前置条件（`mcp`：node、npx、可选 Chromium）。报告 `pass` / `warn` / `fail`。详见 [§4.35](#rnix-check)。
 
 ---
 

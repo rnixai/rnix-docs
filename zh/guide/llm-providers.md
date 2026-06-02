@@ -192,6 +192,54 @@ CLI 驱动实现 `DriverMetaProvider` 接口，暴露运行时元数据用于可
 
 元数据记录在 strace 事件（`claude_cli.resolve`、`claude_cli.capabilities`）中，可在 Dashboard 进程详情中查看。
 
+### Prompt 上下文注入
+
+为节省一次启动往返，当进程带有项目目录或 skill 时，`claude-cli` 驱动会在首条 prompt 前面拼接一段简短的 `# Instructions` 块——让模型无需额外的工具调用即可知道自己身在何处、拥有哪些 skill：
+
+```
+# Instructions
+
+Working directory: /path/to/project
+
+Accessible skill bundle: /path/to/project/.claude/skills/code-review, web-research
+
+# User request
+
+<实际的 intent>
+```
+
+该 skill bundle 同时通过 `--add-dir`（在具备该能力时）暴露给 CLI 自带的内置工具。若既无项目目录也无 skill，则原样发送 intent，不做修改。
+
+### 权限模式（Permission Mode）
+
+`claude-cli` 驱动在可配置的权限模式下运行，按 provider 在 `providers.yaml` 中设置：
+
+```yaml
+providers:
+  claude:
+    driver: claude-cli
+    model: sonnet
+    permission_mode: bypassPermissions   # 默认值
+```
+
+| 模式 | 行为 |
+|------|------|
+| `bypassPermissions` | 跳过所有权限确认（daemon 默认值） |
+| `acceptEdits` | 自动接受文件编辑；其余操作仍需确认 |
+| `plan` | 仅规划——不执行任何实际操作 |
+| `default` | 使用 Claude CLI 的原生默认行为 |
+
+**为何 `bypassPermissions` 是 daemon 默认值，且在此安全：** Rnix 进程在 daemon 下运行且无 TTY，因此交互式的 CLI 权限弹窗会*永久阻塞进程*。权限控制改由 CLI 下一层的 Rnix VFS 设备白名单（`allowed_tools`）强制执行。若你安装的 CLI **不**支持 `--permission-mode`，请将 `permission_mode` 留空以省略该标志。
+
+### 故障排查
+
+| 症状 | 可能原因 | 修复 |
+|------|----------|------|
+| 看不到流式中间消息，输出在完成后一次性返回 | 安装的 CLI 缺少 `--include-partial-messages` | `claude -p --help \| grep include-partial-messages`；通过 `npm update -g @anthropic-ai/claude-code` 更新 |
+| 进程在首次 LLM 调用时挂起，daemon 日志无响应 | 不支持 `--permission-mode` → CLI 弹出 daemon 无法应答的 TTY 提示 | 用 `claude -p --help \| grep permission-mode` 确认；若缺失，设 `permission_mode: ""`（省略该标志）或更新 CLI |
+| Spawn 失败：`no claude-compatible CLI found in PATH: tried [claude openclaude]` | 二进制不在 PATH 及任何扩展搜索路径中 | 安装（`npm install -g @anthropic-ai/claude-code`）、用 `which claude` 验证，或在 `providers.yaml` 中固定 `command: /full/path/claude` |
+| Dashboard 详情面板没有 `Binary:` / `Capabilities:` 行 | 该进程未使用 CLI 驱动（API 驱动不实现 `DriverMetaProvider`） | 预期行为——驱动元数据仅对 `claude-cli` 等 CLI 驱动显示 |
+
 ---
 
 ### API Key 管理

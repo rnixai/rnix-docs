@@ -6,7 +6,7 @@ Rnix 使用分层配置系统，通过 YAML 配置文件、Agent 定义和 Skill
 
 ## 配置模型
 
-Rnix 的配置有两个独立维度：
+Rnix 的配置有三个独立维度：
 
 ### 1. 配置文件分层（XDG 风格）
 
@@ -33,6 +33,32 @@ Skill 遵循 [agentskills.io](https://agentskills.io/) 规范的 dual-scope × d
 
 优先级：`project/native > project/agents > user/native > user/agents`。详见 [Skill 包管理](/zh/guide/skill-packages)。
 
+### 3. 数据目录（会话与历史）
+
+运行时产物——推理步骤、检查点、`events.jsonl`、可恢复历史——**不**存放在配置旁边，而是位于单一的全局**数据目录**，按以下顺序解析：
+
+| 优先级 | 来源 | 解析路径 |
+|--------|------|----------|
+| 1 | `RNIX_DATA_DIR` | 取其原值 |
+| 2 | `XDG_DATA_HOME` | `$XDG_DATA_HOME/rnix` |
+| 3 | （默认） | `~/.local/share/rnix` |
+
+在数据目录下，每个项目在**项目注册表**中拥有自己的子树，以一个确定性的、可读的 ID 作为键：
+
+```
+<data-dir>/
+└── projects/
+    ├── my-api-3f9a1c2b/         ← <sanitized-basename>-<hash8>
+    │   └── steps/
+    │       └── <uuid>/          ← events.jsonl、proc-info.json、检查点
+    └── another-repo-7c4e0d11/
+        └── steps/
+```
+
+ID 形如 `<sanitized-basename>-<hash8>`，其中 `hash8` 是 `sha256(项目绝对路径)` 的前 4 字节。哈希可避免两个同名 basename 的项目（例如两个不同的 `api/` 目录）相互冲突，basename 则保持目录可读。如此集中存储，使得 `rnix ps -a`、`rnix record`、`rnix replay`、`rnix resume` 能从单一根目录**跨所有项目**枚举历史，也让下文的**垃圾回收（GC）**能全局地应用 `retention_days` / `max_entries`。
+
+> 旧版本曾将会话数据存放在相对当前目录的 `<project>/.rnix/data/steps/`。该位置已被全局数据目录取代——`.rnix/` 现在仅保存配置、状态和 skill。
+
 ### 目录结构
 
 ```
@@ -44,10 +70,9 @@ Skill 遵循 [agentskills.io](https://agentskills.io/) 规范的 dual-scope × d
 │   └── code-analyst/
 │       ├── agent.yaml
 │       └── instructions.md
-├── skills/                      ← 用户 skill（native namespace）
-│   └── code-analysis/
-│       └── SKILL.md
-└── data/
+└── skills/                      ← 用户 skill（native namespace）
+    └── code-analysis/
+        └── SKILL.md
 
 ~/.agents/skills/                ← 用户 skill（agents namespace，agentskills.io 标准）
 └── web-research/                ←   与 Cursor、OpenCode 等共享
@@ -61,9 +86,8 @@ Skill 遵循 [agentskills.io](https://agentskills.io/) 规范的 dual-scope × d
 ├── web-search.yaml
 ├── agents/                      ← 项目 Agent 定义
 ├── skills/                      ← 项目 skill（native namespace）
-├── state/                       ← 运行时状态（trust marker 等）
-├── data/
-└── steps/
+└── state/                       ← 运行时状态（trust marker 等）
+                                 ← （会话数据位于全局数据目录——见"3. 数据目录"）
 
 <project>/.agents/skills/        ← 项目 skill（agents namespace，agentskills.io 标准）
 └── shared-util/                 ←   项目内跨工具共享

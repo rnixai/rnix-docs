@@ -86,6 +86,25 @@ Mode: warn-only
 
 ---
 
+## Spawn Safety
+
+When an agent uses the `spawn` tool to create a child process, two kernel-level guards keep the process tree safe:
+
+**Permission inheritance is monotonic.** A child's `AllowedDevices` are always a subset of its parent's — spawning a child can never *gain* a capability the parent lacks. This closes the privilege-escalation path where an agent spawns a helper to reach a device it was denied.
+
+**Recursion is depth-bounded.** Because a child can never acquire new permissions by being spawned, an LLM that keeps spawning children to "acquire" a missing device would otherwise recurse forever. The kernel caps the LLM-reachable process-tree depth at **`MaxSpawnDepth` (8)**. A `spawn` that would exceed it is rejected deterministically:
+
+```
+spawn rejected: maximum spawn depth 8 reached (current depth 8).
+Child processes inherit your device restrictions and cannot gain new
+permissions by spawning deeper. Use complete to report your results
+with the devices you have.
+```
+
+Only LLM-initiated `spawn` calls accumulate depth — `rnix resume`, `compose`, supervisor restarts, and CLI-launched processes all start at depth 0 and are unaffected. Repeated rejections at the limit feed the circuit breaker (fingerprint `INTERNAL|spawn`), so a runaway agent unwinds its chain instead of spinning.
+
+---
+
 ## Capability Migration
 
 When an agent fails and Supervisor restart also fails, the system can **migrate the unfinished task** to a similar agent.

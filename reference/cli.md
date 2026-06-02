@@ -571,16 +571,21 @@ Arguments: <pid> — Process ID (exactly 1 argument)
 
 **Note:** To pause/resume an entire process tree (including descendants), use the dashboard `p` key which calls `SignalTree`.
 
-### 4.20 rnix resume \<pid|uuid\> — Resume Suspended Process
+### 4.20 rnix resume \<pid|uuid\> — Resume Process
 
-Resume a suspended agent process from its checkpoint. This command is for checkpoint-based resume (from `StateSuspended`), not for unpausing a SIGPAUSE-paused process — use SIGRESUME for that (via dashboard `p` key or `rnix kill <pid>` with signal 5).
+Resume a process from a checkpoint (`Suspended`) **or** from history (`Dead` / `Zombie` / `context_full` / circuit-broken). This is checkpoint/history-based resume — it is *not* the same as unpausing a SIGPAUSE-paused process; for that use SIGRESUME (via dashboard `p` key or `rnix kill <pid>` with signal 5).
 
 ```
-Usage: rnix resume <pid|uuid>
+Usage: rnix resume [--fork] [--from-step N] <pid|uuid>
 Arguments: <pid|uuid> — Process ID or UUID (exactly 1 argument)
 ```
 
-Supports both PID (for running daemon processes) and UUID (for resuming from persisted checkpoints).
+| Flag | Description |
+|------|-------------|
+| `--fork` | Resume into a **new** UUID instead of inheriting the original. The forked process records an `origin_uuid` lineage link, so the original UUID stays independently resumable (Git-style exploration). |
+| `--from-step N` | Truncate history replay at step `N` before resuming (a *truncated fork*). Requires the history path and conflicts with checkpoints — returns `ErrInvalid` if both apply. `0` = no truncation. |
+
+Accepts both a PID (for a running daemon process) and a UUID (for resuming from persisted checkpoints or history). See [Process Resume](/guide/process-resume) for the full resume / fork model and the Dashboard Lineage view.
 
 ### 4.21 rnix heartbeat — Heartbeat Monitor
 
@@ -1009,6 +1014,68 @@ Feature flags are always listed in alphabetical order.
 
 ---
 
+### 4.34 rnix mcp — MCP Server Inspection {#rnix-mcp}
+
+Inspect and validate [Model Context Protocol](/guide/mcp-integration) (MCP) server mounts on the running daemon.
+
+```
+Usage: rnix mcp [command]
+Subcommands:
+  list           List active MCP server mounts on the daemon
+  test <name>    Probe a configured server (connect → tools/list → resources/list → prompts/list)
+  logs <name>    Show captured stderr of a mounted MCP server
+```
+
+**Subcommand: `rnix mcp list`**
+
+List the MCP mounts the daemon currently holds. This is a pure read: when the daemon is not running it prints a friendly empty list and exits `0` (consistent with `rnix ps`).
+
+```
+Usage: rnix mcp list
+Arguments: None (cobra.NoArgs)
+```
+
+**Subcommand: `rnix mcp test <name>`**
+
+Run a one-shot probe against a server declared in `mcp.yaml`. The probe spins up a fresh transport on the daemon, walks four stages — `connect` / `tools_list` / `resources_list` / `prompts_list` — then tears it down, leaving no mount in the registry. This command **requires the daemon to be running** (the transport must live in the daemon's process tree to avoid orphan subprocesses), so a daemon-down state exits `1`.
+
+```
+Usage: rnix mcp test <name>
+Arguments: <name> — MCP server name from mcp.yaml (exactly 1 argument)
+```
+
+**Subcommand: `rnix mcp logs <name>`**
+
+Print the most recent 256 stderr lines captured from a mounted MCP server's child process — the first place to look when an MCP tool starts failing (e.g. `npx error: ENOENT`, `chromium not found`). Like `mcp list`, this is a pure read: daemon-down prints a hint and exits `0`; an unknown / unmounted server name exits `1` with the list of available servers.
+
+```
+Usage: rnix mcp logs <name>
+Arguments: <name> — Mounted MCP server name (exactly 1 argument)
+```
+
+---
+
+### 4.35 rnix check — Subsystem Diagnostics {#rnix-check}
+
+Run targeted environment / configuration checks for a single rnix subsystem (currently `mcp`). This is distinct from `rnix doctor`, which focuses on LLM-provider health.
+
+```
+Usage: rnix check [command]
+Subcommands:
+  mcp    Verify MCP runtime prerequisites (node, npx, optional Chromium)
+```
+
+**Subcommand: `rnix check mcp`**
+
+Check that the host has the binaries needed to run the MCP servers declared in `mcp.yaml`. It probes `node` + `npx` by default; if any server references `playwright`, it additionally probes for a Chromium install (`npx playwright install chromium`). Reports a `pass` / `warn` / `fail` status — a `fail` exits `1`.
+
+```
+Usage: rnix check mcp
+Arguments: None (cobra.NoArgs)
+```
+
+---
+
 
 ### 9.1 rnix top — Real-time Process Monitor
 
@@ -1171,6 +1238,26 @@ Usage: rnix config show
 ```
 
 Display active feature profile and flags. Connects to daemon for live state; falls back to global config file if daemon is not running.
+
+---
+
+### 9.21 rnix mcp — MCP Server Inspection
+
+```
+Usage: rnix mcp list | test <name> | logs <name>
+```
+
+Inspect MCP mounts on the daemon: `list` active mounts, `test` a configured server with a 4-stage probe, or tail a server's captured `logs`. See [§4.34](#rnix-mcp).
+
+---
+
+### 9.22 rnix check — Subsystem Diagnostics
+
+```
+Usage: rnix check mcp
+```
+
+Verify a subsystem's host prerequisites (`mcp`: node, npx, optional Chromium). Reports `pass` / `warn` / `fail`. See [§4.35](#rnix-check).
 
 ---
 
