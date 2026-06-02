@@ -23,21 +23,21 @@ Arguments: [intent] — arbitrary-length intent string (multiple arguments joine
 
 | Flag | Short | Type | Default | Description |
 |------|--------|------|--------|------|
-| `--model` | `-m` | `string` | `""` | LLM model (`sonnet`/`opus`/`haiku`) |
+| `--model` | `-m` | `string` | `""` | LLM model (`deepseek-v4-flash`/`deepseek-v4-pro`/`sonnet`) |
 | `--max-steps` | — | `int` | `0` | Maximum reasoning steps (`0` = default 10) |
 | `--agent` | — | `string` | `""` | Agent definition name |
-| `--provider` | — | `string` | `""` | LLM provider (`claude`/`cursor`) |
+| `--provider` | — | `string` | `""` | LLM provider (`deepseek`/`claude`/`cursor`) |
 
 **Default Output Example:**
 
 ```
-[kernel] spawning PID 1 (claude/haiku)...
+[kernel] spawning PID 1 (deepseek/deepseek-v4-flash)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 ══ Result ══════════════════════════════════════════════════════════════════════
   Analysis result content...
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | claude/haiku | tokens: 1234 | elapsed: 6.2s
+[kernel] PID 1 exited(0) | deepseek/deepseek-v4-flash | tokens: 1234 | elapsed: 6.2s
 ```
 
 **JSON Success Response:**
@@ -86,11 +86,19 @@ daemon is not running
 ### 4.3 rnix ps — Process List
 
 ```
-Usage: rnix ps
+Usage: rnix ps [flags]
 Arguments: None (cobra.NoArgs)
 ```
 
-**Four Output Modes:**
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `-a`, `--all` | Show all processes including completed/dead (active + historical) |
+| `-v`, `--verbose` | Show extra columns (PPID, Intent) |
+| `-q`, `--quiet` | Print one PID per line |
+| `-j`, `--json` | Output structured JSON |
+| `--uuid` | Show UUID column (auto-enabled with `-a`) |
 
 **Default Mode — Table Format:**
 
@@ -102,6 +110,20 @@ Arguments: None (cobra.NoArgs)
 
 1 active, 1 zombie, 2 total
 ```
+
+**--all — Include Historical Processes:**
+
+```bash
+$ rnix ps -a
+  PID   UUID                                  STATE      SKILL              TOKENS   ELAPSED
+─────   ────────────────────────────────────   ────────   ───────────────   ────────   ────────
+    1   019746a0-1234-7000-8000-000000000001   running    code-analysis        456      3.2s
+    2   019746a0-1234-7000-8000-000000000002   dead       security-scan       1200      8.5s
+
+1 active, 1 dead, 2 total
+```
+
+The UUID column is automatically shown when `-a` is used, since UUIDs are essential for identifying historical processes (e.g., for `rnix resume`).
 
 **--verbose — With Extra Fields:**
 
@@ -1176,4 +1198,8 @@ Single `reasonStep` loop where LLM autonomously selects ActionType each step: to
 | `1` | `"unexpected exit"` | Unexpected exit |
 | `1` | `"max steps exceeded"` | Exceeded maximum reasoning steps |
 | `1` | Error description | Error during reasoning |
-| `2` | `"budget_exceeded"` | Token budget exceeded |
+| `2` | `"budget_exhausted"` | Cumulative token budget exceeded (`max_tokens`), self-suspended |
+| `2` | `"max_turns_reached"` | Maximum reasoning turns exceeded, self-suspended |
+| `2` | `"loop_detected"` | Repetitive action loop detected, self-suspended |
+| `2` | `"user_suspended"` | User-initiated suspension (SIGPAUSE) |
+| `3` | `"context_full"` | Per-step input tokens exceeded `context_budget`, self-suspended (recoverable via resume) |

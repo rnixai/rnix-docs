@@ -23,21 +23,21 @@
 
 | Flag | 短选项 | 类型 | 默认值 | 说明 |
 |------|--------|------|--------|------|
-| `--model` | `-m` | `string` | `""` | LLM 模型（`sonnet`/`opus`/`haiku`） |
+| `--model` | `-m` | `string` | `""` | LLM 模型（`deepseek-v4-flash`/`deepseek-v4-pro`/`sonnet`） |
 | `--max-steps` | — | `int` | `0` | 最大推理步数（`0` = 默认 10） |
 | `--agent` | — | `string` | `""` | Agent 定义名称 |
-| `--provider` | — | `string` | `""` | LLM 提供商（`claude`/`cursor`） |
+| `--provider` | — | `string` | `""` | LLM 提供商（`deepseek`/`claude`/`cursor`） |
 
 **默认输出示例：**
 
 ```
-[kernel] spawning PID 1 (claude/haiku)...
+[kernel] spawning PID 1 (deepseek/deepseek-v4-flash)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 ══ Result ══════════════════════════════════════════════════════════════════════
   分析结果内容...
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | claude/haiku | tokens: 1234 | elapsed: 6.2s
+[kernel] PID 1 exited(0) | deepseek/deepseek-v4-flash | tokens: 1234 | elapsed: 6.2s
 ```
 
 **JSON 成功响应：**
@@ -86,11 +86,19 @@ daemon is not running
 ### 4.3 rnix ps — 进程列表
 
 ```
-用法: rnix ps
+用法: rnix ps [flags]
 参数: 无 (cobra.NoArgs)
 ```
 
-**四种输出模式：**
+**可用标志：**
+
+| 标志 | 说明 |
+|------|------|
+| `-a`, `--all` | 显示所有进程，包括已完成/已终止的进程（活跃 + 历史） |
+| `-v`, `--verbose` | 显示额外列（PPID、Intent） |
+| `-q`, `--quiet` | 每行输出一个 PID |
+| `-j`, `--json` | 输出结构化 JSON |
+| `--uuid` | 显示 UUID 列（使用 `-a` 时自动启用） |
 
 **默认模式 — 表格格式：**
 
@@ -102,6 +110,20 @@ daemon is not running
 
 1 active, 1 zombie, 2 total
 ```
+
+**--all — 包含历史进程：**
+
+```bash
+$ rnix ps -a
+  PID   UUID                                  STATE      SKILL              TOKENS   ELAPSED
+─────   ────────────────────────────────────   ────────   ───────────────   ────────   ────────
+    1   019746a0-1234-7000-8000-000000000001   running    code-analysis        456      3.2s
+    2   019746a0-1234-7000-8000-000000000002   dead       security-scan       1200      8.5s
+
+1 active, 1 dead, 2 total
+```
+
+使用 `-a` 时 UUID 列会自动显示，因为 UUID 是识别历史进程的关键标识（例如用于 `rnix resume`）。
 
 **--verbose — 含额外字段：**
 
@@ -1140,4 +1162,8 @@ Spawn 时自动挂载，格式 `/mnt/mcp/{pid}-{serverName}`。子路径映射�
 | `1` | `"unexpected exit"` | 意外退出 |
 | `1` | `"max steps exceeded"` | 超过最大推理步数 |
 | `1` | 错误描述 | 推理过程中出错 |
-| `2` | `"budget_exceeded"` | Token 预算超限 |
+| `2` | `"budget_exhausted"` | 累计 token 预算超限（`max_tokens`），自暂停 |
+| `2` | `"max_turns_reached"` | 超过最大推理轮次，自暂停 |
+| `2` | `"loop_detected"` | 检测到重复动作循环，自暂停 |
+| `2` | `"user_suspended"` | 用户发起的暂停（SIGPAUSE） |
+| `3` | `"context_full"` | 单步输入 token 超过 `context_budget`，自暂停（可通过 resume 恢复） |

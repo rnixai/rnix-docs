@@ -6,35 +6,44 @@ Rnix implements an adaptive immune security system that monitors agent behavior,
 
 ## Immune System Configuration
 
-The Immune System is **disabled by default**. To enable it, add the following configuration:
+The Immune System is **enabled by default in warn-only (observation) mode**. It monitors agent behavior and records anomalies, but does not suspend processes. This provides passive security awareness with zero interference.
+
+To switch to **enforce mode** (auto-suspend on anomaly) or to disable entirely:
 
 ```yaml
-# config.yaml
+# .rnix/config.yaml
 immune:
-  enabled: true
+  enabled: true               # default: true
+  warn_only: false            # default: true — set false to enable auto-suspend
   deviation_threshold: 2.0    # Standard deviations from baseline (default: 2.0)
-  min_samples: 10             # Minimum samples before anomaly detection activates
-  auto_suspend: true          # Auto-suspend processes on anomaly detection
-  threat_memory: true         # Enable threat signature persistence
+  min_samples: 5              # Minimum samples before anomaly detection activates
 ```
 
 ### Configuration Fields
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | `bool` | `false` | Enable or disable the immune system |
+| `enabled` | `bool` | `true` | Enable or disable the immune system |
+| `warn_only` | `bool` | `true` | Warn-only mode: detect and log anomalies without suspending processes |
 | `deviation_threshold` | `float` | `2.0` | Number of standard deviations to trigger anomaly |
-| `min_samples` | `int` | `10` | Minimum behavior samples before detection begins |
-| `auto_suspend` | `bool` | `true` | Automatically suspend anomalous processes |
-| `threat_memory` | `bool` | `true` | Persist threat signatures across sessions |
+| `min_samples` | `int` | `5` | Minimum behavior samples before detection begins |
+| `min_migration_similarity` | `float` | `0.5` | Minimum similarity score for capability migration |
 
-When disabled, all immune-related IPC methods return empty status, and no behavior monitoring occurs.
+### Operating Modes
+
+| Mode | `enabled` | `warn_only` | Behavior |
+|------|-----------|-------------|----------|
+| **Observation** (default) | `true` | `true` | Monitor, log anomalies, persist threat signatures — never suspend |
+| **Enforce** | `true` | `false` | Monitor + auto-suspend anomalous processes (SIGPAUSE) |
+| **Disabled** | `false` | — | No monitoring, IPC methods return empty status |
+
+When in observation mode, `rnix immune status` shows `Mode: warn-only` and alerts are recorded but processes continue running.
 
 ---
 
 ## Immune Daemon
 
-When enabled, the **Immune Daemon** is a security monitoring process that continuously watches all agent behavior patterns.
+The **Immune Daemon** continuously watches all agent behavior patterns. Since it is enabled by default, every agent process is monitored from the first run.
 
 ### Behavior Baseline
 
@@ -56,15 +65,15 @@ When an agent's behavior deviates from its baseline beyond a threshold:
 - Token consumption spike
 - Access to unusual VFS paths
 
-The Immune Daemon triggers an alert and can automatically **suspend** the process.
+In **warn-only mode** (default), the Immune Daemon logs an `AnomalyAlert` and persists a `ThreatSignature`, but the process continues running. In **enforce mode**, the alert triggers `SIGPAUSE` to suspend the process.
 
 ### Threat Memory (Antibody Memory)
 
-Identified anomalous behavior patterns are recorded in a threat memory library. When the same pattern appears again, it is **immediately blocked** without re-detection.
+Identified anomalous behavior patterns are recorded in a threat memory library. When the same pattern appears again, it is recognized **immediately** — in enforce mode this means instant suspension; in warn-only mode, an immediate alert.
 
 ```bash
 $ rnix immune status
-Security Monitor: active
+Mode: warn-only
   Monitoring: 5 processes
   Alerts: 1 active
     PID 7: unusual /dev/shell frequency (23/step, baseline: 5-10)
@@ -92,7 +101,7 @@ security-scan     0.72          1.00            0.20
 doc-writer        0.35          0.20            1.00
 ```
 
-When `security-scanner` fails beyond retry limits, its remaining task can be migrated to `code-analyst` (similarity: 0.72) for continued execution with partial context transfer.
+When `security-scanner` fails beyond retry limits, its remaining task can be migrated to `code-analyst` (similarity: 0.72) for continued execution with partial context transfer. Migration is gated — it only triggers when the substitute agent demonstrates a measurable net improvement in the similarity matrix, preventing degradation through blind handoffs.
 
 ---
 
@@ -114,7 +123,7 @@ Agent Collaboration Topology:
     code-analyst ↔ security-scanner: 72% (high substitutability)
 ```
 
-High-frequency collaboration paths are **prioritized in subsequent orchestrations** — the system learns which agent combinations work best together.
+Collaboration data is collected automatically from production syscalls — `spawn` events record parent→child edges, and IPC `msg` events record peer-to-peer edges — feeding the topology with real usage telemetry. High-frequency collaboration paths are **visible for operational insight** — the topology serves as an observability tool showing which agent combinations are used most.
 
 ---
 
@@ -133,6 +142,7 @@ This mirrors biological neural plasticity: when one pathway fails, the system st
 
 ## Related Documentation
 
+- [Intelligence Emergence](/guide/emergence) — How immune learning and neuroplasticity produce emergent intelligence
 - [Monitoring & Supervisor](/guide/monitoring) — Process monitoring and restart strategies
 - [Token Economy](/guide/token-economy) — Budget pools and reputation
 - [Autonomous Agents](/guide/autonomous-agents) — Unified reasoning loop

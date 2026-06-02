@@ -7,7 +7,7 @@ This tutorial walks you through the Rnix debugging workflow: intentionally intro
 ## Prerequisites
 
 - Completed [Tutorial 1: Writing Your First Skill](/tutorials/writing-first-skill) (familiar with creating Skills and Agents)
-- Rnix installed and working
+- Working in the `rnix-tutorial/` project from Tutorial 1 (with DeepSeek provider configured). Any process data left from Tutorial 1 does not affect this tutorial
 
 ---
 
@@ -21,7 +21,7 @@ This tutorial walks you through the Rnix debugging workflow: intentionally intro
 
 ## Step 1: Prepare a Buggy Skill
 
-We will reuse the `code-summarizer` Skill from Tutorial 1, but intentionally introduce a permission bug: the Skill needs to run a Shell command (e.g., `wc -l` to count lines), yet `/dev/shell` is not declared in `allowed-tools`.
+We will reuse the `code-summarizer` Skill from Tutorial 1, but intentionally introduce a permission bug: the Skill needs to run Shell commands (e.g., `wc -l` to count lines, `md5sum` to compute a checksum), yet `/dev/shell` is not declared in `allowed-tools`.
 
 ### Create the Buggy Skill
 
@@ -31,24 +31,29 @@ Create `.rnix/skills/line-counter/SKILL.md`:
 ---
 name: line-counter
 description: >
-  Count the number of lines in a code file and report the result.
+  Count the number of lines in a code file and compute its checksum.
   Requires filesystem and Shell access.
 allowed-tools: /dev/fs
 metadata:
   author: my-team
   version: "1.0"
-  tags:
-    - code
-    - metrics
+  tags: "code, metrics"
 ---
 
 # Line Counter
+
+## Important Constraints
+
+- You MUST use /dev/shell to execute commands for all counting and checksum work
+- Do NOT count lines manually by reading file content
+- Do NOT compute checksums manually — all data must come from actual shell command output
 
 ## Workflow
 
 1. Read the user-specified file via /dev/fs to confirm it exists
 2. Run `wc -l` via /dev/shell to count the lines
-3. Output the filename and line count
+3. Run `md5sum` via /dev/shell to compute the file checksum
+4. Output the filename, line count, and MD5 checksum
 
 ## Tool Usage Guide
 
@@ -56,10 +61,10 @@ metadata:
 Used to verify that the target file exists.
 
 ### /dev/shell — Shell Command Execution
-Used to run `wc -l` to count lines.
+Used to run `wc -l` to count lines and `md5sum` to compute the checksum.
 ```
 
-Notice where the bug is: the Skill body mentions that it needs `/dev/shell`, but the frontmatter's `allowed-tools` lists **only** `/dev/fs` — `/dev/shell` is missing.
+Notice where the bug is: the Skill body mentions that it needs `/dev/shell`, but the frontmatter's `allowed-tools` lists **only** `/dev/fs` — `/dev/shell` is missing. The agent cannot bypass this bug because computing an MD5 checksum requires actually executing the `md5sum` command.
 
 ### Create an Agent That Uses This Skill
 
@@ -69,17 +74,33 @@ Create `.rnix/agents/counter/agent.yaml`:
 name: counter
 description: "An agent that counts lines of code"
 models:
-  provider: claude
-  preferred: haiku
-context_budget: 2048
+  provider: deepseek
+  preferred: deepseek-v4-flash
 skills:
   - line-counter
+```
+
+### Write instructions.md
+
+Create `.rnix/agents/counter/instructions.md` — the Agent's system prompt:
+
+```markdown
+# Counter Agent
+
+You are a file statistics expert. Your job is to count lines and compute checksums for user-specified code files using shell commands.
+
+## Working Principles
+
+- You must use the `wc -l` command to count lines
+- You must use the `md5sum` command to compute the file checksum
+- Do not count lines or compute checksums manually by reading file content
+- Output results in English
 ```
 
 ### Run and Observe the Failure
 
 ```bash
-rnix -i "Count the lines in kernel/kernel.go" --agent=counter
+rnix -i "Count the lines in src/server.go" --agent=counter
 ```
 
 You will see the agent attempt to run but exit with an error:
@@ -105,7 +126,7 @@ The agent failed due to insufficient permissions. But the error message may not 
 In one terminal, launch the agent:
 
 ```bash
-rnix -i "Count the lines in kernel/kernel.go" --agent=counter
+rnix -i "Count the lines in src/server.go" --agent=counter
 ```
 
 In another terminal, trace the process (assuming PID 3):
@@ -117,12 +138,12 @@ rnix strace 3
 ### Analyze the strace Output
 
 ```
-[  0.001s] Spawn(agent="counter", intent="Count the lines in kernel/kernel.go") → 3    1ms
+[  0.001s] Spawn(agent="counter", intent="Count the lines in src/server.go") → 3    1ms
 [  0.002s] CtxAlloc() → 2    0µs
 [  0.003s] Open(flags=1, path="/lib/skills/line-counter/SKILL.md") → 3    0µs
 [  0.003s] Read(fd=3, length=1048576) → 645    0µs
 [  0.004s] Close(fd=3) → <nil>    0µs
-[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM call
+[  0.005s] Open(flags=2, path="/dev/llm/deepseek") → 4    0µs  ← LLM call
 [  0.005s] Write(fd=4, size=890) → <nil>    1.20s  ← slow operation
 [  0.006s] Read(fd=4, length=1048576) → 512    2ms
 [  0.006s] Close(fd=4) → <nil>    0µs
@@ -187,7 +208,7 @@ allowed-tools: /dev/fs /dev/shell
 ### Run Again
 
 ```bash
-rnix -i "Count the lines in kernel/kernel.go" --agent=counter
+rnix -i "Count the lines in src/server.go" --agent=counter
 ```
 
 This time it should complete successfully:
@@ -195,9 +216,10 @@ This time it should complete successfully:
 ```
 PID 4 | counter | running
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-kernel/kernel.go: 287 lines
+src/server.go: 23 lines
+MD5: d41d8cd98f00b204e9800998ecf8427e
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PID 4 | completed | 0 | 2.1s | 450 tokens
+PID 4 | completed | 0 | 2.5s | 520 tokens
 ```
 
 ### Confirm the Fix with strace
@@ -209,25 +231,29 @@ rnix strace 4
 ```
 
 ```
-[  0.001s] Spawn(agent="counter", intent="Count the lines in kernel/kernel.go") → 4    1ms
+[  0.001s] Spawn(agent="counter", intent="Count the lines in src/server.go") → 4    1ms
 [  0.002s] CtxAlloc() → 3    0µs
 [  0.003s] Open(flags=1, path="/lib/skills/line-counter/SKILL.md") → 3    0µs
-[  0.003s] Read(fd=3, length=1048576) → 680    0µs
+[  0.003s] Read(fd=3, length=1048576) → 820    0µs
 [  0.004s] Close(fd=3) → <nil>    0µs
-[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM call
-[  0.005s] Write(fd=4, size=920) → <nil>    1.80s  ← slow operation
+[  0.005s] Open(flags=2, path="/dev/llm/deepseek") → 4    0µs  ← LLM call
+[  0.005s] Write(fd=4, size=980) → <nil>    1.80s  ← slow operation
 [  0.006s] Read(fd=4, length=1048576) → 480    2ms
 [  0.006s] Close(fd=4) → <nil>    0µs
 [  0.007s] Open(flags=1, path="/dev/fs") → 5    0µs
 [  0.007s] Read(fd=5, length=1048576) → 2048    1ms
 [  0.008s] Close(fd=5) → <nil>    0µs
-[  0.009s] Open(flags=2, path="/dev/shell") → 6    0µs
+[  0.009s] Open(flags=2, path="/dev/shell") → 6    0µs      ← wc -l
 [  0.009s] Write(fd=6, size=56) → <nil>    50ms
 [  0.010s] Read(fd=6, length=1048576) → 24    0µs
 [  0.010s] Close(fd=6) → <nil>    0µs
+[  0.011s] Open(flags=2, path="/dev/shell") → 7    0µs      ← md5sum
+[  0.011s] Write(fd=7, size=64) → <nil>    30ms
+[  0.012s] Read(fd=7, length=1048576) → 48    0µs
+[  0.012s] Close(fd=7) → <nil>    0µs
 ```
 
-This time there are no `[ERR]` lines — all syscalls executed successfully, including the Open/Write/Read/Close sequence for `/dev/shell`.
+This time there are no `[ERR]` lines — all syscalls executed successfully, including two Open/Write/Read/Close sequences for `/dev/shell` (one for `wc -l`, one for `md5sum`).
 
 ---
 

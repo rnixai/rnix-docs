@@ -115,19 +115,6 @@ rnix log <pid> --filter output   # Only output
 
 Set per-agent or per-workflow token limits:
 
-**Agent level** (`agent.yaml`):
-```yaml
-context_budget: 8192
-```
-
-**Workflow level** (`compose.yaml`):
-```yaml
-agents:
-  analyzer:
-    intent: "Analyze code"
-    context_budget: 4096
-```
-
 **CLI override:**
 ```bash
 rnix -i "Analyze code" --max-tokens 10000

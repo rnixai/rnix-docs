@@ -91,7 +91,7 @@ IPC 通信使用 NDJSON（Newline Delimited JSON）格式，每行一个 JSON �
 **SpawnRequest：**
 
 ```json
-{"intent": "分析代码", "agent": "code-analyst", "model": "sonnet", "max_steps": 10}
+{"intent": "分析代码", "agent": "code-analyst", "model": "deepseek-v4-flash", "max_steps": 10}
 ```
 
 **KillRequest：**

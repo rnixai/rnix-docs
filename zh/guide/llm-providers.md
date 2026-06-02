@@ -12,7 +12,7 @@ Rnix 通过声明式配置支持多个 LLM 提供商，并将它们作为 OpenAI
 
 ```yaml
 version: "1"
-default_provider: claude
+default_provider: deepseek
 
 providers:
   - name: claude
@@ -95,7 +95,7 @@ Spawn 智能体时，提供商按以下优先级解析：
 1. `--provider` CLI flag（最高优先级）
 2. `agent.yaml` → `models.provider`
 3. `providers.yaml` → `default_provider`
-4. 内置默认值：`claude`
+4. 内置默认值：`deepseek`
 
 ### 提供商降级
 
@@ -151,6 +151,48 @@ deepseek     http    offline   deepseek-chat      timeout
   default_model: deepseek-reasoner
   thinking_budget: 16384
 ```
+
+---
+
+## CLI 驱动能力探测
+
+CLI 类驱动（`claude-cli`、`cursor-cli`、`qwen-cli`）通过外部 CLI 工具与 LLM 交互。其中 `claude-cli` 驱动内置了**能力探测**系统，可自动适配不同 CLI 版本。
+
+### 能力探测
+
+首次使用时，Claude CLI 驱动执行 `claude -p --help`（5s 超时）并扫描输出以检测可选标志：
+
+| 能力 | 标志 | 效果 |
+|------|------|------|
+| `partialMessages` | `--include-partial-messages` | 启用流式 LLM 部分响应 |
+| `addDir` | `--add-dir` | 将额外目录打包到 agent 上下文 |
+| `permissionMode` | `--permission-mode` | 控制工具执行权限 |
+
+探测每个驱动实例仅执行一次并缓存结果。若探测超时或失败，所有能力默认为 `false`（保守模式）。
+
+### 备选二进制解析
+
+驱动按以下路径搜索 CLI 二进制：
+
+1. `claude`（默认）或 provider 配置中的 `command` 值
+2. `openclaude`（备选）
+3. 扩展搜索路径：`~/.local/bin`、nvm 最新 node bin、`~/.bun/bin`
+
+### DriverMetaProvider
+
+CLI 驱动实现 `DriverMetaProvider` 接口，暴露运行时元数据用于可观测性：
+
+| 键 | 描述 | 示例 |
+|----|------|------|
+| `resolved_bin` | 解析后的二进制绝对路径 | `/usr/local/bin/claude` |
+| `permission_mode` | 活跃的权限模式 | `bypassPermissions` |
+| `cap_partial_messages` | 是否支持流式 | `"true"` / `"false"` |
+| `cap_add_dir` | 是否支持目录打包 | `"true"` / `"false"` |
+| `cap_permission_mode` | 是否支持权限模式 | `"true"` / `"false"` |
+
+元数据记录在 strace 事件（`claude_cli.resolve`、`claude_cli.capabilities`）中，可在 Dashboard 进程详情中查看。
+
+---
 
 ### API Key 管理
 

@@ -79,7 +79,7 @@ $ rnix daemon status
 
 $ rnix resume abc123-def456
 [kernel] 正在从检查点恢复 UUID abc123（第 10/20 步）...
-[kernel] PID 5 已启动 (claude/sonnet) | 从 abc123 恢复
+[kernel] PID 5 已启动 (deepseek/deepseek-v4-flash) | 从 abc123 恢复
 ```
 
 对于 Suspended 进程：使用 `checkpoint.json` 进行完整上下文恢复（最快路径）。  
@@ -92,7 +92,7 @@ $ rnix resume abc123-def456
 ```bash
 $ rnix resume --fork abc123-def456
 [kernel] 正在从 abc123 分叉 → 新 UUID xyz789...
-[kernel] PID 6 已启动 (claude/sonnet) | 从 abc123 分叉
+[kernel] PID 6 已启动 (deepseek/deepseek-v4-flash) | 从 abc123 分叉
 ```
 
 Dashboard 显示其谱系：`xyz789（forked from abc123）`。

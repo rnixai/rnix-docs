@@ -44,7 +44,7 @@ Device registration is completed during daemon startup via dependency injection 
 {
   "intent": "Analyze code",
   "system_prompt": "...",
-  "model": "sonnet",
+  "model": "deepseek-v4-flash",
   "max_turns": 1,
   "timeout_ms": 30000,
   "messages": [{"role": "user", "content": "..."}]

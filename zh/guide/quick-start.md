@@ -19,11 +19,12 @@ go version go1.26.0 linux/amd64
 
 ### LLM 提供商
 
-Rnix 支持多种 LLM 提供商，至少需要一个：
+Rnix 支持多种 LLM 提供商。默认提供商为 **DeepSeek**（通过 OpenAI 兼容 API）：
 
-- **Claude Code CLI** — `npm install -g @anthropic-ai/claude-code`
+- **DeepSeek API**（默认）— 设置 `DEEPSEEK_API_KEY` 环境变量。模型：`deepseek-v4-flash`
+- **Claude Code CLI** — `npm install -g @anthropic-ai/claude-code`，使用 `--provider claude` 切换
 - **Cursor CLI** — 需要设置 `CURSOR_API_KEY` 环境变量
-- **OpenAI 兼容 API**（Ollama、Groq、DeepSeek 等）— 运行 `rnix init` 后在 `~/.config/rnix/providers.yaml` 中配置
+- **其他 OpenAI 兼容 API**（Ollama、Groq 等）— 运行 `rnix init` 后在 `~/.config/rnix/providers.yaml` 中配置
 
 ---
 
@@ -73,7 +74,7 @@ $ rnix -i "分析 ./README.md"
 你将看到类似以下的输出：
 
 ```
-[kernel] spawning PID 1 (claude/haiku)...
+[kernel] spawning PID 1 (deepseek/deepseek-v4-flash)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 ══ Result ══════════════════════════════════════════════════════════════════════
@@ -82,18 +83,18 @@ $ rnix -i "分析 ./README.md"
   该文件是 Rnix 项目的入口说明文档，包含项目简介、安装方式和基本用法。
   结构清晰，涵盖了新用户上手所需的关键信息...
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | claude/haiku | tokens: 1024 | elapsed: 5.3s
+[kernel] PID 1 exited(0) | deepseek/deepseek-v4-flash | tokens: 1024 | elapsed: 5.3s
 ```
 
 ### 解读输出
 
 | 输出行 | 含义 |
 |--------|------|
-| `[kernel] spawning PID 1 (claude/haiku)...` | 内核正在创建智能体进程，分配 PID 1，使用 claude 提供商的 haiku 模型 |
+| `[kernel] spawning PID 1 (deepseek/deepseek-v4-flash)...` | 内核正在创建智能体进程，分配 PID 1，使用 deepseek 提供商的 deepseek-v4-flash 模型 |
 | `[agent/1] reasoning step 1...` | PID 1 的智能体正在执行第 1 步推理 |
 | `══ Result ══...` | 双线边框内是智能体的最终输出结果 |
 | `[kernel] PID 1 exited(0)` | 进程正常退出（退出码 0） |
-| `claude/haiku` | 使用的 provider/model |
+| `deepseek/deepseek-v4-flash` | 使用的 provider/model |
 | `tokens: 1024` | 本次执行消耗的 token 数量 |
 | `elapsed: 5.3s` | 总耗时 |
 
@@ -111,13 +112,13 @@ $ rnix -i "分析 ./cmd/rnix/main.go" --agent=code-analyst
 
 ### 选择 LLM 提供商
 
-默认使用 Claude Code CLI（`/dev/llm/claude`）。通过 `--provider` flag 切换到 Cursor CLI：
+默认使用 DeepSeek API（`/dev/llm/deepseek`）。通过 `--provider` flag 切换到其他提供商：
 
 ```bash
-$ rnix -i "分析代码" --provider=cursor
+$ rnix -i "分析代码" --provider=claude
 
 # 或配合 --agent 使用
-$ rnix -i "分析代码" --agent=code-analyst --provider=cursor
+$ rnix -i "分析代码" --agent=code-analyst --provider=claude
 ```
 
 也可以在 Agent 定义中指定默认 provider（`agents/*/agent.yaml`）：
@@ -133,7 +134,7 @@ models:
 你将看到类似以下的输出：
 
 ```
-[kernel] spawning PID 1 (claude/haiku)...
+[kernel] spawning PID 1 (deepseek/deepseek-v4-flash)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 [agent/1] reasoning step 3...
@@ -147,7 +148,7 @@ models:
   - **Info** — 全局变量较多，可考虑封装到结构体中
   - **Info** — 建议为 runRoot 添加更多错误分类处理
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | claude/haiku | tokens: 2340 | elapsed: 12.5s
+[kernel] PID 1 exited(0) | deepseek/deepseek-v4-flash | tokens: 2340 | elapsed: 12.5s
 ```
 
 > 💡 想了解 Agent 和 Skill 的设计原理？请参阅 [核心概念文档](/zh/guide/concepts) 中的"Agent 与 Skill"章节。

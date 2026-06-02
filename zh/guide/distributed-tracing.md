@@ -53,7 +53,7 @@ Root cause analysis for trace abc-123:
   Highest token consumer: analyzer (1450 tokens, 41%)
 
 Recommendations:
-  - Consider using a faster model for analyzer (e.g., haiku)
+  - Consider using a faster model for analyzer (e.g., deepseek-v4-flash)
   - analyzer's context could be trimmed (cold segments: 23%)
 ```
 

@@ -7,7 +7,7 @@ This tutorial walks you through creating a Rnix Skill and an Agent that referenc
 ## Prerequisites
 
 - Rnix is installed and operational (see [Quick Start Guide](/guide/quick-start))
-- Claude Code CLI is installed and its API key is configured
+- An LLM provider is configured (this tutorial uses DeepSeek — see [LLM Providers](/guide/llm-providers))
 - Basic familiarity with Rnix concepts such as processes, VFS, and Skills (see [Core Concepts](/guide/concepts))
 
 ---
@@ -17,6 +17,68 @@ This tutorial walks you through creating a Rnix Skill and an Agent that referenc
 1. The file structure of a Skill and how to write a `SKILL.md`
 2. How an Agent references a Skill to gain capabilities
 3. How to run an Agent and observe the Skill execution process
+
+---
+
+## Step 0: Set Up the Example Project
+
+All tutorials use a shared example project. Create it once and reuse across Tutorial 1–4.
+
+```bash
+mkdir rnix-tutorial && cd rnix-tutorial
+rnix init
+```
+
+Configure the LLM provider in `.rnix/providers.yaml`:
+
+```yaml
+default_provider: deepseek
+
+providers:
+  deepseek:
+    driver: openai-compat
+    model: deepseek-v4-flash
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+```
+
+Create a sample source file for agents to analyze:
+
+```bash
+mkdir -p src
+cat > src/server.go << 'EOF'
+package main
+
+import (
+    "fmt"
+    "net/http"
+    "os/exec"
+)
+
+func handler(w http.ResponseWriter, r *http.Request) {
+    name := r.URL.Query().Get("name")
+    fmt.Fprintf(w, "Hello, %s!", name)
+}
+
+func runCommand(w http.ResponseWriter, r *http.Request) {
+    cmd := r.URL.Query().Get("cmd")
+    out, _ := exec.Command("sh", "-c", cmd).Output()
+    w.Write(out)
+}
+
+func main() {
+    http.HandleFunc("/hello", handler)
+    http.HandleFunc("/run", runCommand)
+    http.ListenAndServe(":8080", nil)
+}
+EOF
+```
+
+Make sure `DEEPSEEK_API_KEY` is set in your environment:
+
+```bash
+export DEEPSEEK_API_KEY="your-key-here"
+```
 
 ---
 
@@ -45,9 +107,7 @@ allowed-tools: /dev/fs
 metadata:
   author: my-team
   version: "1.0"
-  tags:
-    - code
-    - summary
+  tags: "code, summary"
 ---
 
 # Code Summarizer
@@ -91,7 +151,7 @@ A `SKILL.md` consists of two parts:
 | `description` | Short description (used during the discovery phase, ~100 tokens) |
 | `allowed-tools` | Space-separated whitelist of VFS device paths |
 | `metadata.version` | Version number |
-| `metadata.tags` | List of tags (used for search and categorization) |
+| `metadata.tags` | Comma-separated tags string (used for search and categorization) |
 
 **Body (Markdown Content)**: Detailed instructions for the Skill, injected into the agent's system prompt during the activation phase.
 
@@ -103,7 +163,7 @@ The `allowed-tools` field determines which VFS devices the agent is permitted to
 |-------------|------------|
 | `/dev/fs` | Read/write the host filesystem |
 | `/dev/shell` | Execute shell commands |
-| `/dev/llm/claude` | Invoke LLM inference |
+| `/dev/llm/deepseek` | Invoke LLM inference |
 
 Our `code-summarizer` only needs to read files, so it declares only `/dev/fs`.
 
@@ -136,10 +196,8 @@ Create `.rnix/agents/summarizer/agent.yaml`:
 name: summarizer
 description: "An agent that reads code files and generates structured summaries"
 models:
-  provider: claude
-  preferred: sonnet
-  fallback: haiku
-context_budget: 4096
+  provider: deepseek
+  preferred: deepseek-v4-flash
 skills:
   - code-summarizer
 ```
@@ -150,10 +208,9 @@ skills:
 |-------|-------------|
 | `name` | Unique identifier for the Agent |
 | `description` | Short description of the Agent |
-| `models.provider` | LLM provider (`claude` (default) or `cursor`) |
+| `models.provider` | LLM provider (matches a key in `providers.yaml`) |
 | `models.preferred` | Preferred model |
-| `models.fallback` | Fallback model |
-| `context_budget` | Context budget (in tokens) |
+| `models.fallback` | Fallback model (optional) |
 | `skills` | List of referenced Skills (corresponding to the Skill's `name` field) |
 
 ### Write instructions.md
@@ -198,7 +255,7 @@ Process (runtime instance)
 Use the `--agent` flag to specify the Agent you just created:
 
 ```bash
-rnix -i "Summarize the code structure of kernel/kernel.go" --agent=summarizer
+rnix -i "Summarize the code structure of src/server.go" --agent=summarizer
 ```
 
 You should see output similar to the following:
@@ -207,17 +264,17 @@ You should see output similar to the following:
 PID 1 | summarizer | running
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## Summary: kernel/kernel.go
+## Summary: src/server.go
 
-**File Purpose:** Core implementation of the Rnix kernel, containing the Kernel interface composition and the Spawn/reasonStep main loop.
+**File Purpose:** HTTP server entry point with two endpoints: a greeting handler and a command runner.
 
 **Core Types:**
-- KernelImpl -- Kernel implementation struct, composing sub-interfaces such as ProcessManager, ContextManager, and FileSystem
-- Kernel -- Top-level kernel interface, embedding all sub-interfaces
+- (none — this is a main package with standalone functions)
 
 **Key Functions:**
-- Spawn(intent, agent, opts) → PID -- Creates and starts an agent process
-- reasonStep(proc) → error -- A single reasoning step
+- handler(w, r) — Handles /hello requests, reads "name" query parameter
+- runCommand(w, r) — Handles /run requests, executes shell commands
+- main() — Registers HTTP handlers and starts the server on :8080
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PID 1 | completed | 0 | 3.2s | 1,240 tokens
@@ -225,17 +282,18 @@ PID 1 | completed | 0 | 3.2s | 1,240 tokens
 
 ### View Process Status
 
-While the agent is running (or after it finishes), you can view the process list with `rnix ps`:
+While the agent is running, you can view the process list with `rnix ps`. After the agent finishes, processes are automatically reaped -- use `rnix ps -a` to show all processes including completed ones:
 
 ```bash
-rnix ps
+rnix ps -a
 ```
 
 Example output:
 
 ```
-  PID   STATE     SKILL              TOKENS   ELAPSED
-    1   zombie    code-summarizer    1,240    3.2s
+  PID   UUID          STATE       SKILL                     TOKENS   ACTIVE        ELAPSED
+─────   ───────────   ─────────   ───────────────   ──────────────   ──────────   ────────
+    —   abcdef12...   dead        code-summarizer            1,240   —               3.2s
 ```
 
 ### Use strace to View Syscall Traces
@@ -249,12 +307,12 @@ rnix strace 1
 Example output:
 
 ```
-[  0.001s] Spawn(agent="summarizer", intent="Summarize the code structure of kernel/kernel.go") → 1    1ms
+[  0.001s] Spawn(agent="summarizer", intent="Summarize the code structure of src/server.go") → 1    1ms
 [  0.002s] CtxAlloc() → 1    0µs
 [  0.003s] Open(flags=1, path="/lib/skills/code-summarizer/SKILL.md") → 3    0µs
 [  0.003s] Read(fd=3, length=1048576) → 892    0µs
 [  0.004s] Close(fd=3) → <nil>    0µs
-[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM call
+[  0.005s] Open(flags=2, path="/dev/llm/deepseek") → 4    0µs  ← LLM call
 [  0.006s] Write(fd=4, size=1234) → <nil>    2.80s  ← slow operation
 [  0.006s] Read(fd=4, length=1048576) → 1560    2ms
 [  0.007s] Close(fd=4) → <nil>    0µs
@@ -265,7 +323,7 @@ Example output:
 
 From the strace output, you can clearly see:
 1. The kernel first loaded the `code-summarizer` Skill (reading `/lib/skills/code-summarizer/SKILL.md`, 892 bytes)
-2. Then it invoked the LLM (`/dev/llm/claude`) for inference -- Write sends the request, Read retrieves the response
+2. Then it invoked the LLM (`/dev/llm/deepseek`) for inference -- Write sends the request, Read retrieves the response
 3. The LLM instructed reading the target file (`/dev/fs`, 2048 bytes)
 4. All operations go through the VFS, and the `allowed-tools: /dev/fs` declaration in the Skill controls access permissions
 5. The return value of Read is the **byte count** (e.g., `→ 2048`), not the file content itself
@@ -300,9 +358,7 @@ allowed-tools: /dev/fs
 metadata:
   author: my-team
   version: "1.0"
-  tags:
-    - code
-    - summary
+  tags: "code, summary"
 ---
 
 # Code Summarizer
@@ -336,10 +392,8 @@ Used to read target source code files.
 name: summarizer
 description: "An agent that reads code files and generates structured summaries"
 models:
-  provider: claude
-  preferred: sonnet
-  fallback: haiku
-context_budget: 4096
+  provider: deepseek
+  preferred: deepseek-v4-flash
 skills:
   - code-summarizer
 ```
@@ -359,12 +413,12 @@ You are a code summarization expert. Read user-specified code files and generate
 ### Run Command
 
 ```bash
-rnix -i "Summarize the code structure of kernel/kernel.go" --agent=summarizer
+rnix -i "Summarize the code structure of src/server.go" --agent=summarizer
 ```
 
 ### Expected Output
 
-The agent reads `kernel/kernel.go` and outputs a structured code summary report.
+The agent reads `src/server.go` and outputs a structured code summary report. The output line will show `deepseek/deepseek-v4-flash` as the provider/model.
 
 ---
 

@@ -6,8 +6,8 @@
 
 ## 前置条件
 
-- 已完成 [教程 1：编写第一个 Skill](/tutorials/writing-first-skill)（了解 Skill 和 Agent 的创建流程）
-- Rnix 已安装并可运行
+- 已完成 [教程 1：编写第一个 Skill](/zh/tutorials/writing-first-skill)（了解 Skill 和 Agent 的创建流程）
+- 在教程 1 的 `rnix-tutorial/` 项目中操作（已配置 DeepSeek 提供商）。教程 1 留下的进程数据不影响本教程
 
 ---
 
@@ -21,7 +21,7 @@
 
 ## 步骤一：准备一个有 bug 的 Skill
 
-我们复用教程 1 的 `code-summarizer` Skill，但故意制造一个权限 bug：让 Skill 需要执行 Shell 命令（比如 `wc -l` 统计行数），却没有在 `allowed-tools` 中声明 `/dev/shell` 权限。
+我们复用教程 1 的 `code-summarizer` Skill，但故意制造一个权限 bug：让 Skill 需要执行 Shell 命令（`wc -l` 统计行数、`md5sum` 计算校验和），却没有在 `allowed-tools` 中声明 `/dev/shell` 权限。
 
 ### 创建有 bug 的 Skill
 
@@ -31,23 +31,28 @@
 ---
 name: line-counter
 description: >
-  统计代码文件的行数并报告。需要文件系统和 Shell 访问。
+  统计代码文件的行数并计算校验和。需要文件系统和 Shell 访问。
 allowed-tools: /dev/fs
 metadata:
   author: my-team
   version: "1.0"
-  tags:
-    - code
-    - metrics
+  tags: "code, metrics"
 ---
 
 # Line Counter
 
+## 重要约束
+
+- 你**必须**通过 /dev/shell 执行命令来完成统计工作
+- **禁止**通过读取文件内容手动计数或手动计算校验和
+- 所有数据必须来自 shell 命令的实际输出
+
 ## 工作流程
 
-1. 通过 /dev/fs 读取用户指定的文件确认其存在
+1. 通过 /dev/fs 读取用户指定的文件，确认其存在
 2. 通过 /dev/shell 执行 `wc -l` 命令统计行数
-3. 输出文件名和行数
+3. 通过 /dev/shell 执行 `md5sum` 命令计算文件校验和
+4. 输出文件名、行数和 MD5 校验和
 
 ## 工具使用指南
 
@@ -55,10 +60,10 @@ metadata:
 用于确认目标文件存在。
 
 ### /dev/shell — Shell 命令执行
-用于运行 `wc -l` 统计行数。
+用于运行 `wc -l` 统计行数，运行 `md5sum` 计算校验和。
 ```
 
-注意看 bug 在哪里：Skill body 中声明了需要 `/dev/shell`，但 frontmatter 的 `allowed-tools` **只有** `/dev/fs`，缺少了 `/dev/shell`。
+注意看 bug 在哪里：Skill body 中声明了需要 `/dev/shell`，但 frontmatter 的 `allowed-tools` **只有** `/dev/fs`，缺少了 `/dev/shell`。由于 MD5 校验和无法通过读取文件内容手动计算，智能体必然需要调用 `/dev/shell`，从而触发这个权限 bug。
 
 ### 创建引用该 Skill 的 Agent
 
@@ -68,17 +73,33 @@ metadata:
 name: counter
 description: "统计代码行数的智能体"
 models:
-  provider: claude
-  preferred: haiku
-context_budget: 2048
+  provider: deepseek
+  preferred: deepseek-v4-flash
 skills:
   - line-counter
+```
+
+### 编写 instructions.md
+
+创建 `.rnix/agents/counter/instructions.md` —— Agent 的系统提示词：
+
+```markdown
+# Counter Agent
+
+你是一个文件统计专家。你的职责是通过 shell 命令统计用户指定文件的行数并计算校验和。
+
+## 工作原则
+
+- 必须使用 `wc -l` 命令统计行数
+- 必须使用 `md5sum` 命令计算文件校验和
+- 禁止通过读取文件内容手动计数或计算
+- 使用中文输出统计结果
 ```
 
 ### 运行并观察失败
 
 ```bash
-rnix -i "统计 kernel/kernel.go 的行数" --agent=counter
+rnix -i "统计 src/server.go 的行数" --agent=counter
 ```
 
 你会看到智能体尝试执行但报错退出：
@@ -104,7 +125,7 @@ PID 2 | failed | 1 | 1.5s | 320 tokens
 在一个终端启动智能体：
 
 ```bash
-rnix -i "统计 kernel/kernel.go 的行数" --agent=counter
+rnix -i "统计 src/server.go 的行数" --agent=counter
 ```
 
 在另一个终端追踪该进程（假设 PID 为 3）：
@@ -116,12 +137,12 @@ rnix strace 3
 ### 分析 strace 输出
 
 ```
-[  0.001s] Spawn(agent="counter", intent="统计 kernel/kernel.go 的行数") → 3    1ms
+[  0.001s] Spawn(agent="counter", intent="统计 src/server.go 的行数") → 3    1ms
 [  0.002s] CtxAlloc() → 2    0µs
 [  0.003s] Open(flags=1, path="/lib/skills/line-counter/SKILL.md") → 3    0µs
 [  0.003s] Read(fd=3, length=1048576) → 645    0µs
 [  0.004s] Close(fd=3) → <nil>    0µs
-[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM 调用
+[  0.005s] Open(flags=2, path="/dev/llm/deepseek") → 4    0µs  ← LLM 调用
 [  0.005s] Write(fd=4, size=890) → <nil>    1.20s  ← 慢操作
 [  0.006s] Read(fd=4, length=1048576) → 512    2ms
 [  0.006s] Close(fd=4) → <nil>    0µs
@@ -186,7 +207,7 @@ allowed-tools: /dev/fs /dev/shell
 ### 重新运行
 
 ```bash
-rnix -i "统计 kernel/kernel.go 的行数" --agent=counter
+rnix -i "统计 src/server.go 的行数" --agent=counter
 ```
 
 这次应该正常完成：
@@ -194,9 +215,10 @@ rnix -i "统计 kernel/kernel.go 的行数" --agent=counter
 ```
 PID 4 | counter | running
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-kernel/kernel.go: 287 行
+src/server.go: 23 行
+MD5: d41d8cd98f00b204e9800998ecf8427e
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PID 4 | completed | 0 | 2.1s | 450 tokens
+PID 4 | completed | 0 | 2.5s | 520 tokens
 ```
 
 ### 用 strace 确认修复
@@ -208,25 +230,29 @@ rnix strace 4
 ```
 
 ```
-[  0.001s] Spawn(agent="counter", intent="统计 kernel/kernel.go 的行数") → 4    1ms
+[  0.001s] Spawn(agent="counter", intent="统计 src/server.go 的行数") → 4    1ms
 [  0.002s] CtxAlloc() → 3    0µs
 [  0.003s] Open(flags=1, path="/lib/skills/line-counter/SKILL.md") → 3    0µs
-[  0.003s] Read(fd=3, length=1048576) → 680    0µs
+[  0.003s] Read(fd=3, length=1048576) → 820    0µs
 [  0.004s] Close(fd=3) → <nil>    0µs
-[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM 调用
-[  0.005s] Write(fd=4, size=920) → <nil>    1.80s  ← 慢操作
+[  0.005s] Open(flags=2, path="/dev/llm/deepseek") → 4    0µs  ← LLM 调用
+[  0.005s] Write(fd=4, size=980) → <nil>    1.80s  ← 慢操作
 [  0.006s] Read(fd=4, length=1048576) → 480    2ms
 [  0.006s] Close(fd=4) → <nil>    0µs
 [  0.007s] Open(flags=1, path="/dev/fs") → 5    0µs
 [  0.007s] Read(fd=5, length=1048576) → 2048    1ms
 [  0.008s] Close(fd=5) → <nil>    0µs
-[  0.009s] Open(flags=2, path="/dev/shell") → 6    0µs
+[  0.009s] Open(flags=2, path="/dev/shell") → 6    0µs      ← wc -l
 [  0.009s] Write(fd=6, size=56) → <nil>    50ms
 [  0.010s] Read(fd=6, length=1048576) → 24    0µs
 [  0.010s] Close(fd=6) → <nil>    0µs
+[  0.011s] Open(flags=2, path="/dev/shell") → 7    0µs      ← md5sum
+[  0.011s] Write(fd=7, size=64) → <nil>    30ms
+[  0.012s] Read(fd=7, length=1048576) → 48    0µs
+[  0.012s] Close(fd=7) → <nil>    0µs
 ```
 
-这次没有 `[ERR]` 行了——所有 syscall 都成功执行，包括 `/dev/shell` 的 Open/Write/Read/Close。
+这次没有 `[ERR]` 行了——所有 syscall 都成功执行，包括两次 `/dev/shell` 的 Open/Write/Read/Close（分别用于 `wc -l` 和 `md5sum`）。
 
 ---
 

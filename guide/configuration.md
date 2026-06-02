@@ -125,7 +125,7 @@ This file defines available LLM providers. Located at `~/.config/rnix/providers.
 
 ```yaml
 version: "1"
-default_provider: claude
+default_provider: deepseek
 
 providers:
   - name: claude
@@ -159,7 +159,7 @@ providers:
 | Field | Type | Description |
 |-------|------|-------------|
 | `version` | `string` | Config format version (`"1"`) |
-| `default_provider` | `string` | Default provider when none specified (default: `claude`) |
+| `default_provider` | `string` | Default provider when none specified (default: `deepseek`) |
 | `providers[].name` | `string` | Provider name, maps to `/dev/llm/<name>` |
 | `providers[].driver` | `string` | Driver type: `claude-cli`, `cursor-cli`, or `openai-compat` |
 | `providers[].command` | `string` | CLI binary name override for CLI drivers |
@@ -180,7 +180,7 @@ providers:
 1. `--provider` CLI flag (highest priority)
 2. `agent.yaml` → `models.provider` field
 3. `providers.yaml` → `default_provider`
-4. Built-in default: `claude`
+4. Built-in default: `deepseek`
 
 ### Model Resolution Priority
 
@@ -297,7 +297,7 @@ Compose files define DAG-based multi-agent workflows. Located at `.rnix/compose.
 ```yaml
 version: "1.0"
 intent: "Code review workflow"
-model: "haiku"
+model: "deepseek-v4-flash"
 
 agents:
   analyzer:
@@ -355,10 +355,9 @@ Each agent is defined by an `agent.yaml` file and an `instructions.md` file in `
 name: code-analyst
 description: "Code quality analysis agent"
 models:
-  provider: claude
-  preferred: sonnet
-  fallback: haiku
-context_budget: 8192
+  provider: deepseek
+  preferred: deepseek-v4-flash
+  fallback: deepseek-v4-pro
 max_steps: 20
 max_tokens: 50000
 skills:
@@ -385,7 +384,7 @@ mcp:
 | `models.provider` | `string` | No | LLM provider name |
 | `models.preferred` | `string` | No | Preferred model name |
 | `models.fallback` | `string` | No | Fallback model name |
-| `context_budget` | `int` | No | Max token budget (0 = unlimited) |
+| `context_budget` | `int` | No | Per-step context window guard: max input tokens allowed in a single LLM call. When exceeded, the process self-suspends with exit code 3 (`context_full`) and can be resumed. `0` = auto-derive from `context_window × 0.9`; explicitly set values are clamped to `min(budget, context_window)`. |
 | `max_steps` | `int` | No | Maximum reasoning steps (0 = default 10) |
 | `max_tokens` | `int` | No | Maximum total tokens (0 = unlimited) |
 | `skills` | `[]string` | No | Referenced skill names |
@@ -426,9 +425,7 @@ allowed-tools: /dev/fs /dev/shell /dev/web
 metadata:
   author: rnix
   version: "1.0"
-  tags:
-    - code
-    - quality
+  tags: "code, quality"
 ---
 
 # Code Analysis

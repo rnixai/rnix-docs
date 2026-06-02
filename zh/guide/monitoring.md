@@ -115,19 +115,6 @@ rnix log <pid> --filter output   # 仅输出
 
 为每个 Agent 或工作流设置 Token 限制：
 
-**Agent 级别**（`agent.yaml`）：
-```yaml
-context_budget: 8192
-```
-
-**工作流级别**（`compose.yaml`）：
-```yaml
-agents:
-  analyzer:
-    intent: "分析代码"
-    context_budget: 4096
-```
-
 **CLI 覆盖：**
 ```bash
 rnix -i "分析代码" --max-tokens 10000

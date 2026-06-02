@@ -42,15 +42,29 @@ When agents compete for limited budget, the **price signal mechanism** schedules
 
 ### Budget Enforcement
 
+Rnix enforces two independent budget mechanisms:
+
+**Cumulative budget** (`max_tokens`) — Total token consumption across the process lifetime:
+
 ```
 Per LLM call:
   proc.TokensUsed += response.TokensUsed
 
-  if budget > 0 && TokensUsed >= budget:
-    finishProcess(ExitStatus{Code: 2, Reason: "budget_exceeded"})
+  if max_tokens > 0 && TokensUsed >= max_tokens:
+    selfSuspend(ExitStatus{Code: 2, Reason: "budget_exhausted"})
 ```
 
-Exit codes: 0 = normal, 1 = error, **2 = budget exceeded**.
+**Per-step context guard** (`context_budget`) — Single-step input token ceiling:
+
+```
+Per LLM call:
+  if context_budget > 0 && response.InputTokens >= context_budget:
+    selfSuspend(ExitStatus{Code: 3, Reason: "context_full"})
+```
+
+Both triggers **self-suspend** the process (not terminate), meaning the process can be resumed via `rnix resume`. If `context_budget` is not explicitly set, it auto-derives from `context_window × 0.9`.
+
+Exit codes: 0 = normal, 1 = error, **2 = suspended** (budget/loop/turns), **3 = context full**.
 
 ---
 
@@ -124,9 +138,8 @@ name: security-scan
 description: "Scan for security vulnerabilities"
 allowed-tools: /dev/fs /dev/shell
 synergy:
-  code-analysis:
-    description: "When combined with code-analysis, enables deep security-aware code review"
-    instructions: |
+  - with: code-analysis
+    instruction: |
       With both security-scan and code-analysis active, you can:
       - Correlate code quality issues with security implications
       - Identify security anti-patterns in code structure
@@ -152,10 +165,22 @@ Known effective Skill combinations:
 
 The matrix tracks which Skill combinations historically produce significantly better results than individual Skills, based on reputation system data.
 
+### Synergy → Stem Match Feedback
+
+Synergy data feeds back into the stem cell differentiation system. When a Stem Agent matches skills for a new intent, the matched skills are re-ranked using synergy scores:
+
+1. **Base matching** — StemMatcher scores skills by keyword overlap with the intent
+2. **Synergy boost** — Skill combinations with proven synergy records get priority
+3. **Reputation weight** — Individual skill reputation scores further adjust ranking
+4. **ε-exploration** — A small probability of trying less-proven combinations prevents convergence to a local optimum
+
+This creates a complete feedback loop: better skill combinations → higher reputation → preferred in future matching → more data → refined synergy scores.
+
 ---
 
 ## Related Documentation
 
+- [Intelligence Emergence](/guide/emergence) — How reputation and synergy drive emergent intelligence
 - [Compose Orchestration](/guide/compose) — Multi-agent workflows with budgets
 - [Autonomous Agents](/guide/autonomous-agents) — Unified reasoning and stem cell differentiation
 - [Agents & Skills](/guide/agents-and-skills) — Agent and Skill definitions

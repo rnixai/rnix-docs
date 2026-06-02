@@ -6,9 +6,9 @@
 
 ## 前置条件
 
-- 已完成 [教程 1：编写第一个 Skill](/tutorials/writing-first-skill)（了解 Skill 和 Agent 的创建流程）
-- Rnix 已安装并可运行
-- 对 Rnix 的进程、VFS 概念有基本了解（参考 [核心概念文档](/guide/concepts)）
+- 已完成 [教程 1：编写第一个 Skill](/zh/tutorials/writing-first-skill)（了解 Skill 和 Agent 的创建流程）
+- 在教程 1 的 `rnix-tutorial/` 项目中操作（已配置 DeepSeek 提供商）。之前教程留下的进程数据不影响本教程
+- 对 Rnix 的进程、VFS 概念有基本了解（参考 [核心概念文档](/zh/guide/concepts)）
 
 ---
 
@@ -50,15 +50,15 @@ Rnix Compose 的 DAG 调度引擎会自动解析依赖，按拓扑排序确定�
 
 ## 步骤二：编写 compose.yaml
 
-在项目根目录创建 `compose.yaml`：
+在项目的 `.rnix/` 目录下创建 `compose.yaml`（即 `.rnix/compose.yaml`，这是 `rnix compose up` 的默认查找路径）：
 
 ```yaml
 version: "1.0"
 intent: "代码审查工作流"
-model: "haiku"
+model: "deepseek-v4-flash"
 agents:
   analyzer:
-    intent: "分析 kernel/kernel.go 的代码质量"
+    intent: "分析 src/server.go 的代码质量"
     agent: "code-analyst"
   doc-gen:
     intent: "基于分析结果生成改进建议文档"
@@ -138,7 +138,7 @@ rnix top
 rnix top — 实时监控                           刷新: 1s
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PID  STATE    AGENT         TOKENS   ELAPSED  INTENT
-5    running  code-analyst  1,200    2.3s     分析 kernel/kernel.go…
+5    running  code-analyst  1,200    2.3s     分析 src/server.go…
 6    created  default       0        -        基于分析结果生成…
 7    created  default       0        -        检查分析和建议…
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -214,7 +214,7 @@ rnix compose down
 对于简单的线性工作流，可以用管道语法代替 compose 文件：
 
 ```bash
-rnix -i 'spawn "分析 kernel/kernel.go" --agent=code-analyst | spawn "生成改进文档" | spawn "质量检查"'
+rnix -i 'spawn "分析 src/server.go" --agent=code-analyst | spawn "生成改进文档" | spawn "质量检查"'
 ```
 
 管道语法 `|` 将前一个 Agent 的输出自动注入为下一个 Agent 的 `[PIPE_INPUT]` 上下文。
@@ -225,7 +225,7 @@ rnix -i 'spawn "分析 kernel/kernel.go" --agent=code-analyst | spawn "生成改
 
 ```bash
 rnix -i '
-export TARGET=./kernel/kernel.go
+export TARGET=./src/server.go
 spawn "分析 $TARGET 的代码质量" --agent=code-analyst | spawn "生成改进文档"
 '
 ```
@@ -244,7 +244,7 @@ agents:
 当分析发现问题时生成修复方案，否则输出通过报告：
 
 ```
-result = spawn "分析 kernel/kernel.go" --agent=code-analyst
+result = spawn "分析 src/server.go" --agent=code-analyst
 if $result.exitcode == 0
   spawn "生成通过报告"
 else

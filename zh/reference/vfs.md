@@ -44,7 +44,7 @@ VFS（虚拟文件系统）是 Rnix 的统一资源抽象层，遵循 Unix "一�
 {
   "intent": "分析代码",
   "system_prompt": "...",
-  "model": "sonnet",
+  "model": "deepseek-v4-flash",
   "max_turns": 1,
   "timeout_ms": 30000,
   "messages": [{"role": "user", "content": "..."}]

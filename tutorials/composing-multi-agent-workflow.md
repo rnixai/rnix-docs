@@ -7,7 +7,7 @@ This tutorial walks you through using Rnix Compose to orchestrate multiple agent
 ## Prerequisites
 
 - Completed [Tutorial 1: Writing Your First Skill](/tutorials/writing-first-skill) (familiar with Skill and Agent creation)
-- Rnix installed and working
+- Working in the `rnix-tutorial/` project from Tutorial 1 (with DeepSeek provider configured). Any process data left from earlier tutorials does not affect this tutorial
 - Basic understanding of Rnix process and VFS concepts (see [Core Concepts](/guide/concepts))
 
 ---
@@ -50,15 +50,15 @@ You can reuse the Agent from Tutorial 1 or use the existing `code-analyst`. This
 
 ## Step 2: Write compose.yaml
 
-Create `compose.yaml` in the project root:
+Create `compose.yaml` in the project's `.rnix/` directory (i.e. `.rnix/compose.yaml`, the default path `rnix compose up` looks for):
 
 ```yaml
 version: "1.0"
 intent: "Code review workflow"
-model: "haiku"
+model: "deepseek-v4-flash"
 agents:
   analyzer:
-    intent: "Analyze code quality of kernel/kernel.go"
+    intent: "Analyze code quality of src/server.go"
     agent: "code-analyst"
   doc-gen:
     intent: "Generate improvement documentation based on analysis results"
@@ -138,7 +138,7 @@ You will see a TUI (Terminal User Interface) displaying real-time status of all 
 rnix top — Real-time Monitor                      Refresh: 1s
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PID  STATE    AGENT         TOKENS   ELAPSED  INTENT
-5    running  code-analyst  1,200    2.3s     Analyze kernel/kernel.go…
+5    running  code-analyst  1,200    2.3s     Analyze src/server.go…
 6    created  default       0        -        Generate improvement docs…
 7    created  default       0        -        Verify analysis quality…
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -214,7 +214,7 @@ This terminates all compose-spawned processes and cleans up resources.
 For simple linear workflows, you can use pipe syntax instead of a compose file:
 
 ```bash
-rnix -i 'spawn "Analyze kernel/kernel.go" --agent=code-analyst | spawn "Generate improvement docs" | spawn "Quality check"'
+rnix -i 'spawn "Analyze src/server.go" --agent=code-analyst | spawn "Generate improvement docs" | spawn "Quality check"'
 ```
 
 The pipe operator `|` automatically injects the previous agent's output as the next agent's `[PIPE_INPUT]` context.
@@ -225,7 +225,7 @@ Combine with AgentShell environment variables for more flexible workflows:
 
 ```bash
 rnix -i '
-export TARGET=./kernel/kernel.go
+export TARGET=./src/server.go
 spawn "Analyze $TARGET code quality" --agent=code-analyst | spawn "Generate improvement docs"
 '
 ```
@@ -244,7 +244,7 @@ agents:
 Generate a fix plan when issues are found, otherwise output a passing report:
 
 ```
-result = spawn "Analyze kernel/kernel.go" --agent=code-analyst
+result = spawn "Analyze src/server.go" --agent=code-analyst
 if $result.exitcode == 0
   spawn "Generate passing report"
 else
@@ -270,18 +270,13 @@ rnix compose down
 
 ## Next Steps
 
-Congratulations! You have mastered the three core skills of Rnix:
-
-1. **Writing Skills and Agents** — creating reusable agent capabilities
-2. **Debugging** — tracing and locating errors with strace
-3. **Workflow orchestration** — composing multi-agent collaboration with Compose and pipes
+Congratulations! You have mastered multi-agent orchestration. Continue to the next tutorial to explore how Rnix's emergent intelligence works.
 
 ### Further Learning
 
+- [Tutorial 4: Observing Intelligence Emergence](/tutorials/observing-emergence) — watch stem cell differentiation, reputation, and synergy in action
 - [Core Concepts](/guide/concepts) — deep understanding of Rnix's OS design philosophy
 - [Reference Manual](/reference/) — complete definitions for all Syscalls, VFS paths, and CLI commands
-- [Tutorial 1: Writing Your First Skill](/tutorials/writing-first-skill) — review Skill writing details
-- [Tutorial 2: Debugging Your First Bug](/tutorials/debugging-first-bug) — review debugging techniques
 
 ## Related Documentation
 

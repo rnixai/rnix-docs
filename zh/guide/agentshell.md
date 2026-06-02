@@ -145,7 +145,7 @@ end
 ### Map
 
 ```bash
-config = {"model": "sonnet", "budget": 5000}
+config = {"model": "deepseek-v4-flash", "budget": 5000}
 model = $config["model"]
 ```
 

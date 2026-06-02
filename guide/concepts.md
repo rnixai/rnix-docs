@@ -105,10 +105,10 @@ This command triggers the following lifecycle:
 CLI output example:
 
 ```
-[kernel] spawning PID 1 (claude/haiku)...
+[kernel] spawning PID 1 (deepseek/deepseek-v4-flash)...
 [agent]  step 1/10
 [result] Code analysis results...
-[kernel] PID 1 exited(0) | claude/haiku | tokens: 1234 | elapsed: 6.2s
+[kernel] PID 1 exited(0) | deepseek/deepseek-v4-flash | tokens: 1234 | elapsed: 6.2s
 ```
 
 ### Process Tree
@@ -257,10 +257,9 @@ Using `code-analyst` as an example, its `agent.yaml`:
 name: code-analyst
 description: "Agent that analyzes code quality, identifies issues, and provides improvement suggestions"
 models:
-  provider: claude    # or cursor (optional, overridable via --provider CLI flag)
-  preferred: sonnet
-  fallback: haiku
-context_budget: 8192
+  provider: deepseek  # or cursor (optional, overridable via --provider CLI flag)
+  preferred: deepseek-v4-flash
+  fallback: deepseek-v4-pro
 skills:
   - code-analysis
 ```
@@ -580,10 +579,10 @@ cmd/rnix/main.go (CLI Client)
      │  Unix Domain Socket (StreamEvents)
      ▼
 CLI Client receives ProgressEvent → formatted output:
-    [kernel] spawning PID 1 (claude/haiku)...
+    [kernel] spawning PID 1 (deepseek/deepseek-v4-flash)...
     [agent/1] reasoning step 1...
     ══ Result ══...
-    [kernel] PID 1 exited(0) | claude/haiku | tokens: 1234 | elapsed: 6.2s
+    [kernel] PID 1 exited(0) | deepseek/deepseek-v4-flash | tokens: 1234 | elapsed: 6.2s
 ```
 
 Key distinction: the CLI no longer calls the kernel directly, but acts as an IPC client sending requests to the daemon. The daemon's `callbackMux` routes each process's progress events to the corresponding client connection, enabling streaming output. After the Spawn stream ends, the IPC Server proactively calls `kernel.Reap(pid)` to clean up the Zombie process (close DebugChan, free context, remove from process table), since in daemon mode there is no CLI-side `Wait()` call to trigger reclamation.

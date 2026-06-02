@@ -135,7 +135,7 @@ rnix gc --json             # JSON 输出（隐含 --force）
 
 ```yaml
 version: "1"
-default_provider: claude
+default_provider: deepseek
 
 providers:
   - name: claude
@@ -169,7 +169,7 @@ providers:
 | 字段 | 类型 | 描述 |
 |-------|------|------|
 | `version` | `string` | 配置格式版本（`"1"`） |
-| `default_provider` | `string` | 未指定时的默认提供商（默认：`claude`） |
+| `default_provider` | `string` | 未指定时的默认提供商（默认：`deepseek`） |
 | `providers[].name` | `string` | 提供商名称，映射到 `/dev/llm/<name>` |
 | `providers[].driver` | `string` | 驱动类型：`claude-cli`、`cursor-cli` 或 `openai-compat` |
 | `providers[].command` | `string` | CLI 驱动器的二进制名称覆盖 |
@@ -281,7 +281,7 @@ Compose 文件定义基于 DAG 的多 agent 工作流。位于 `.rnix/compose.ya
 ```yaml
 version: "1.0"
 intent: "Code review workflow"
-model: "haiku"
+model: "deepseek-v4-flash"
 
 agents:
   analyzer:
@@ -318,10 +318,9 @@ rnix compose resume --node <name>  # 恢复失败的 DAG 节点
 name: code-analyst
 description: "Code quality analysis agent"
 models:
-  provider: claude
-  preferred: sonnet
-  fallback: haiku
-context_budget: 8192
+  provider: deepseek
+  preferred: deepseek-v4-flash
+  fallback: deepseek-v4-pro
 max_steps: 20
 max_tokens: 50000
 skills:
@@ -348,7 +347,7 @@ mcp:
 | `models.provider` | `string` | 否 | LLM 提供商名称 |
 | `models.preferred` | `string` | 否 | 首选模型 |
 | `models.fallback` | `string` | 否 | 回退模型 |
-| `context_budget` | `int` | 否 | 最大 token 预算（0 = 无限制） |
+| `context_budget` | `int` | 否 | 单步上下文窗口守卫：单次 LLM 调用允许的最大输入 token 数。超限时进程自暂停（退出码 3, `context_full`），可通过 resume 恢复。`0` = 自动推导为 `context_window × 0.9`；显式设置的值会截断为 `min(budget, context_window)`。 |
 | `max_steps` | `int` | 否 | 最大推理步数（0 = 默认 10） |
 | `max_tokens` | `int` | 否 | 最大总 token 数（0 = 无限制） |
 | `skills` | `[]string` | 否 | 引用的 skill 名称 |
@@ -388,9 +387,7 @@ allowed-tools: /dev/fs /dev/shell /dev/web
 metadata:
   author: rnix
   version: "1.0"
-  tags:
-    - code
-    - quality
+  tags: "code, quality"
 ---
 
 # 代码分析

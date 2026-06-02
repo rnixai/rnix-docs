@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 import { withUtm } from '../utils/utm'
 
 const LANDING_URL = 'https://rnix.ai'
@@ -45,6 +46,7 @@ const guideSidebar = [
       { text: 'Process Resume & Recovery', link: '/guide/process-resume' },
       { text: 'Monitoring & Supervisor', link: '/guide/monitoring' },
       { text: 'Token Economy & Reputation', link: '/guide/token-economy' },
+      { text: 'Intelligence Emergence', link: '/guide/emergence' },
       { text: 'Security & Self-Healing', link: '/guide/security' },
       { text: 'Configuration', link: '/guide/configuration' },
     ],
@@ -92,13 +94,14 @@ const zhGuideSidebar = [
       { text: '进程暂停与恢复', link: '/zh/guide/process-resume' },
       { text: '监控与 Supervisor', link: '/zh/guide/monitoring' },
       { text: 'Token 经济与声誉', link: '/zh/guide/token-economy' },
+      { text: '智能涌现', link: '/zh/guide/emergence' },
       { text: '安全与自愈', link: '/zh/guide/security' },
       { text: '配置指南', link: '/zh/guide/configuration' },
     ],
   },
 ]
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: 'Rnix',
   description: 'The AI-Era Unix — Power agents with Unix philosophy',
 
@@ -131,6 +134,7 @@ export default defineConfig({
                 { text: 'Writing Your First Skill', link: '/tutorials/writing-first-skill' },
                 { text: 'Debugging Your First Bug', link: '/tutorials/debugging-first-bug' },
                 { text: 'Composing Multi-Agent Workflows', link: '/tutorials/composing-multi-agent-workflow' },
+                { text: 'Observing Intelligence Emergence', link: '/tutorials/observing-emergence' },
               ],
             },
           ],
@@ -180,6 +184,7 @@ export default defineConfig({
                 { text: '编写第一个 Skill', link: '/zh/tutorials/writing-first-skill' },
                 { text: '调试第一个 Bug', link: '/zh/tutorials/debugging-first-bug' },
                 { text: '组合多智能体工作流', link: '/zh/tutorials/composing-multi-agent-workflow' },
+                { text: '观察智能涌现', link: '/zh/tutorials/observing-emergence' },
               ],
             },
           ],
@@ -223,6 +228,9 @@ export default defineConfig({
   },
 
   vite: {
+    optimizeDeps: {
+      include: ['mermaid', 'dayjs'],
+    },
     server: {
       watch: {
         usePolling: true,
@@ -230,4 +238,8 @@ export default defineConfig({
       },
     },
   },
-})
+
+  mermaid: {
+    theme: 'dark',
+  },
+}))

@@ -12,7 +12,7 @@ Define LLM providers declaratively in `~/.config/rnix/providers.yaml` (global) o
 
 ```yaml
 version: "1"
-default_provider: claude
+default_provider: deepseek
 
 providers:
   - name: claude
@@ -95,7 +95,7 @@ When spawning an agent, the provider is resolved:
 1. `--provider` CLI flag (highest priority)
 2. `agent.yaml` → `models.provider`
 3. `providers.yaml` → `default_provider`
-4. Built-in default: `claude`
+4. Built-in default: `deepseek`
 
 ### Provider Fallback
 
@@ -151,6 +151,46 @@ deepseek     http    offline   deepseek-chat      timeout
   default_model: deepseek-reasoner
   thinking_budget: 16384
 ```
+
+---
+
+## CLI Driver Capabilities
+
+CLI-based drivers (`claude-cli`, `cursor-cli`, `qwen-cli`) wrap external CLI tools. The `claude-cli` driver includes an advanced **capability probing** system that adapts to different CLI versions.
+
+### Capability Probing
+
+On first use, the Claude CLI driver runs `claude -p --help` (5s timeout) and scans the output to detect optional flags:
+
+| Capability | Flag | Effect |
+|------------|------|--------|
+| `partialMessages` | `--include-partial-messages` | Enable streaming of partial LLM responses |
+| `addDir` | `--add-dir` | Bundle additional directories into the agent context |
+| `permissionMode` | `--permission-mode` | Control tool execution permissions |
+
+Probing runs once per driver instance and caches results. If the probe times out or fails, all capabilities default to `false` (conservative mode).
+
+### Fallback Binary Resolution
+
+The driver searches multiple paths for the CLI binary:
+
+1. `claude` (default) or the value of `command` in provider config
+2. `openclaude` (fallback)
+3. Extended search paths: `~/.local/bin`, nvm's latest node bin, `~/.bun/bin`
+
+### DriverMetaProvider
+
+CLI drivers implement the `DriverMetaProvider` interface, exposing runtime metadata for observability:
+
+| Key | Description | Example |
+|-----|-------------|---------|
+| `resolved_bin` | Absolute path to resolved binary | `/usr/local/bin/claude` |
+| `permission_mode` | Active permission mode | `bypassPermissions` |
+| `cap_partial_messages` | Streaming support detected | `"true"` / `"false"` |
+| `cap_add_dir` | Directory bundling support | `"true"` / `"false"` |
+| `cap_permission_mode` | Permission mode support | `"true"` / `"false"` |
+
+This metadata is recorded in strace events (`claude_cli.resolve`, `claude_cli.capabilities`) and visible in the dashboard's process detail view.
 
 ---
 

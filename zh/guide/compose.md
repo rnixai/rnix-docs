@@ -10,7 +10,7 @@
 # compose.yaml
 version: "1.0"
 intent: "Code review workflow"
-model: "haiku"
+model: "deepseek-v4-flash"
 
 agents:
   analyzer:

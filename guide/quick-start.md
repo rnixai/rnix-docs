@@ -19,11 +19,12 @@ If not installed, visit [go.dev/dl](https://go.dev/dl/).
 
 ### LLM Provider
 
-Rnix supports multiple LLM providers. You need at least one:
+Rnix supports multiple LLM providers. The default provider is **DeepSeek** (via OpenAI-compatible API):
 
-- **Claude Code CLI** — `npm install -g @anthropic-ai/claude-code`
+- **DeepSeek API** (default) — set the `DEEPSEEK_API_KEY` environment variable. Model: `deepseek-v4-flash`
+- **Claude Code CLI** — `npm install -g @anthropic-ai/claude-code`, use with `--provider claude`
 - **Cursor CLI** — requires `CURSOR_API_KEY` environment variable
-- **OpenAI-compatible API** (Ollama, Groq, DeepSeek, etc.) — configure in `~/.config/rnix/providers.yaml` after `rnix init`
+- **Other OpenAI-compatible APIs** (Ollama, Groq, etc.) — configure in `~/.config/rnix/providers.yaml` after `rnix init`
 
 ---
 
@@ -70,7 +71,7 @@ This creates global configuration at `~/.config/rnix/` (providers, agents, skill
 
 ```bash
 $ rnix -i "Analyze the code quality of ./cmd/rnix/main.go"
-[kernel] spawning PID 1 (claude/haiku)...
+[kernel] spawning PID 1 (deepseek/deepseek-v4-flash)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 ══ Result ══════════════════════════════════════════════════════════════════════
@@ -79,7 +80,7 @@ $ rnix -i "Analyze the code quality of ./cmd/rnix/main.go"
   2. Import organization: clean and grouped
   ...
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | claude/haiku | tokens: 1,234 | elapsed: 6.2s
+[kernel] PID 1 exited(0) | deepseek/deepseek-v4-flash | tokens: 1,234 | elapsed: 6.2s
 ```
 
 The daemon starts automatically on first use and exits after 60s idle.

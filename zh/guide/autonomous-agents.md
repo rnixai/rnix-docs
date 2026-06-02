@@ -38,7 +38,7 @@ name: autonomous-analyst
 description: "Self-directed code analysis agent"
 planning: true              # 默认: true — LLM 可选择规划
 models:
-  preferred: sonnet
+  preferred: deepseek-v4-flash
 skills:
   - code-analysis
   - security-scan
@@ -90,13 +90,13 @@ Generic Stem Agent (no Skills)
 ```
 
 1. **基础智能体**仅具备核心推理能力和统一推理循环，不绑定任何 Skill
-2. **自动匹配**根据所有可用 Skill 的元数据分析意图，找到最佳匹配
+2. **自动匹配**根据所有可用 Skill 的元数据分析意图，找到最佳匹配。匹配到的技能随后使用声誉分数和协同矩阵数据重新排序——高表现的技能组合被优先选择，同时 ε-探索参数防止"强者恒强"的锁定效应
 3. **渐进特化**先加载核心 Skill，执行过程中通过 `specialize` action 按需动态加载更多 Skill
-4. **表观遗传记忆**记录每个项目的分化路径（哪些 Skill、何种顺序）——下次类似意图到来时，智能体可以快速重新分化
+4. **分化记忆（DiffMemory）** 记录意图→技能的映射关系，并以 JSON Lines 文件持久化到 `$PROJECT/.rnix/diffmemory/`。daemon 重启时自动加载历史映射。当相似意图再次到来时，先前成功的技能组合被即时召回，跳过匹配计算
 
 ### 分化谱系
 
-查看完整的分化路径：
+谱系系统提供分化过程的**观测性遥测**——记录发生了什么，但不影响未来的 spawn 或选择决策。查看完整的分化路径：
 
 ```bash
 $ rnix lineage <pid>
@@ -106,8 +106,23 @@ PID 5: autonomous-analyst
     1. [auto] security-scan       (intent match: 0.95)
     2. [auto] code-analysis       (intent match: 0.90)
     3. [runtime] dependency-check  (loaded at step 4, tool need)
-  Project memory: ~/.rnix/lineage/project-abc/security-analyst.json
 ```
+
+### 反馈闭环：声誉 → 干细胞匹配
+
+分化不是一次性过程——它通过闭环反馈持续改进：
+
+```
+意图 → StemMatcher（关键词匹配）
+         → 声誉 + 协同重新排序
+            → 使用选定技能 Spawn
+               → 执行结果
+                  → RecordResult（声誉更新）
+                  → RecordCombo（协同矩阵更新）
+                     → 下次匹配受益于累积数据
+```
+
+这意味着系统表现出**自然选择**：产生更好结果的技能组合逐渐被优先选择，同时 ε-探索参数确保新组合仍有被尝试的机会。
 
 ---
 
@@ -130,7 +145,9 @@ User Intent: "Refactor authentication to use JWT"
 
 ## 相关文档
 
+- [智能涌现](/zh/guide/emergence) — 分化、声誉与协同如何产生涌现智能
 - [意图系统](/zh/guide/intent-system) — 声明式意图分解与协调
-- [Token 经济](/zh/guide/token-economy) — 预算池和信誉用于智能体选择
+- [Token 经济](/zh/guide/token-economy) — 预算池、声誉与协同反馈
+- [安全与自愈](/zh/guide/security) — 免疫系统与神经可塑性
 - [智能体与 Skill](/zh/guide/agents-and-skills) — 智能体和 Skill 定义
 - [Compose 编排](/zh/guide/compose) — 静态多智能体 DAG 工作流

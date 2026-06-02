@@ -6,35 +6,44 @@ Rnix 实现了一套自适应免疫安全系统，持续监控智能体行为、
 
 ## 免疫系统配置
 
-免疫系统**默认禁用**。要启用它，添加以下配置：
+免疫系统**默认启用，以 warn-only（观测）模式运行**。它监控智能体行为并记录异常，但不挂起进程。这提供了零干扰的被动安全感知。
+
+要切换到**执行模式**（检测到异常时自动挂起进程）或完全禁用：
 
 ```yaml
-# config.yaml
+# .rnix/config.yaml
 immune:
-  enabled: true
+  enabled: true               # 默认: true
+  warn_only: false            # 默认: true — 设为 false 启用自动挂起
   deviation_threshold: 2.0    # 距离基线的标准差（默认：2.0）
-  min_samples: 10             # 异常检测激活前的最小样本数
-  auto_suspend: true          # 检测到异常时自动挂起进程
-  threat_memory: true         # 启用威胁签名持久化
+  min_samples: 5              # 异常检测激活前的最小样本数
 ```
 
 ### 配置字段
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `enabled` | `bool` | `false` | 启用或禁用免疫系统 |
+| `enabled` | `bool` | `true` | 启用或禁用免疫系统 |
+| `warn_only` | `bool` | `true` | 观测模式：检测并记录异常，但不挂起进程 |
 | `deviation_threshold` | `float` | `2.0` | 触发异常的标准差阈值 |
-| `min_samples` | `int` | `10` | 检测开始前的最小行为样本数 |
-| `auto_suspend` | `bool` | `true` | 自动挂起异常进程 |
-| `threat_memory` | `bool` | `true` | 跨会话持久化威胁签名 |
+| `min_samples` | `int` | `5` | 检测开始前的最小行为样本数 |
+| `min_migration_similarity` | `float` | `0.5` | 能力迁移的最小相似度阈值 |
 
-禁用时，所有免疫相关的 IPC 方法返回空状态，且不进行行为监控。
+### 运行模式
+
+| 模式 | `enabled` | `warn_only` | 行为 |
+|------|-----------|-------------|------|
+| **观测模式**（默认） | `true` | `true` | 监控、记录异常、持久化威胁签名——不挂起进程 |
+| **执行模式** | `true` | `false` | 监控 + 自动挂起异常进程（SIGPAUSE） |
+| **禁用** | `false` | — | 不监控，IPC 方法返回空状态 |
+
+在观测模式下，`rnix immune status` 显示 `Mode: warn-only`，异常被记录但进程继续运行。
 
 ---
 
 ## 免疫守护进程
 
-启用后，**免疫守护进程（Immune Daemon）** 是一个安全监控进程，持续监视所有智能体的行为模式。
+**免疫守护进程（Immune Daemon）** 持续监视所有智能体的行为模式。由于默认启用，每个智能体进程从首次运行起即被监控。
 
 ### 行为基线
 
@@ -56,15 +65,15 @@ immune:
 - Token 消耗激增
 - 访问异常的 VFS 路径
 
-免疫守护进程将触发告警，并可自动**挂起**该进程。
+在**观测模式**（默认）下，免疫守护进程记录 `AnomalyAlert` 并持久化 `ThreatSignature`，但进程继续运行。在**执行模式**下，告警触发 `SIGPAUSE` 挂起进程。
 
 ### 威胁记忆（抗体记忆）
 
-已识别的异常行为模式会被记录到威胁记忆库中。当相同模式再次出现时，将被**立即阻断**，无需重新检测。
+已识别的异常行为模式会被记录到威胁记忆库中。当相同模式再次出现时，将被**立即识别**——在执行模式下意味着即时挂起；在观测模式下，立即发出告警。
 
 ```bash
 $ rnix immune status
-Security Monitor: active
+Mode: warn-only
   Monitoring: 5 processes
   Alerts: 1 active
     PID 7: unusual /dev/shell frequency (23/step, baseline: 5-10)
@@ -92,7 +101,7 @@ security-scan     0.72          1.00            0.20
 doc-writer        0.35          0.20            1.00
 ```
 
-当 `security-scanner` 超出重试上限时，其剩余任务可以迁移给 `code-analyst`（相似度：0.72），通过部分上下文传输继续执行。
+当 `security-scanner` 超出重试上限时，其剩余任务可以迁移给 `code-analyst`（相似度：0.72），通过部分上下文传输继续执行。迁移受门控约束——只有当替代智能体在相似度矩阵中展现出可测量的净提升时才会触发，防止盲目切换导致质量退化。
 
 ---
 
@@ -114,7 +123,7 @@ Agent Collaboration Topology:
     code-analyst ↔ security-scanner: 72% (high substitutability)
 ```
 
-高频协作路径在后续编排中被**优先使用**——系统会学习哪些智能体组合协作效果最佳。
+协作数据从生产级 syscall 自动采集——`spawn` 事件记录父→子边，IPC `msg` 事件记录对等通信边——以真实使用遥测数据填充拓扑。高频协作路径**可用于运维洞察**——拓扑作为可观测性工具，展示哪些智能体组合使用最多。
 
 ---
 
@@ -133,7 +142,8 @@ Agent Collaboration Topology:
 
 ## 相关文档
 
+- [智能涌现](/zh/guide/emergence) — 免疫学习与神经可塑性如何产生涌现智能
 - [监控与 Supervisor](/zh/guide/monitoring) — 进程监控和重启策略
-- [Token 经济](/zh/guide/token-economy) — 预算池和信誉
+- [Token 经济](/zh/guide/token-economy) — 预算池和声誉
 - [自主智能体](/zh/guide/autonomous-agents) — 统一推理循环
 - [Compose 编排](/zh/guide/compose) — 多智能体 DAG 工作流

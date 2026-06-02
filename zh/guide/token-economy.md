@@ -42,15 +42,29 @@ agents:
 
 ### 预算强制执行
 
+Rnix 实施两套独立的预算机制：
+
+**累计预算**（`max_tokens`）— 进程生命周期内的总 token 消耗：
+
 ```
 每次 LLM 调用：
   proc.TokensUsed += response.TokensUsed
 
-  if budget > 0 && TokensUsed >= budget:
-    finishProcess(ExitStatus{Code: 2, Reason: "budget_exceeded"})
+  if max_tokens > 0 && TokensUsed >= max_tokens:
+    selfSuspend(ExitStatus{Code: 2, Reason: "budget_exhausted"})
 ```
 
-退出码：0 = 正常，1 = 错误，**2 = 预算超限**。
+**单步上下文守卫**（`context_budget`）— 单次调用的输入 token 上限：
+
+```
+每次 LLM 调用：
+  if context_budget > 0 && response.InputTokens >= context_budget:
+    selfSuspend(ExitStatus{Code: 3, Reason: "context_full"})
+```
+
+两种触发都会使进程**自暂停**（非终止），意味着可以通过 `rnix resume` 恢复。若未显式设置 `context_budget`，则自动推导为 `context_window × 0.9`。
+
+退出码：0 = 正常，1 = 错误，**2 = 已暂停**（预算/循环/轮次），**3 = 上下文满**。
 
 ---
 
@@ -124,9 +138,8 @@ name: security-scan
 description: "Scan for security vulnerabilities"
 allowed-tools: /dev/fs /dev/shell
 synergy:
-  code-analysis:
-    description: "When combined with code-analysis, enables deep security-aware code review"
-    instructions: |
+  - with: code-analysis
+    instruction: |
       With both security-scan and code-analysis active, you can:
       - Correlate code quality issues with security implications
       - Identify security anti-patterns in code structure
@@ -152,10 +165,22 @@ Known effective Skill combinations:
 
 协同矩阵追踪哪些 Skill 组合在历史上产生了显著优于单个 Skill 的效果，数据基于声誉系统。
 
+### 协同 → 干细胞匹配反馈
+
+协同数据反馈到干细胞分化系统。当 Stem Agent 为新意图匹配技能时，匹配结果使用协同分数重新排序：
+
+1. **基础匹配** — StemMatcher 按关键词与意图的重叠度评分
+2. **协同提升** — 有成功协同记录的技能组合获得优先权
+3. **声誉加权** — 单个技能的声誉分数进一步调整排名
+4. **ε-探索** — 小概率尝试未经验证的组合，防止收敛到局部最优
+
+这形成了完整的反馈闭环：更好的技能组合 → 更高的声誉 → 未来匹配中被优先选择 → 更多数据 → 更精准的协同分数。
+
 ---
 
 ## 相关文档
 
+- [智能涌现](/zh/guide/emergence) — 声誉与协同如何驱动涌现智能
 - [Compose 编排](/zh/guide/compose) — 带预算的多智能体工作流
 - [自主智能体](/zh/guide/autonomous-agents) — 统一推理与干细胞分化
 - [Agent 与 Skill](/zh/guide/agents-and-skills) — Agent 与 Skill 定义

@@ -21,10 +21,9 @@ name: code-analyst
 description: "Code quality analysis agent"
 planning: true              # true（默认）或 false
 models:
-  provider: claude          # claude, cursor, ollama, groq 等
-  preferred: sonnet
-  fallback: haiku
-context_budget: 8192
+  provider: deepseek        # deepseek, claude, cursor, ollama, groq 等
+  preferred: deepseek-v4-flash
+  fallback: deepseek-v4-pro
 skills:
   - code-analysis
   - security-scan
@@ -81,9 +80,8 @@ metadata:
   author: rnix
   version: "1.0"
 synergy:
-  security-scan:
-    description: "Enables deep security-aware code review"
-    instructions: |
+  - with: security-scan
+    instruction: |
       When combined with security-scan, correlate code quality
       issues with security implications.
 ---

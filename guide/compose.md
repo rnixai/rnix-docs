@@ -10,7 +10,7 @@ Define multi-agent DAG workflows in YAML. The Compose engine handles dependency 
 # compose.yaml
 version: "1.0"
 intent: "Code review workflow"
-model: "haiku"
+model: "deepseek-v4-flash"
 
 agents:
   analyzer:

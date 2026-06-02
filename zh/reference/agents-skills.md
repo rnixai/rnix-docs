@@ -17,8 +17,8 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `provider` | `string` | LLM 提供商（`claude`（默认）或 `cursor`） |
-| `preferred` | `string` | 首选模型（如 `sonnet`） |
-| `fallback` | `string` | 备用模型（如 `haiku`） |
+| `preferred` | `string` | 首选模型（如 `deepseek-v4-flash`） |
+| `fallback` | `string` | 备用模型（如 `deepseek-v4-pro`） |
 
 **模型选择优先级：** CLI `--model` flag > Agent manifest `preferred` > 驱动默认值
 
@@ -99,10 +99,9 @@ Rnix 对 Skill 提供两级加载粒度：
 name: code-analyst
 description: "分析代码质量、识别潜在问题并提供改进建议的智能体"
 models:
-  provider: claude
-  preferred: sonnet
-  fallback: haiku
-context_budget: 8192
+  provider: deepseek
+  preferred: deepseek-v4-flash
+  fallback: deepseek-v4-pro
 skills:
   - code-analysis
 ```

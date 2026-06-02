@@ -38,7 +38,7 @@ name: autonomous-analyst
 description: "Self-directed code analysis agent"
 planning: true              # default: true — LLM can choose to plan
 models:
-  preferred: sonnet
+  preferred: deepseek-v4-flash
 skills:
   - code-analysis
   - security-scan
@@ -90,13 +90,13 @@ Generic Stem Agent (no Skills)
 ```
 
 1. **Base agent** starts with only core reasoning capability and unified reasoning loop, no bound Skills
-2. **Auto-matching** analyzes the intent against all available Skill metadata to find the best matches
+2. **Auto-matching** analyzes the intent against all available Skill metadata to find the best matches. Matched skills are then re-ranked using reputation scores and synergy matrix data — high-performing skill combinations are prioritized, with ε-exploration to prevent "rich-get-richer" lock-in
 3. **Progressive specialization** loads core Skills first, then dynamically loads additional Skills via `specialize` action as needed during execution
-4. **Epigenetic memory** records differentiation paths (which Skills, in what order) for each project — next time a similar intent arrives, the agent can rapidly re-differentiate
+4. **Differentiation Memory (DiffMemory)** records intent→skills mappings and persists them as JSON Lines files (`$PROJECT/.rnix/diffmemory/`). On daemon restart, historical mappings are reloaded. When a similar intent arrives, previously successful skill combinations are recalled instantly, bypassing the matching computation
 
 ### Differentiation Lineage
 
-View the complete differentiation path:
+The lineage system provides **observability telemetry** for the differentiation process — it records what happened, but does not influence future spawn or selection decisions. View the complete differentiation path:
 
 ```bash
 $ rnix lineage <pid>
@@ -106,8 +106,23 @@ PID 5: autonomous-analyst
     1. [auto] security-scan       (intent match: 0.95)
     2. [auto] code-analysis       (intent match: 0.90)
     3. [runtime] dependency-check  (loaded at step 4, tool need)
-  Project memory: ~/.rnix/lineage/project-abc/security-analyst.json
 ```
+
+### Feedback Loop: Reputation → Stem Match
+
+Differentiation is not a one-shot process — it improves over time through a closed feedback loop:
+
+```
+Intent → StemMatcher (keyword match)
+           → Reputation + Synergy re-rank
+              → Spawn with selected Skills
+                 → Execution result
+                    → RecordResult (reputation update)
+                    → RecordCombo (synergy matrix update)
+                       → Next match benefits from accumulated data
+```
+
+This means the system exhibits **natural selection**: skill combinations that produce better results are gradually preferred, while the ε-exploration parameter ensures novel combinations are still tried.
 
 ---
 
@@ -130,7 +145,9 @@ User Intent: "Refactor authentication to use JWT"
 
 ## Related Documentation
 
+- [Intelligence Emergence](/guide/emergence) — How differentiation, reputation, and synergy produce emergent intelligence
 - [Intent System](/guide/intent-system) — Declarative intent decomposition and reconciliation
-- [Token Economy](/guide/token-economy) — Budget pools and reputation for agent selection
+- [Token Economy](/guide/token-economy) — Budget pools, reputation, and synergy feedback
+- [Security & Self-Healing](/guide/security) — Immune system and neuroplasticity
 - [Agents & Skills](/guide/agents-and-skills) — Agent and Skill definitions
 - [Compose Orchestration](/guide/compose) — Static multi-agent DAG workflows

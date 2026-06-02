@@ -91,7 +91,7 @@ IPC communication uses the NDJSON (Newline Delimited JSON) format, one JSON obje
 **SpawnRequest:**
 
 ```json
-{"intent": "Analyze code", "agent": "code-analyst", "model": "sonnet", "max_steps": 10}
+{"intent": "Analyze code", "agent": "code-analyst", "model": "deepseek-v4-flash", "max_steps": 10}
 ```
 
 **KillRequest:**

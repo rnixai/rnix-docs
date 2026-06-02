@@ -7,7 +7,7 @@
 ## 前置条件
 
 - Rnix 已安装并可运行（参考 [快速上手指南](/zh/guide/quick-start)）
-- Claude Code CLI 已安装且 API 密钥已配置
+- 已配置 LLM 提供商（本教程使用 DeepSeek——参见 [LLM 提供商](/zh/guide/llm-providers)）
 - 对 Rnix 的进程、VFS、Skill 概念有基本了解（参考 [核心概念文档](/zh/guide/concepts)）
 
 ---
@@ -17,6 +17,68 @@
 1. Skill 的文件结构和 `SKILL.md` 编写规范
 2. Agent 如何引用 Skill 获得能力
 3. 如何运行 Agent 并观察 Skill 的执行过程
+
+---
+
+## 步骤零：搭建示例项目
+
+所有教程使用同一个示例项目。创建一次，教程 1–4 复用。
+
+```bash
+mkdir rnix-tutorial && cd rnix-tutorial
+rnix init
+```
+
+在 `.rnix/providers.yaml` 中配置 LLM 提供商：
+
+```yaml
+default_provider: deepseek
+
+providers:
+  deepseek:
+    driver: openai-compat
+    model: deepseek-v4-flash
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+```
+
+创建示例源码文件供智能体分析：
+
+```bash
+mkdir -p src
+cat > src/server.go << 'EOF'
+package main
+
+import (
+    "fmt"
+    "net/http"
+    "os/exec"
+)
+
+func handler(w http.ResponseWriter, r *http.Request) {
+    name := r.URL.Query().Get("name")
+    fmt.Fprintf(w, "Hello, %s!", name)
+}
+
+func runCommand(w http.ResponseWriter, r *http.Request) {
+    cmd := r.URL.Query().Get("cmd")
+    out, _ := exec.Command("sh", "-c", cmd).Output()
+    w.Write(out)
+}
+
+func main() {
+    http.HandleFunc("/hello", handler)
+    http.HandleFunc("/run", runCommand)
+    http.ListenAndServe(":8080", nil)
+}
+EOF
+```
+
+确保环境变量已设置：
+
+```bash
+export DEEPSEEK_API_KEY="your-key-here"
+```
 
 ---
 
@@ -45,9 +107,7 @@ allowed-tools: /dev/fs
 metadata:
   author: my-team
   version: "1.0"
-  tags:
-    - code
-    - summary
+  tags: "code, summary"
 ---
 
 # Code Summarizer
@@ -91,7 +151,7 @@ metadata:
 | `description` | 简短描述（用于发现阶段，~100 tokens） |
 | `allowed-tools` | 空格分隔的 VFS 设备路径白名单 |
 | `metadata.version` | 版本号 |
-| `metadata.tags` | 标签列表（用于搜索和分类） |
+| `metadata.tags` | 逗号分隔的标签字符串（用于搜索和分类） |
 
 **Body（Markdown 正文）**：Skill 的详细指令，在激活阶段注入智能体的系统提示词。
 
@@ -103,7 +163,7 @@ metadata:
 |----------|------|
 | `/dev/fs` | 读写宿主文件系统 |
 | `/dev/shell` | 执行 Shell 命令 |
-| `/dev/llm/claude` | 调用 LLM 推理 |
+| `/dev/llm/deepseek` | 调用 LLM 推理 |
 
 我们的 `code-summarizer` 只需要读取文件，所以只声明了 `/dev/fs`。
 
@@ -136,10 +196,8 @@ mkdir -p .rnix/agents/summarizer
 name: summarizer
 description: "读取代码文件并生成结构化摘要的智能体"
 models:
-  provider: claude
-  preferred: sonnet
-  fallback: haiku
-context_budget: 4096
+  provider: deepseek
+  preferred: deepseek-v4-flash
 skills:
   - code-summarizer
 ```
@@ -150,10 +208,9 @@ skills:
 |------|------|
 | `name` | Agent 的唯一标识名 |
 | `description` | Agent 的简短描述 |
-| `models.provider` | LLM 提供者（`claude`（默认）或 `cursor`） |
+| `models.provider` | LLM 提供者（对应 `providers.yaml` 中的 key） |
 | `models.preferred` | 首选模型 |
-| `models.fallback` | 降级模型 |
-| `context_budget` | 上下文预算（tokens） |
+| `models.fallback` | 降级模型（可选） |
 | `skills` | 引用的 Skill 列表（对应 Skill 的 `name` 字段） |
 
 ### 编写 instructions.md
@@ -198,7 +255,7 @@ Process（运行时实例）
 使用 `--agent` 标志指定刚创建的 Agent：
 
 ```bash
-rnix -i "总结 kernel/kernel.go 的代码结构" --agent=summarizer
+rnix -i "总结 src/server.go 的代码结构" --agent=summarizer
 ```
 
 你将看到类似以下的输出：
@@ -207,7 +264,7 @@ rnix -i "总结 kernel/kernel.go 的代码结构" --agent=summarizer
 PID 1 | summarizer | running
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-## 摘要: kernel/kernel.go
+## 摘要: src/server.go
 
 **文件用途:** Rnix 内核的核心实现，包含 Kernel 接口组合和 Spawn/reasonStep 主循环。
 
@@ -225,17 +282,18 @@ PID 1 | completed | 0 | 3.2s | 1,240 tokens
 
 ### 查看进程状态
 
-在智能体运行期间（或运行后），可以用 `rnix ps` 查看进程列表：
+在智能体运行期间，可以用 `rnix ps` 查看进程列表。进程完成后会被自动回收——使用 `rnix ps -a` 查看所有进程（包括已完成的）：
 
 ```bash
-rnix ps
+rnix ps -a
 ```
 
 输出示例：
 
 ```
-  PID   STATE     SKILL              TOKENS   ELAPSED
-    1   zombie    code-summarizer    1,240    3.2s
+  PID   UUID          STATE       SKILL                     TOKENS   ACTIVE        ELAPSED
+─────   ───────────   ─────────   ───────────────   ──────────────   ──────────   ────────
+    —   abcdef12...   dead        code-summarizer            1,240   —               3.2s
 ```
 
 ### 使用 strace 查看 Syscall 追踪
@@ -249,12 +307,12 @@ rnix strace 1
 输出示例：
 
 ```
-[  0.001s] Spawn(agent="summarizer", intent="总结 kernel/kernel.go 的代码结构") → 1    1ms
+[  0.001s] Spawn(agent="summarizer", intent="总结 src/server.go 的代码结构") → 1    1ms
 [  0.002s] CtxAlloc() → 1    0µs
 [  0.003s] Open(flags=1, path="/lib/skills/code-summarizer/SKILL.md") → 3    0µs
 [  0.003s] Read(fd=3, length=1048576) → 892    0µs
 [  0.004s] Close(fd=3) → <nil>    0µs
-[  0.005s] Open(flags=2, path="/dev/llm/claude") → 4    0µs  ← LLM 调用
+[  0.005s] Open(flags=2, path="/dev/llm/deepseek") → 4    0µs  ← LLM 调用
 [  0.006s] Write(fd=4, size=1234) → <nil>    2.80s  ← 慢操作
 [  0.006s] Read(fd=4, length=1048576) → 1560    2ms
 [  0.007s] Close(fd=4) → <nil>    0µs
@@ -265,7 +323,7 @@ rnix strace 1
 
 从 strace 输出可以清楚看到：
 1. 内核先加载了 `code-summarizer` Skill（读取 `/lib/skills/code-summarizer/SKILL.md`，892 字节）
-2. 然后调用 LLM（`/dev/llm/claude`）进行推理——Write 发送请求，Read 获取响应
+2. 然后调用 LLM（`/dev/llm/deepseek`）进行推理——Write 发送请求，Read 获取响应
 3. LLM 指示读取目标文件（`/dev/fs`，2048 字节）
 4. 一切操作都通过 VFS 完成，Skill 声明的 `allowed-tools: /dev/fs` 控制了访问权限
 5. Read 的返回值是**字节数**（如 `→ 2048`），不是文件内容本身
@@ -300,9 +358,7 @@ allowed-tools: /dev/fs
 metadata:
   author: my-team
   version: "1.0"
-  tags:
-    - code
-    - summary
+  tags: "code, summary"
 ---
 
 # Code Summarizer
@@ -336,10 +392,8 @@ metadata:
 name: summarizer
 description: "读取代码文件并生成结构化摘要的智能体"
 models:
-  provider: claude
-  preferred: sonnet
-  fallback: haiku
-context_budget: 4096
+  provider: deepseek
+  preferred: deepseek-v4-flash
 skills:
   - code-summarizer
 ```
@@ -359,12 +413,12 @@ skills:
 ### 运行命令
 
 ```bash
-rnix -i "总结 kernel/kernel.go 的代码结构" --agent=summarizer
+rnix -i "总结 src/server.go 的代码结构" --agent=summarizer
 ```
 
 ### 预期输出
 
-智能体读取 `kernel/kernel.go`，输出结构化的代码摘要报告。
+智能体读取 `src/server.go`，输出结构化的代码摘要报告。
 
 ---
 

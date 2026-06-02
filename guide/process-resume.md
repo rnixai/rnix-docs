@@ -79,7 +79,7 @@ $ rnix daemon status
 
 $ rnix resume abc123-def456
 [kernel] resuming UUID abc123 from checkpoint (step 10/20)...
-[kernel] PID 5 spawned (claude/sonnet) | resumed from abc123
+[kernel] PID 5 spawned (deepseek/deepseek-v4-flash) | resumed from abc123
 ```
 
 For Suspended processes: uses `checkpoint.json` for full context restoration (fastest path).  
@@ -92,7 +92,7 @@ Creates a new UUID with `origin_uuid` linking back. The original process data is
 ```bash
 $ rnix resume --fork abc123-def456
 [kernel] forking from abc123 → new UUID xyz789...
-[kernel] PID 6 spawned (claude/sonnet) | forked from abc123
+[kernel] PID 6 spawned (deepseek/deepseek-v4-flash) | forked from abc123
 ```
 
 Dashboard shows the lineage: `xyz789 (forked from abc123)`.

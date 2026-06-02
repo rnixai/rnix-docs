@@ -17,8 +17,8 @@ The `AgentManifest` structure defines the Agent's configuration manifest:
 | Field | Type | Description |
 |------|------|------|
 | `provider` | `string` | LLM provider (`claude` (default) or `cursor`) |
-| `preferred` | `string` | Preferred model (e.g., `sonnet`) |
-| `fallback` | `string` | Fallback model (e.g., `haiku`) |
+| `preferred` | `string` | Preferred model (e.g., `deepseek-v4-flash`) |
+| `fallback` | `string` | Fallback model (e.g., `deepseek-v4-pro`) |
 
 **Model Selection Priority:** CLI `--model` flag > Agent manifest `preferred` > driver default
 
@@ -99,10 +99,9 @@ Rnix provides two levels of loading granularity for Skills:
 name: code-analyst
 description: "Agent that analyzes code quality, identifies issues, and provides improvement suggestions"
 models:
-  provider: claude
-  preferred: sonnet
-  fallback: haiku
-context_budget: 8192
+  provider: deepseek
+  preferred: deepseek-v4-flash
+  fallback: deepseek-v4-pro
 skills:
   - code-analysis
 ```

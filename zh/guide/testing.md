@@ -30,7 +30,7 @@ Results: 2 passed, 1 failed, 0 skipped
 # tests/code-review.yaml
 name: "Code review test suite"
 agent: "code-analyst"
-model: "haiku"
+model: "deepseek-v4-flash"
 
 cases:
   - name: "basic-analysis"
