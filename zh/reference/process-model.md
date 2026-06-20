@@ -3,6 +3,12 @@
 ### 7.1 ProcessState 状态机
 
 ```
+                  ┌──────────────┐
+                  │  Suspended   │
+                  └──────────────┘
+                   ▲            │
+        预算耗尽 /  │            │ resume
+        SIGPAUSE   │            ▼
 Created ──→ Running ──→ Zombie ──→ Dead
    │           │           │
    │  Start()  │ Terminate │  Reap()
@@ -16,6 +22,7 @@ Created ──→ Running ──→ Zombie ──→ Dead
 | `StateRunning` | `1` | `"running"` | 推理循环执行中 |
 | `StateZombie` | `2` | `"zombie"` | 推理已结束，等待资源回收 |
 | `StateDead` | `3` | `"dead"` | 所有资源已释放 |
+| `StateSuspended` | `4` | `"suspended"` | 推理循环持久挂起（预算耗尽或 SIGPAUSE），可被 resume |
 
 ### 7.2 状态转移规则
 
@@ -25,11 +32,13 @@ Created ──→ Running ──→ Zombie ──→ Dead
 |---------|---------|---------|
 | Created | Running | `Start()` — 推理 goroutine 启动 |
 | Running | Zombie | `Terminate()` — 完成/错误/超时/Kill |
+| Running | Suspended | Token/成本预算耗尽，或经 SIGPAUSE 持久挂起 |
+| Suspended | Running | `resume` — 基于检查点重新 spawn，推理循环重启 |
 | Zombie | Dead | `Reap()` — Wait 回收 |
 
 **非法转移：** 所有其他组合均为非法。尝试非法转移返回 `*SyscallError`（`INTERNAL`）。
 
-`StateDead` 没有合法的后续状态。
+`StateDead` 是冻结状态而非终态——其落盘数据在被垃圾回收前始终可被 resume（参见[进程恢复](/zh/guide/process-resume)）。
 
 ### 7.3 ExitStatus 结构
 

@@ -12,6 +12,13 @@
 | `ErrInternal` | `"INTERNAL"` | 内部错误（状态异常、序列化失败等） |
 | `ErrDriver` | `"DRIVER"` | 设备驱动错误（LLM 调用失败、文件读写失败等） |
 | `ErrInvalid` | `"INVALID"` | 无效参数（如无效信号值） |
+| `ErrIsDirectory` | `"IS_DIRECTORY"` | 期望文件处目标路径为目录 |
+| `ErrBrokenPipe` | `"BROKEN_PIPE"` | 向无存活读端的管道写入 |
+| `ErrServiceUnavailable` | `"SERVICE_UNAVAILABLE"` | 调用进行中发生的瞬时驱动/服务故障 |
+| `ErrAlreadyMounted` | `"ALREADY_MOUNTED"` | 挂载路径已被占用 |
+| `ErrResourceExhausted` | `"RESOURCE_EXHAUSTED"` | 触达资源上限（预算、容量、配额） |
+| `ErrForceKilled` | `"FORCE_KILLED"` | 优雅 SIGTERM 超时，驱动/传输层升级为 SIGKILL |
+| `ErrDeviceDisconnected` | `"DEVICE_DISCONNECTED"` | 设备（如 MCP 子进程）已知断连，调用快速失败 |
 
 ### 6.2 SyscallError
 

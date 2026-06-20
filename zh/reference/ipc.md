@@ -81,12 +81,19 @@ IPC 通信使用 NDJSON（Newline Delimited JSON）格式，每行一个 JSON �
 | `kill` | 请求-响应 | `KillRequest` | 发送信号到进程 |
 | `signal_tree` | 请求-响应 | `SignalTreeRequest` | 向进程及其所有后代发送信号 |
 | `resume` | 请求-响应 | `ResumeRequest` | 从检查点恢复挂起的进程 |
+| `suspend` | 请求-响应 | `SuspendRequest` | 将运行中的进程挂起到检查点 |
+| `list_resumable` | 请求-响应 | — | 列出可从落盘历史恢复的进程 |
+| `compact` | 请求-响应 | `CompactRequest` | 手动压缩进程上下文 |
+| `answer_user` | 请求-响应 | `AnswerUserRequest` | 向待处理的 `ask_user` 提问投递用户答复 |
 | `list_events` | 请求-响应 | `ListEventsRequest` | 列出进程事件（已结束进程从磁盘加载） |
 | `attach_debug` | 流式 | `AttachDebugRequest` | 订阅 SyscallEvent 流 |
 | `get_step_detail` | 请求-响应 | `StepDetailRequest` | 检索单个步骤记录 |
 | `list_steps` | 请求-响应 | `ListStepsRequest` | 列出进程的所有步骤摘要 |
+| `get_raw_capture` | 请求-响应 | `RawCaptureRequest` | 检索某步骤的原始 LLM 请求/响应记录 |
 | `get_proc_detail` | 请求-响应 | `ProcDetailRequest` | 获取进程详细信息 |
 | `shutdown` | 请求-响应 | — | 优雅关闭 daemon |
+
+此外还有 intent / trace / mcp / gc 等运维方法——完整枚举见 `ipc/protocol.go`（`Method` 常量）。
 
 **SpawnRequest：**
 
@@ -125,8 +132,10 @@ IPC 通信使用 NDJSON（Newline Delimited JSON）格式，每行一个 JSON �
 **PingResponse：**
 
 ```json
-{"version": "0.1.0"}
+{"version": "0.10.0"}
 ```
+
+`version` 字段反映运行中 daemon 的构建版本号（此处取值仅作示意）。
 
 ### 5.5 StreamEvent 流式协议
 

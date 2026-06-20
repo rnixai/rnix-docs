@@ -7,37 +7,53 @@
 | `--json` | — | `bool` | JSON 格式输出 |
 | `--verbose` | `-v` | `bool` | 详细输出 |
 | `--quiet` | `-q` | `bool` | 静默输出 |
+| `--model` | `-m` | `string` | 使用的 LLM 模型（如 `sonnet`/`opus`/`haiku`） |
+| `--provider` | — | `string` | LLM 提供商覆盖（参见 `providers.yaml`） |
+| `--fallback-model` | — | `string` | 覆盖 agent 降级模型（为空 = 使用 agent manifest） |
+| `--fallback-provider` | — | `string` | 覆盖 agent 降级提供商（为空 = 与主提供商相同） |
+| `--reasoning-effort` | — | `string` | 透传给提供商的推理强度（如 `low`/`medium`/`high`）；为空时使用提供商默认。详见 [LLM 提供商 › 推理强度](/zh/guide/llm-providers#reasoning-effort) |
 
 **输出模式优先级：** `--json` > `--quiet` > `--verbose` > 默认
 
-这三个 flag 通过 `PersistentFlags` 注册，对所有子命令生效。
+这些 flag 通过 `PersistentFlags` 注册，对所有子命令生效。
 
-### 4.2 rnix [intent] — 根命令
+### 4.2 rnix -i \<intent\> — 根命令
 
 ```
-用法: rnix [intent]
-参数: [intent] — 任意长度意图字符串（多个参数以空格拼接）
+用法: rnix -i <intent> [flags]
 ```
+
+意图通过 `-i`/`--intent` flag 传入，**而非**位置参数——根命令拒绝位置参数。不带 `-i` 时，`rnix` 打印帮助。
 
 **私有 Flags：**
 
 | Flag | 短选项 | 类型 | 默认值 | 说明 |
 |------|--------|------|--------|------|
-| `--model` | `-m` | `string` | `""` | LLM 模型（`deepseek-v4-flash`/`deepseek-v4-pro`/`sonnet`） |
+| `--intent` | `-i` | `string` | `""` | 用于 spawn 智能体的意图字符串 |
 | `--max-steps` | — | `int` | `0` | 最大推理步数（`0` = 默认 10） |
 | `--agent` | — | `string` | `""` | Agent 定义名称 |
-| `--provider` | — | `string` | `""` | LLM 提供商（`deepseek`/`claude`/`cursor`） |
+| `--dashboard` | — | `bool` | `false` | spawn 智能体后打开 dashboard |
+
+全局 `--model`/`--provider`/`--reasoning-effort` flag（见 §4.1）同样适用于根命令。
 
 **默认输出示例：**
 
 ```
-[kernel] spawning PID 1 (deepseek/deepseek-v4-flash)...
+[kernel] spawning PID 1 (claude/sonnet)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 ══ Result ══════════════════════════════════════════════════════════════════════
   分析结果内容...
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | deepseek/deepseek-v4-flash | tokens: 1234 | elapsed: 6.2s
+[kernel] PID 1 exited(0) | claude/sonnet | tokens: 1234 | elapsed: 6.2s
+```
+
+**示例：**
+
+```bash
+rnix -i "analyze ./README.md"
+rnix -i "refactor error handling in main.go"
+rnix -i "analyze project structure" --json
 ```
 
 **JSON 成功响应：**
@@ -57,6 +73,7 @@
 ```
 用法: rnix daemon [command]
 子命令:
+  start     若 daemon 未运行则启动它
   status    显示 daemon 状态（运行状态、版本、socket 路径、进程数）
   stop      停止运行中的 daemon
 ```
@@ -69,6 +86,16 @@ version: 0.1.0
 socket:  /run/user/1000/rnix/rnix.sock
 procs:   1 active / 3 total
 ```
+
+**`rnix daemon start` 输出示例：**
+
+```
+daemon started
+status:  running
+...
+```
+
+daemon 已在运行时，`start` 打印 `daemon is already running` 并报告当前状态。
 
 **`rnix daemon stop` 输出示例：**
 
@@ -209,6 +236,20 @@ $ rnix ps -a
 {"timestamp_ms": 13, "pid": 1, "syscall": "Open", "args": {"flags": 2, "path": "/dev/llm/claude"}, "result": 3, "duration_ms": 1.0}
 ```
 
+**--raw — 原始 LLM 请求/响应捕获：**
+
+回放为进程的每次 LLM 调用所记录的原始请求与响应——API 类提供商为 HTTP 请求/响应，CLI 类提供商为完整的命令调用与输出。可用于确认究竟向模型发送了什么（prompt、参数、推理强度）。附加步骤号可检视单次调用。捕获中的凭证已脱敏。
+
+```bash
+rnix strace <pid> --raw                  # 所有已捕获的 LLM 调用
+rnix strace <pid> --raw --step 3         # 单个推理步骤
+rnix strace <pid> --raw --uuid <uuid>    # 定位已被 reap 的进程
+```
+
+`--uuid <uuid>` flag 用显式进程 UUID 覆盖 PID 解析，使 `--raw` 能定位已被 reap（PID 已不在进程表中）的进程。
+
+对运行中和已结束的进程均适用（捕获随进程历史持久化）。详见 [调试 › 原始 LLM I/O](/zh/guide/debugging#raw-llm-io)。
+
 **SIGINT 行为：** 仅 detach 追踪，不影响被追踪进程。
 
 ### 4.6 rnix version — 版本信息
@@ -270,6 +311,10 @@ type jsonErrorData struct {
 用法: rnix init
 参数: 无
 ```
+
+| Flag | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--with-mcp-examples` | `bool` | `false` | 生成包含 Playwright MCP 示例服务器的 `mcp.yaml` |
 
 **行为：**
 
@@ -672,6 +717,8 @@ $ rnix intent list --json
 | 标志 | 类型 | 默认值 | 描述 |
 |------|------|--------|------|
 | `--force` | `bool` | `false` | 即使已安装也强制安装 |
+| `--global` / `-g` | `bool` | `false` | 无视 cwd，安装到用户作用域（`~/.config/rnix/skills/` 或 `~/.agents/skills/`） |
+| `--shared` | `bool` | `false` | 安装到 agents 命名空间（`.agents/skills/`），与 agentskills.io 生态跨工具互通 |
 
 **子命令：`rnix skill search [keyword]`**
 
@@ -699,6 +746,13 @@ $ rnix intent list --json
 用法: rnix skill list
 参数: 无 (cobra.NoArgs)
 ```
+
+| 标志 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `--global` / `-g` | `bool` | `false` | 仅显示用户作用域下的技能（`~/.config/rnix/skills/` + `~/.agents/skills/`） |
+| `--project` / `-p` | `bool` | `false` | 仅显示项目作用域下的技能（`<projectDir>/.rnix/skills/` + `<projectDir>/.agents/skills/`） |
+
+`--global` 与 `--project` 互斥。
 
 **示例：**
 
@@ -1024,6 +1078,7 @@ Feature flag 始终按字母序列出。
   list           列出 daemon 上活动的 MCP 服务器挂载
   test <name>    探测某个已配置的服务器（connect → tools/list → resources/list → prompts/list）
   logs <name>    显示某个已挂载 MCP 服务器捕获的 stderr
+  reload         重新读取 mcp.yaml 并刷新 daemon 的 MCP 注册表
 ```
 
 **子命令：`rnix mcp list`**
@@ -1053,6 +1108,15 @@ Feature flag 始终按字母序列出。
 参数：<name> — 已挂载的 MCP 服务器名（恰好 1 个参数）
 ```
 
+**子命令：`rnix mcp reload`**
+
+重新解析 `mcp.yaml` 并在不重启的情况下替换 daemon 的 MCP 服务器注册表。编辑 `mcp.yaml`（新增/删除/重新配置服务器）后运行此命令，让 `mcp test` 和后续挂载立即看到变更。它仅刷新查找表——已挂载的服务器不受影响。与 `mcp test` 一样，该命令**要求 daemon 处于运行状态**，因此 daemon 未运行时以 `1` 退出。损坏的 `mcp.yaml` 会保留原有注册表不变并报告解析错误。
+
+```
+用法：rnix mcp reload
+参数：无（cobra.NoArgs）
+```
+
 ---
 
 ### 4.35 rnix check — 子系统诊断 {#rnix-check}
@@ -1072,6 +1136,56 @@ Feature flag 始终按字母序列出。
 ```
 用法：rnix check mcp
 参数：无（cobra.NoArgs）
+```
+
+---
+
+### 4.36 rnix doctor — LLM Provider 健康诊断 {#rnix-doctor}
+
+对 rnix 配置和每个已配置的 LLM provider 运行环境健康检查。这是 [`rnix check`](#rnix-check)（聚焦 MCP 等子系统前置条件）的 LLM provider 对应物。它报告 cwd、命令可达性、认证模式，并在带 `--probe` 时对每个 provider 触发一次 live `"Respond with hello."` 探测。报告 `pass` / `warn` / `fail` 状态。
+
+```
+用法：rnix doctor [--probe] [--provider <name>] [--json]
+```
+
+| 标志 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `--probe` | `bool` | `false` | 对每个 provider 运行 live hello 探测（少量 token 用量；计费） |
+| `--provider` | `string` | `""` | 仅检查指定名称的 provider（匹配 `providers.yaml`） |
+| `--json` | `bool` | `false` | 机器可读输出 |
+
+**示例：**
+
+```bash
+rnix doctor                    # 仅静态检查
+rnix doctor --probe            # 包含 live hello 探测（计费）
+rnix doctor --provider claude  # 检查单个 provider
+rnix doctor --json             # 机器可读输出
+```
+
+---
+
+### 4.37 rnix gc — 回收进程数据 {#rnix-gc}
+
+删除 `.rnix/data/steps/<uuid>/` 下超出当前保留策略（`~/.config/rnix/config.yaml` 中的 `gc.retention_days` / `gc.max_entries`）的已终止进程数据。Running 和 Suspended 进程**永不**参与回收——gc 不会杀掉运行中的工作。批量操作（候选超过 100）会提示确认，除非提供 `--force` 或 `--json`。
+
+```
+用法：rnix gc [--dry-run] [--force] [--json]
+```
+
+| 标志 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `--dry-run` | `bool` | `false` | 预览候选而不删除 |
+| `--force` | `bool` | `false` | 跳过批量删除（>100 条）的确认 |
+| `--json` | `bool` | `false` | 输出 JSON（隐含 `--force`） |
+
+**示例：**
+
+```bash
+rnix gc --dry-run        # 预览候选而不删除
+rnix gc                  # 交互式清理
+rnix gc --force          # 跳过确认
+rnix gc --json           # 机器可读输出（隐含 --force）
 ```
 
 ---
@@ -1125,7 +1239,8 @@ GDB 风格交互式调试器，支持断点（syscall/reasoning/quality/budget�
 ### 9.6 rnix record / replay — 时间旅行调试
 
 ```
-用法: rnix record <pid>
+用法: rnix record start|stop <pid>
+      rnix record list
       rnix replay <record-id>
 ```
 
@@ -1151,7 +1266,7 @@ GDB 风格交互式调试器，支持断点（syscall/reasoning/quality/budget�
 ### 9.9 rnix agtest — 推理回归测试
 
 ```
-用法: rnix agtest <test-file> [--case <name>] [--json] [--verbose]
+用法: rnix agtest <file-or-dir> [--dry-run] [--timeout <ms>] [--json] [--verbose]
 ```
 
 声明式 YAML 测试用例，三种断言类型（reasoning/syscall/quality），支持批量运行和 CI 集成。
@@ -1167,12 +1282,11 @@ GDB 风格交互式调试器，支持断点（syscall/reasoning/quality/budget�
 ### 9.11 rnix intent — 声明式意图
 
 ```
-用法: rnix intent apply "<description>"
-      rnix intent status
-      rnix intent reset <node-id>
+用法: rnix intent status
+      rnix intent list
 ```
 
-LLM 驱动的意图分解 + Reconciler 持续调和。支持增量更新。
+LLM 驱动的意图分解 + Reconciler 持续调和。`status` / `list` 查看意图状态。声明新意图请使用顶层 `rnix apply "<description>"`（见 §4.22）。
 
 ### 9.12 rnix serve — LLM 网关
 

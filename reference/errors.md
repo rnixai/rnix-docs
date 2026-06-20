@@ -12,6 +12,13 @@ All error types share a unified `ErrCode` classification code:
 | `ErrInternal` | `"INTERNAL"` | Internal error (state anomaly, serialization failure, etc.) |
 | `ErrDriver` | `"DRIVER"` | Device driver error (LLM call failure, file read/write failure, etc.) |
 | `ErrInvalid` | `"INVALID"` | Invalid parameter (e.g., invalid signal value) |
+| `ErrIsDirectory` | `"IS_DIRECTORY"` | Target path is a directory where a file was expected |
+| `ErrBrokenPipe` | `"BROKEN_PIPE"` | Write to a pipe with no live reader |
+| `ErrServiceUnavailable` | `"SERVICE_UNAVAILABLE"` | Transient driver/service failure during an in-flight call |
+| `ErrAlreadyMounted` | `"ALREADY_MOUNTED"` | Mount path is already in use |
+| `ErrResourceExhausted` | `"RESOURCE_EXHAUSTED"` | A resource limit (budget, capacity, quota) has been hit |
+| `ErrForceKilled` | `"FORCE_KILLED"` | Graceful SIGTERM timed out and the driver/transport escalated to SIGKILL |
+| `ErrDeviceDisconnected` | `"DEVICE_DISCONNECTED"` | Device (e.g., MCP child process) is known-disconnected; the call fast-fails |
 
 ### 6.2 SyscallError
 

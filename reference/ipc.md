@@ -81,12 +81,19 @@ IPC communication uses the NDJSON (Newline Delimited JSON) format, one JSON obje
 | `kill` | Request-Response | `KillRequest` | Sends a signal to a process |
 | `signal_tree` | Request-Response | `SignalTreeRequest` | Sends a signal to a process and all descendants |
 | `resume` | Request-Response | `ResumeRequest` | Resumes a suspended process from checkpoint |
+| `suspend` | Request-Response | `SuspendRequest` | Suspends a running process to a checkpoint |
+| `list_resumable` | Request-Response | — | Lists processes that can be resumed from on-disk history |
+| `compact` | Request-Response | `CompactRequest` | Manually compacts a process's context |
+| `answer_user` | Request-Response | `AnswerUserRequest` | Delivers a user's answer to a pending `ask_user` prompt |
 | `list_events` | Request-Response | `ListEventsRequest` | Lists events for a process (from disk for dead processes) |
 | `attach_debug` | Streaming | `AttachDebugRequest` | Subscribes to a SyscallEvent stream |
 | `get_step_detail` | Request-Response | `StepDetailRequest` | Retrieves a single step record |
 | `list_steps` | Request-Response | `ListStepsRequest` | Lists all step summaries for a process |
+| `get_raw_capture` | Request-Response | `RawCaptureRequest` | Retrieves the raw LLM request/response capture for a step |
 | `get_proc_detail` | Request-Response | `ProcDetailRequest` | Gets detailed process information |
 | `shutdown` | Request-Response | — | Gracefully shuts down the daemon |
+
+There are additional intent / trace / mcp / gc and other operational methods — for the complete enum see `ipc/protocol.go` (the `Method` constants).
 
 **SpawnRequest:**
 
@@ -125,8 +132,10 @@ Resumes a suspended process from its checkpoint. Response: `{"pid": 5, "uuid": "
 **PingResponse:**
 
 ```json
-{"version": "0.1.0"}
+{"version": "0.10.0"}
 ```
+
+The `version` field reflects the running daemon's build version (the value shown here is illustrative).
 
 ### 5.5 StreamEvent Streaming Protocol
 

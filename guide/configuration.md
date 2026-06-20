@@ -102,6 +102,8 @@ The ID is `<sanitized-basename>-<hash8>`, where `hash8` is the first 4 bytes of 
 - **Agent directories** (`agents/`): Shadow — project agent with same name completely replaces global agent
 - **Skill directories** (`skills/`): Shadow with 2×2 priority — `project/native > project/agents > user/native > user/agents`. Winning copy completely replaces shadowed copies.
 
+> **Exception — `init.yaml`**: The daemon is a single per-user process, so its bootstrap config is read **only** from the global `~/.config/rnix/init.yaml`. It does **not** participate in the project-level merge and a project `.rnix/init.yaml` is never read.
+
 ### Initialization
 
 ```bash
@@ -249,11 +251,16 @@ providers:
 | `version` | `string` | Config format version (`"1"`) |
 | `default_provider` | `string` | Default provider when none specified (default: `deepseek`) |
 | `providers[].name` | `string` | Provider name, maps to `/dev/llm/<name>` |
-| `providers[].driver` | `string` | Driver type: `claude-cli`, `cursor-cli`, or `openai-compat` |
+| `providers[].driver` | `string` | Driver type (one of 8): `claude-cli`, `cursor-cli`, `qwen-cli`, `codex-cli`, `openai-compat`, `openai`, `gemini`, `anthropic` |
 | `providers[].command` | `string` | CLI binary name override for CLI drivers |
 | `providers[].default_model` | `string` | Default model name |
 | `providers[].base_url` | `string` | API base URL (for `openai-compat` driver) |
 | `providers[].api_key_env` | `string` | Environment variable name for API key |
+| `providers[].timeout_sec` | `int` | Per-request timeout in seconds; `0` = driver default (5 min for CLI drivers) |
+| `providers[].grace_sec` | `int` | CLI grace period between `SIGTERM` and `SIGKILL`; `0` = driver default (20s) |
+| `providers[].models` | `map` | Per-model metadata, keyed by model name: `<model>: {context_window: N}`. Used to derive `context_budget` (context_window × 0.9) |
+
+For the full set of advanced provider options (`mode`, `max_tokens`, `cost_per_token`, `thinking_budget`, `reasoning_effort`, `extra_args`, `permission_mode`), see [LLM Providers › Advanced Provider Options](/guide/llm-providers#advanced-provider-options).
 
 ### Driver Types
 
@@ -261,7 +268,12 @@ providers:
 |--------|-------------|----------|
 | `claude-cli` | Invokes Claude Code CLI (`claude -p`) | Anthropic Claude |
 | `cursor-cli` | Invokes Cursor CLI (`agent --print`) | Cursor |
+| `qwen-cli` | Invokes Qwen Code CLI | Qwen Code |
+| `codex-cli` | Invokes OpenAI Codex CLI | OpenAI Codex |
 | `openai-compat` | Calls OpenAI-compatible HTTP API | Ollama, Groq, DeepSeek, any OpenAI-compatible endpoint |
+| `openai` | Official OpenAI SDK | OpenAI GPT-4, GPT-4o |
+| `gemini` | Native Gemini API | Google Gemini |
+| `anthropic` | Official Anthropic SDK | Claude (via API, not CLI) |
 
 ### Provider Resolution Priority
 
@@ -276,6 +288,10 @@ providers:
 2. `agent.yaml` → `models.preferred` field
 3. Provider's `default_model`
 4. Driver's built-in default
+
+### Reasoning Effort
+
+Set `reasoning_effort` on a provider (or per spawn) to control discrete reasoning strength. The value is passed through to the provider verbatim. It resolves through a four-tier fallback (per-spawn → agent → provider → native default) and supersedes the legacy `thinking_budget` where both are set; the budget path is retained as a fallback for providers that still require it. See [LLM Providers › Reasoning Effort](/guide/llm-providers#reasoning-effort) for details and the case-sensitivity note.
 
 ### API Key Management
 
@@ -336,45 +352,75 @@ Each spawn request generates an independent environment snapshot from `.env` fil
 
 ---
 
-## init.yaml — Bootstrap Services
+## init.yaml — Bootstrap Services & Supervisors
 
-Defines services that start automatically when the daemon launches. Located at `.rnix/init.yaml`.
+Defines services and supervised agent trees that start when the daemon launches. The daemon is a single per-user process, so bootstrap is a **global concern**: this file is read **only** from `~/.config/rnix/init.yaml`. A project-level `.rnix/init.yaml` is **never** read.
+
+`rnix init` writes a scaffold here that defaults to an empty service list. Two top-level sections are supported: `services` and `supervisors`.
 
 ```yaml
-version: "1.0"
-
 services:
-  health-monitor:
-    intent: "Monitor system health and report anomalies"
-    agent: "monitor"
-    restart: always
-    max_restarts: 3
+  - name: skills
+    type: skill_registry
+    required: false
+    config:
+      scan_path: lib/skills
 
-  code-watcher:
-    intent: "Watch for file changes and trigger analysis"
-    agent: "watcher"
-    restart: on-failure
-    depends_on:
-      - health-monitor
+  - name: mcp
+    type: mcp_manager
+    required: false
+
+supervisors:
+  - name: monitors
+    strategy: one_for_one
+    max_restarts: 3
+    max_window: 60s
+    required: false
+    children:
+      - name: health-monitor
+        intent: "Monitor system health and report anomalies"
+        agent: monitor
+        model: deepseek-v4-flash
+        restart: permanent
 ```
 
-### Service Fields
+### Services
+
+`services` is a **list**; each item is a `ServiceConfig`.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `intent` | `string` | Required | Intent string for the service agent |
-| `agent` | `string` | `""` | Named agent definition (empty = generic) |
-| `restart` | `string` | `"no"` | Restart policy: `no`, `always`, `on-failure` |
-| `max_restarts` | `int` | `3` | Maximum restart attempts |
-| `depends_on` | `[]string` | `[]` | Services that must start first |
+| `name` | `string` | Required | Display name for the service |
+| `type` | `string` | Required | Registered service type — one of `skill_registry`, `mcp_manager`, `log_aggregator` |
+| `required` | `bool` | `false` | `true` = bootstrap aborts if this service fails; `false` = warn and continue |
+| `config` | `map` | `{}` | Type-specific key/value options (e.g. `skill_registry` accepts `scan_path`) |
 
-### Restart Policies
+> `mcp_manager` is loaded **implicitly** even when omitted, so MCP servers declared in `mcp.yaml` are always resolvable by `rnix mcp test`/`rnix mcp list`. A user-declared `mcp_manager` service takes precedence over the implicit one.
 
-| Policy | Behavior |
-|--------|----------|
-| `no` | Never restart (default) |
-| `always` | Restart on any exit |
-| `on-failure` | Restart only on non-zero exit code |
+### Supervisors
+
+`supervisors` is a **list**; each item is a `SupervisorConfig` describing a long-running supervised agent tree.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `string` | Required | Display name for the supervisor tree |
+| `strategy` | `string` | `""` | Restart strategy for the tree |
+| `max_restarts` | `int` | `0` | Maximum restarts within `max_window` |
+| `max_window` | `duration` | `0` | Sliding window for the restart counter (e.g. `60s`) |
+| `required` | `bool` | `false` | `true` = bootstrap aborts (and rolls back) on failure; `false` = warn and continue |
+| `children` | `[]object` | `[]` | Child processes supervised by this tree |
+
+Each entry under `children` is a `ChildConfig`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Child display name |
+| `intent` | `string` | Intent string for the child agent |
+| `agent` | `string` | Named agent definition (optional; empty = generic) |
+| `model` | `string` | Model override |
+| `provider` | `string` | Provider override |
+| `context_budget` | `int` | Per-step context window guard |
+| `restart` | `string` | Child restart policy |
 
 ---
 
@@ -410,6 +456,9 @@ agents:
 | `version` | `string` | Compose spec version (currently `"1.0"`) |
 | `intent` | `string` | Overall workflow description |
 | `model` | `string` | Global default model (agents can override) |
+| `provider` | `string` | Global default provider (agents can override) |
+| `reasoning_effort` | `string` | Spec-level reasoning effort default (passthrough; agents can override) |
+| `token_budget` | `int` | Overall token budget for the workflow |
 | `agents` | `map` | Agent definitions |
 
 ### Agent Fields
@@ -420,9 +469,13 @@ agents:
 | `agent` | `string` | Named agent definition (optional) |
 | `model` | `string` | Model override for this agent |
 | `provider` | `string` | Provider override for this agent |
+| `reasoning_effort` | `string` | Reasoning effort override for this agent (passthrough) |
+| `skills` | `[]string` | Skill names to load for this agent |
+| `priority` | `string` | Scheduling priority: `high`, `normal`, `low` |
+| `max_tokens` | `int` | Per-process token budget |
+| `timeout_ms` | `int` | Execution timeout in milliseconds |
 | `depends_on` | `map` | Dependencies: `<upstream>: completed` |
-| `timeout` | `duration` | Execution timeout |
-| `max_retries` | `int` | Retry count on failure |
+| `candidates` | `[]string` | Candidate agents for auto-selection |
 
 ### Running Compose Workflows
 
@@ -471,11 +524,21 @@ mcp:
 | `models` | `object` | No | LLM model preferences |
 | `models.provider` | `string` | No | LLM provider name |
 | `models.preferred` | `string` | No | Preferred model name |
-| `models.fallback` | `string` | No | Fallback model name |
+| `models.fallback` | `string` | No | Fallback model name (same provider) |
+| `models.fallback_provider` | `string` | No | Cross-provider fallback; empty = same provider |
+| `models.reasoning_effort` | `string` | No | Agent-level reasoning effort default (passthrough, no validation/case-mapping); empty = defer to provider snapshot |
 | `context_budget` | `int` | No | Per-step context window guard: max input tokens allowed in a single LLM call. When exceeded, the process self-suspends with exit code 3 (`context_full`) and can be resumed. `0` = auto-derive from `context_window × 0.9`; explicitly set values are clamped to `min(budget, context_window)`. |
-| `max_steps` | `int` | No | Maximum reasoning steps (0 = default 10) |
+| `ctx_size` | `int` | No | Per-process message-history slot count (overrides the default 256) |
+| `max_steps` | `int` | No | Maximum reasoning steps. `0` = use `DefaultMaxSteps` (currently `0`, i.e. no step-count limit). |
 | `max_tokens` | `int` | No | Maximum total tokens (0 = unlimited) |
+| `max_cost` | `float64` | No | Per-process cost budget in USD (0 = unlimited) |
+| `step_timeout` | `string` | No | Per-step timeout as a duration string, e.g. `"10m"` (default `"5m"`; `"0"` = disabled) |
 | `skills` | `[]string` | No | Referenced skill names |
+| `deferred_skills` | `[]string` | No | Skills loaded metadata-only; body loaded on `discover_skill` |
+| `tools` | `[]string` | No | Agent-level tool declaration, unioned with skill allowed-tools |
+| `planning` | `bool` | No | Enable the planning capability (default `true` when unset) |
+| `project_doc` | `bool` | No | Inject the project-root `AGENTS.md` into the system prompt (default `true`; set `false` to disable) |
+| `language` | `string` | No | Preferred response language (e.g. `Chinese`, `English`); empty = no preference |
 | `mcp` | `object` | No | MCP server configurations |
 
 ### MCP Server Config Fields

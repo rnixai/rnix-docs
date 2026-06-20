@@ -3,6 +3,12 @@
 ### 7.1 ProcessState State Machine
 
 ```
+                  ┌──────────────┐
+                  │  Suspended   │
+                  └──────────────┘
+                   ▲            │
+        budget /   │            │ resume
+        SIGPAUSE   │            ▼
 Created ──→ Running ──→ Zombie ──→ Dead
    │           │           │
    │  Start()  │ Terminate │  Reap()
@@ -18,6 +24,7 @@ Created ──→ Running ──→ Zombie ──→ Dead
 | `StateRunning` | `1` | `"running"` | Reasoning loop executing |
 | `StateZombie` | `2` | `"zombie"` | Reasoning finished, awaiting resource reclamation |
 | `StateDead` | `3` | `"dead"` | All resources released |
+| `StateSuspended` | `4` | `"suspended"` | Reasoning loop persistently halted (budget exhausted or SIGPAUSE); resumable |
 
 ### 7.2 State Transition Rules
 
@@ -27,11 +34,13 @@ Created ──→ Running ──→ Zombie ──→ Dead
 |---------|---------|---------|
 | Created | Running | `Start()` — reasoning goroutine starts |
 | Running | Zombie | `Terminate()` — completed/error/timeout/Kill |
+| Running | Suspended | Token/cost budget exhausted, or persistent halt via SIGPAUSE |
+| Suspended | Running | `resume` — process re-spawned from checkpoint, reasoning loop restarts |
 | Zombie | Dead | `Reap()` — Wait reclaims |
 
 **Invalid Transitions:** All other combinations are invalid. Attempting an invalid transition returns `*SyscallError` (`INTERNAL`).
 
-`StateDead` has no valid subsequent state.
+`StateDead` is a frozen state rather than a terminal one — its on-disk data remains resumable until garbage-collected (see [Process Resumption](/guide/process-resume)).
 
 ### 7.3 ExitStatus Structure
 

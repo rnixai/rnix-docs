@@ -30,6 +30,25 @@ $ rnix strace <pid>
 
 ---
 
+## 原始 LLM I/O {#raw-llm-io}
+
+`strace` 告诉你发生了一次 LLM 调用；`--raw` 则告诉你究竟发送和收到了什么。对每一次 LLM 调用，Rnix 都能记录原始的请求与响应，供事后回放：
+
+- **API 类提供商** —— HTTP 请求（URL、headers、body）与响应，`reasoning_effort`、`thinking_budget` 等参数原样可见。
+- **CLI 类提供商** —— 完整的命令调用（参数与 stdin），以及 stdout、stderr 和退出码。
+
+```bash
+$ rnix strace <pid> --raw            # 所有已捕获的 LLM 调用
+$ rnix strace <pid> --raw --step 3   # 单个推理步骤
+```
+
+**要点：**
+- 凭证（authorization header、API key、token）在写入前会被自动脱敏。
+- 捕获默认开启，受大小上限约束，并遵循与其他进程历史相同的保留策略——因此对运行中和已结束的进程都适用。
+- 同一批捕获也可从 Dashboard inspector 的 **Raw I/O** 视图以及 IPC 获取，三者共用同一后端。
+
+---
+
 ## gdb — 交互式调试器
 
 附加到运行中的智能体，进行断点、单步执行和运行时状态检视的交互式调试。

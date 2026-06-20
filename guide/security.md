@@ -15,7 +15,7 @@ To switch to **enforce mode** (auto-suspend on anomaly) or to disable entirely:
 immune:
   enabled: true               # default: true
   warn_only: false            # default: true — set false to enable auto-suspend
-  deviation_threshold: 2.0    # Standard deviations from baseline (default: 2.0)
+  deviation_threshold: 3.0    # Standard deviations from baseline (default: 3.0)
   min_samples: 5              # Minimum samples before anomaly detection activates
 ```
 
@@ -25,7 +25,7 @@ immune:
 |-------|------|---------|-------------|
 | `enabled` | `bool` | `true` | Enable or disable the immune system |
 | `warn_only` | `bool` | `true` | Warn-only mode: detect and log anomalies without suspending processes |
-| `deviation_threshold` | `float` | `2.0` | Number of standard deviations to trigger anomaly |
+| `deviation_threshold` | `float` | `3.0` | Number of standard deviations to trigger anomaly |
 | `min_samples` | `int` | `5` | Minimum behavior samples before detection begins |
 | `min_migration_similarity` | `float` | `0.5` | Minimum similarity score for capability migration |
 
@@ -92,10 +92,10 @@ When an agent uses the `spawn` tool to create a child process, two kernel-level 
 
 **Permission inheritance is monotonic.** A child's `AllowedDevices` are always a subset of its parent's — spawning a child can never *gain* a capability the parent lacks. This closes the privilege-escalation path where an agent spawns a helper to reach a device it was denied.
 
-**Recursion is depth-bounded.** Because a child can never acquire new permissions by being spawned, an LLM that keeps spawning children to "acquire" a missing device would otherwise recurse forever. The kernel caps the LLM-reachable process-tree depth at **`MaxSpawnDepth` (8)**. A `spawn` that would exceed it is rejected deterministically:
+**Recursion is depth-bounded.** Because a child can never acquire new permissions by being spawned, an LLM that keeps spawning children to "acquire" a missing device would otherwise recurse forever. The kernel caps the LLM-reachable process-tree depth at **`MaxSpawnDepth` (4)**. A `spawn` that would exceed it is rejected deterministically:
 
 ```
-spawn rejected: maximum spawn depth 8 reached (current depth 8).
+spawn rejected: maximum spawn depth 4 reached (current depth 4).
 Child processes inherit your device restrictions and cannot gain new
 permissions by spawning deeper. Use complete to report your results
 with the devices you have.

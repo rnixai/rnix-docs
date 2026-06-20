@@ -82,8 +82,8 @@ Rnix treats Dead as a frozen state rather than terminal. Process observation dat
 
 This enables:
 
-- **`rnix resume <uuid>`** — Continue a dead process with preserved UUID
-- **`rnix resume --fork <uuid>`** — Explore from a historical point with a new UUID
+- **`rnix resume <pid|uuid>`** — Continue a dead process with preserved UUID
+- **`rnix resume --fork <pid|uuid>`** — Explore from a historical point with a new UUID
 - **Daemon crash recovery** — Suspended processes rehydrate on restart
 
 See [Process Resume](/guide/process-resume) for the full resume workflow.
@@ -289,10 +289,10 @@ name: code-analysis
 description: >
   Analyze code quality, identify bugs, performance issues and security
   vulnerabilities.
-allowed-tools: /dev/fs /dev/shell
+allowed-tools: Read Write Edit Glob Grep Bash
 ```
 
-The `allowed-tools` field defines which VFS device paths this Skill can access — this is the core of Rnix's permission model.
+The `allowed-tools` field lists the **semantic tool names** (PascalCase, the Claude Code canonical form) this Skill can use — this is the core of Rnix's permission model. Since Epic 54 / Decision 45 it uses tool names rather than VFS device paths; the legacy device-path form is still accepted for backward compatibility.
 
 ### Unix Analogy
 
@@ -319,8 +319,8 @@ Just as a Unix executable links multiple shared libraries, an Agent can referenc
 │  "How to analyze    "How to write    │
 │   code"              tests"          │
 │  allowed-tools:    allowed-tools:    │
-│  /dev/fs           /dev/fs           │
-│  /dev/shell        /dev/shell        │
+│  Read Grep         Read              │
+│  Bash              Write             │
 ├──────────────────────────────────────┤
 │      VFS Device Layer (Capabilities) │
 │  /dev/fs  /dev/shell  /dev/llm/...   │
@@ -331,8 +331,8 @@ Processing flow during Spawn:
 
 1. CLI `--agent=code-analyst` → AgentLoader loads `agent.yaml` + `instructions.md`
 2. AgentLoader parses `skills` list → SkillLoader loads each `SKILL.md`
-3. `AllowedTools()` aggregates all Skills' `allowed-tools` → sets process's AllowedDevices whitelist
-4. `SystemPrompt()` = Agent instructions + Skill bodies concatenated → used as LLM system prompt
+3. `AllowedTools()` aggregates all Skills' `allowed-tools` → sets the process's tool whitelist (`proc.AllowedTools`, enforced per-tool)
+4. `SystemPrompt()` = Agent instructions + Skill bodies, plus the nearest project-root `AGENTS.md` injected as a `project_doc` cached section (after `agent_instructions`, before `memory`) → used as LLM system prompt
 
 ### Agent vs Skill Separation of Concerns
 
@@ -341,7 +341,7 @@ Processing flow during Spawn:
 | Definition | "Who I am" — identity and role | "How to do X" — procedural knowledge |
 | Model preferences | Yes (provider/preferred/fallback) | No |
 | Context budget | Yes (context_budget) | No |
-| Device permissions | No (determined by Skill aggregation) | Yes (allowed-tools) |
+| Tool permissions | No (determined by Skill aggregation) | Yes (allowed-tools) |
 | Reusability | Specific role | Shared across Agents |
 
 ### Progressive Loading Strategy

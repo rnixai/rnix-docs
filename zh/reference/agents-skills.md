@@ -8,17 +8,31 @@
 |------|------|---------|------|
 | `name` | `string` | 必需 | Agent 名称（唯一标识符） |
 | `description` | `string` | 可选 | Agent 描述 |
-| `models` | `AgentModels` | 可选 | LLM 模型偏好 |
-| `context_budget` | `int` | 可选 | 上下文预算（token 数） |
+| `models` | `AgentModels` | 可选 | LLM 模型偏好（见 [3.2](#32-agentmodels-子结构)） |
 | `skills` | `[]string` | 可选 | 引用的 Skill 名称列表 |
+| `tools` | `[]string` | 可选 | Agent 级工具白名单，与各 skill 的 `allowed-tools` 取并集 |
+| `mcp` | `[]string` | 可选 | MCP server 引用 |
+| `planning` | `bool` | 可选 | 启用 planning 能力（未设置 = `true`） |
+| `max_steps` | `int` | 可选 | 最大推理步数（`0` = 使用默认值） |
+| `max_tokens` | `int64` | 可选 | 单进程 token 预算（`0` = 不限制） |
+| `max_cost` | `float64` | 可选 | 单进程成本预算（USD，`0` = 不限制） |
+| `context_budget` | `int` | 可选 | 上下文预算（token 数） |
+| `ctx_size` | `int` | 可选 | 上下文消息槽位上限（`0` = 默认） |
+| `step_timeout` | `string` | 可选 | 单步心跳超时（如 `"10m"`；默认 `"5m"`；`"0"` = 禁用） |
+| `language` | `string` | 可选 | 首选响应语言（如 `Chinese`、`English`） |
+| `project_doc` | `bool` | 可选 | 向系统提示词注入项目根 `AGENTS.md`（未设置 = 启用） |
+
+> 非完整列表——完整定义（含 `deferred_skills`、`sla`、`alternatives`）见 `agents/types.go`（`AgentManifest`）。
 
 ### 3.2 AgentModels 子结构
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `provider` | `string` | LLM 提供商（`claude`（默认）或 `cursor`） |
+| `provider` | `string` | LLM 提供商——引用 `providers.yaml` 中定义的 provider 实例名 |
 | `preferred` | `string` | 首选模型（如 `deepseek-v4-flash`） |
 | `fallback` | `string` | 备用模型（如 `deepseek-v4-pro`） |
+| `fallback_provider` | `string` | 跨 provider fallback；为空 = 同 provider |
+| `reasoning_effort` | `string` | Agent 级 reasoning effort 默认值；原样透传（为空 = 沿用驱动快照） |
 
 **模型选择优先级：** CLI `--model` flag > Agent manifest `preferred` > 驱动默认值
 

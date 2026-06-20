@@ -102,6 +102,8 @@ ID 形如 `<sanitized-basename>-<hash8>`，其中 `hash8` 是 `sha256(项目绝�
 - **Agent 目录**（`agents/`）：Shadow——同名项目 agent 完全替代全局 agent
 - **Skill 目录**（`skills/`）：Shadow，按 2×2 优先级——`project/native > project/agents > user/native > user/agents`。胜出副本完全替代被 shadow 的副本。
 
+> **例外——`init.yaml`**：daemon 是单一的每用户进程，其启动配置**只**读取全局 `~/.config/rnix/init.yaml`，**不**参与项目级合并，项目级 `.rnix/init.yaml` 永远不会被读取。
+
 ### 初始化
 
 ```bash
@@ -259,11 +261,16 @@ providers:
 | `version` | `string` | 配置格式版本（`"1"`） |
 | `default_provider` | `string` | 未指定时的默认提供商（默认：`deepseek`） |
 | `providers[].name` | `string` | 提供商名称，映射到 `/dev/llm/<name>` |
-| `providers[].driver` | `string` | 驱动类型：`claude-cli`、`cursor-cli` 或 `openai-compat` |
+| `providers[].driver` | `string` | 驱动类型（8 选 1）：`claude-cli`、`cursor-cli`、`qwen-cli`、`codex-cli`、`openai-compat`、`openai`、`gemini`、`anthropic` |
 | `providers[].command` | `string` | CLI 驱动器的二进制名称覆盖 |
 | `providers[].default_model` | `string` | 默认模型名称 |
 | `providers[].base_url` | `string` | API 基础 URL（用于 `openai-compat` 驱动） |
 | `providers[].api_key_env` | `string` | API 密钥的环境变量名 |
+| `providers[].timeout_sec` | `int` | 每请求超时（秒）；`0` = 驱动默认值（CLI 驱动为 5 分钟） |
+| `providers[].grace_sec` | `int` | CLI 在 `SIGTERM` 与 `SIGKILL` 之间的宽限期；`0` = 驱动默认值（20 秒） |
+| `providers[].models` | `map` | 按模型名分键的元数据：`<model>: {context_window: N}`，用于推导 `context_budget`（context_window × 0.9） |
+
+更多高级提供商选项（`mode`、`max_tokens`、`cost_per_token`、`thinking_budget`、`reasoning_effort`、`extra_args`、`permission_mode`）见 [LLM 提供商 › 高级提供商选项](/zh/guide/llm-providers#高级提供商选项)。
 
 ### 驱动类型
 
@@ -271,7 +278,16 @@ providers:
 |--------|-------------|----------|
 | `claude-cli` | 调用 Claude Code CLI（`claude -p`） | Anthropic Claude |
 | `cursor-cli` | 调用 Cursor CLI（`agent --print`） | Cursor |
-| `openai-compat` | 调用 OpenAI 兼容 HTTP API | Ollama、Groq、DeepSeek 等 |
+| `qwen-cli` | 调用 Qwen Code CLI | Qwen Code |
+| `codex-cli` | 调用 OpenAI Codex CLI | OpenAI Codex |
+| `openai-compat` | 调用 OpenAI 兼容 HTTP API | Ollama、Groq、DeepSeek 等任意 OpenAI 兼容端点 |
+| `openai` | 官方 OpenAI SDK | OpenAI GPT-4、GPT-4o |
+| `gemini` | 原生 Gemini API | Google Gemini |
+| `anthropic` | 官方 Anthropic SDK | Claude（经 API，非 CLI） |
+
+### 推理强度（Reasoning Effort） {#reasoning-effort}
+
+在提供商上（或按 spawn）设置 `reasoning_effort` 以控制离散的推理强度。该值原样透传给提供商，通过四级兜底解析（按 spawn → agent → 提供商 → 原生默认），并在与旧版 `thinking_budget` 同时设置时优先生效；budget 路径保留，供仍需要它的提供商兜底。详情与大小写注意见 [LLM 提供商 › 推理强度](/zh/guide/llm-providers#reasoning-effort)。
 
 ### API 密钥管理
 
@@ -328,37 +344,75 @@ Rnix 支持项目级 `.env` 文件，用于管理 API 密钥等环境变量，�
 
 ---
 
-## init.yaml — 启动服务
+## init.yaml — 启动服务与监督树
 
-定义 daemon 启动时自动运行的服务。位于 `.rnix/init.yaml`。
+定义 daemon 启动时运行的服务（services）与受监督的 agent 树（supervisors）。daemon 是单一的每用户进程，因此启动配置是**全局关注点**：该文件**只**从 `~/.config/rnix/init.yaml` 读取，项目级 `.rnix/init.yaml` **永远不会**被读取。
+
+`rnix init` 会在此写入一个默认空服务列表的脚手架。支持两个顶层小节：`services` 和 `supervisors`。
 
 ```yaml
-version: "1.0"
-
 services:
-  health-monitor:
-    intent: "Monitor system health and report anomalies"
-    agent: "monitor"
-    restart: always
-    max_restarts: 3
+  - name: skills
+    type: skill_registry
+    required: false
+    config:
+      scan_path: lib/skills
 
-  code-watcher:
-    intent: "Watch for file changes and trigger analysis"
-    agent: "watcher"
-    restart: on-failure
-    depends_on:
-      - health-monitor
+  - name: mcp
+    type: mcp_manager
+    required: false
+
+supervisors:
+  - name: monitors
+    strategy: one_for_one
+    max_restarts: 3
+    max_window: 60s
+    required: false
+    children:
+      - name: health-monitor
+        intent: "Monitor system health and report anomalies"
+        agent: monitor
+        model: deepseek-v4-flash
+        restart: permanent
 ```
 
-### 服务字段
+### Services
+
+`services` 是一个**数组**，每项为一个 `ServiceConfig`。
 
 | 字段 | 类型 | 默认值 | 描述 |
 |-------|------|---------|------|
-| `intent` | `string` | 必填 | 服务的 intent 字符串 |
-| `agent` | `string` | `""` | 命名的 agent 定义（空 = 通用） |
-| `restart` | `string` | `"no"` | 重启策略：`no`、`always`、`on-failure` |
-| `max_restarts` | `int` | `3` | 最大重启次数 |
-| `depends_on` | `[]string` | `[]` | 必须先启动的服务 |
+| `name` | `string` | 必填 | 服务显示名 |
+| `type` | `string` | 必填 | 注册的服务类型——`skill_registry`、`mcp_manager`、`log_aggregator` 之一 |
+| `required` | `bool` | `false` | `true` = 该服务失败则启动中止；`false` = 警告并继续 |
+| `config` | `map` | `{}` | 类型特定的键值选项（如 `skill_registry` 接受 `scan_path`） |
+
+> 即使省略，`mcp_manager` 也会被**隐式**加载，因此 `mcp.yaml` 中声明的 MCP 服务器始终可被 `rnix mcp test`/`rnix mcp list` 解析。用户显式声明的 `mcp_manager` 优先于隐式加载。
+
+### Supervisors
+
+`supervisors` 是一个**数组**，每项为一个 `SupervisorConfig`，描述一棵长期运行的受监督 agent 树。
+
+| 字段 | 类型 | 默认值 | 描述 |
+|-------|------|---------|------|
+| `name` | `string` | 必填 | 监督树显示名 |
+| `strategy` | `string` | `""` | 该树的重启策略 |
+| `max_restarts` | `int` | `0` | `max_window` 窗口内的最大重启次数 |
+| `max_window` | `duration` | `0` | 重启计数的滑动窗口（如 `60s`） |
+| `required` | `bool` | `false` | `true` = 失败时启动中止（并回滚）；`false` = 警告并继续 |
+| `children` | `[]object` | `[]` | 该树监督的子进程 |
+
+`children` 下每一项为一个 `ChildConfig`：
+
+| 字段 | 类型 | 描述 |
+|-------|------|------|
+| `name` | `string` | 子进程显示名 |
+| `intent` | `string` | 子 agent 的 intent 字符串 |
+| `agent` | `string` | 命名的 agent 定义（可选；空 = 通用） |
+| `model` | `string` | 模型覆盖 |
+| `provider` | `string` | 提供商覆盖 |
+| `context_budget` | `int` | 单步上下文窗口守卫 |
+| `restart` | `string` | 子进程重启策略 |
 
 ---
 
@@ -386,6 +440,34 @@ agents:
     depends_on:
       doc-gen: completed
 ```
+
+### 顶层字段
+
+| 字段 | 类型 | 描述 |
+|-------|------|------|
+| `version` | `string` | Compose 规范版本（当前为 `"1.0"`） |
+| `intent` | `string` | 整体工作流描述 |
+| `model` | `string` | 全局默认模型（agent 可覆盖） |
+| `provider` | `string` | 全局默认提供商（agent 可覆盖） |
+| `reasoning_effort` | `string` | spec 级推理强度默认值（透传；agent 可覆盖） |
+| `token_budget` | `int` | 工作流整体 token 预算 |
+| `agents` | `map` | Agent 定义 |
+
+### Agent 字段
+
+| 字段 | 类型 | 描述 |
+|-------|------|------|
+| `intent` | `string` | 该 agent 的任务描述 |
+| `agent` | `string` | 命名的 agent 定义（可选） |
+| `model` | `string` | 该 agent 的模型覆盖 |
+| `provider` | `string` | 该 agent 的提供商覆盖 |
+| `reasoning_effort` | `string` | 该 agent 的推理强度覆盖（透传） |
+| `skills` | `[]string` | 该 agent 加载的 skill 名称 |
+| `priority` | `string` | 调度优先级：`high`、`normal`、`low` |
+| `max_tokens` | `int` | 单进程 token 预算 |
+| `timeout_ms` | `int` | 执行超时（毫秒） |
+| `depends_on` | `map` | 依赖：`<上游>: completed` |
+| `candidates` | `[]string` | 自动选择的候选 agent |
 
 ### 运行 Compose 工作流
 
@@ -434,11 +516,21 @@ mcp:
 | `models` | `object` | 否 | LLM 模型偏好 |
 | `models.provider` | `string` | 否 | LLM 提供商名称 |
 | `models.preferred` | `string` | 否 | 首选模型 |
-| `models.fallback` | `string` | 否 | 回退模型 |
+| `models.fallback` | `string` | 否 | 回退模型（同提供商） |
+| `models.fallback_provider` | `string` | 否 | 跨提供商回退；空 = 同提供商 |
+| `models.reasoning_effort` | `string` | 否 | agent 级推理强度默认值（透传，不校验/不转换大小写）；空 = 沿用提供商快照 |
 | `context_budget` | `int` | 否 | 单步上下文窗口守卫：单次 LLM 调用允许的最大输入 token 数。超限时进程自暂停（退出码 3, `context_full`），可通过 resume 恢复。`0` = 自动推导为 `context_window × 0.9`；显式设置的值会截断为 `min(budget, context_window)`。 |
-| `max_steps` | `int` | 否 | 最大推理步数（0 = 默认 10） |
+| `ctx_size` | `int` | 否 | 单进程消息历史槽位数（覆盖默认值 256） |
+| `max_steps` | `int` | 否 | 最大推理步数。`0` = 使用 `DefaultMaxSteps`（当前为 `0`，即不设步数上限）。 |
 | `max_tokens` | `int` | 否 | 最大总 token 数（0 = 无限制） |
+| `max_cost` | `float64` | 否 | 单进程成本预算（美元，0 = 无限制） |
+| `step_timeout` | `string` | 否 | 单步超时，duration 字符串如 `"10m"`（默认 `"5m"`；`"0"` = 禁用） |
 | `skills` | `[]string` | 否 | 引用的 skill 名称 |
+| `deferred_skills` | `[]string` | 否 | 仅加载元数据的 skill；正文在 `discover_skill` 时加载 |
+| `tools` | `[]string` | 否 | agent 级工具声明，与 skill 的 allowed-tools 取并集 |
+| `planning` | `bool` | 否 | 启用规划能力（未设置时默认 `true`） |
+| `project_doc` | `bool` | 否 | 将项目根 `AGENTS.md` 注入 system prompt（默认 `true`；设为 `false` 禁用） |
+| `language` | `string` | 否 | 首选响应语言（如 `Chinese`、`English`）；空 = 无偏好 |
 | `mcp` | `object` | 否 | MCP 服务器配置 |
 
 ### MCP 服务器配置字段

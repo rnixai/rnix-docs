@@ -41,6 +41,7 @@ mcp:
 | `name` | string | 唯一标识符 |
 | `description` | string | 人类可读的描述 |
 | `planning` | bool | Planning 能力：`true`（默认）或 `false` |
+| `project_doc` | bool | 是否将项目根 `AGENTS.md` 注入系统提示词：`true`（默认）或 `false` 禁用 |
 | `models.provider` | string | LLM 提供商名称 |
 | `models.preferred` | string | 首选模型 |
 | `models.fallback` | string | 备选模型/提供商 |
@@ -51,6 +52,18 @@ mcp:
 ### instructions.md
 
 纯 Markdown 文件，包含 Agent 的角色定义，作为 LLM 系统提示词的一部分注入。
+
+### AGENTS.md 注入
+
+Spawn 时，Rnix 还会读取最近的项目根 `AGENTS.md`，作为系统提示词的 `project_doc` cached section 注入，位置在 **`agent_instructions` 之后、`memory` 之前**。这对齐了跨工具的 AGENTS.md 约定。
+
+- **nearest-wins 查找** —— 从工作目录向上遍历，以项目根为边界（绝不越出项目）。
+- **只认 `AGENTS.md`** —— 绝不回退读 `CLAUDE.md`。
+- **64 KiB 上限** —— 超出的文件按 UTF-8 边界安全截断并附尾部标记。
+- **eager 冻结快照** —— spawn 时读盘一次，`specialize` 不重读，以保护 prompt 缓存命中率。
+- **可禁用** —— 在 `agent.yaml` 中设 `project_doc: false`（默认开启）。无 agent 的直接 spawn 默认开启。
+
+实现见 `kernel/sections.go` 和 `internal/config/agentsmd.go`。
 
 ---
 
@@ -75,7 +88,7 @@ name: code-analysis
 description: >
   Analyze code quality, identify bugs, performance issues
   and security vulnerabilities.
-allowed-tools: /dev/fs /dev/shell
+allowed-tools: Read Write Edit Glob Grep Bash
 metadata:
   author: rnix
   version: "1.0"
@@ -92,31 +105,35 @@ synergy:
 Use this skill when asked to review, analyze, or audit code.
 
 ## Workflow
-1. Read source files via /dev/fs
-2. Run analysis tools via /dev/shell
-3. Generate structured report
+1. 用 Read / Glob / Grep 读取源文件
+2. 用 Bash 运行分析工具
+3. 生成结构化报告
 ```
 
 | Frontmatter 字段 | 类型 | 说明 |
 |-------------------|------|------|
 | `name` | string | 唯一标识符 |
 | `description` | string | 简短描述（约 100 tokens） |
-| `allowed-tools` | string | 空格分隔的 VFS 设备路径 |
+| `allowed-tools` | string | 空格分隔的语义工具名（Claude Code 规范形态，如 `Read Write Bash`） |
 | `metadata` | map | 任意键值对 |
 | `synergy` | map | Skill 组合的协同声明 |
 
 ### allowed-tools（权限模型）
 
-`allowed-tools` 字段是核心安全边界。Agent 只能访问其加载的所有 Skill 中列出的 VFS 设备：
+`allowed-tools` 字段是核心安全边界。自 Epic 54 / Decision 45 起，它列出的是**语义工具名**（PascalCase，Claude Code 规范形态），而非 VFS 设备路径。enforcement 为**工具级**：Agent 只能调用其加载的所有 Skill 中列出的工具，且授权按工具粒度（例如 `Read` 不放行 `Write`）。该机制由 `kernel/process.go` 的 `proc.AllowedTools` 实现。
 
 ```
 Agent 加载: [code-analysis, security-scan]
-  code-analysis: /dev/fs /dev/shell
-  security-scan: /dev/fs
-  → AllowedDevices = [/dev/fs, /dev/shell]（取并集）
+  code-analysis: Read Grep Bash
+  security-scan: Read
+  → AllowedTools = [Read, Grep, Bash]（取并集）
 ```
 
-`allowed-tools` 为空表示无限制（可访问所有设备）。
+`allowed-tools` 为空表示无限制（可访问所有工具）。
+
+::: tip 向后兼容
+旧的设备路径写法（`/dev/fs /dev/shell`）仍被接受并对老 Skill 做归一化，但新 Skill 应使用语义工具名。
+:::
 
 ---
 
@@ -133,8 +150,8 @@ Agent 加载: [code-analysis, security-scan]
 ├──────────────────────────────────────┤
 │     Skill A          Skill B         │
 │  allowed-tools:    allowed-tools:    │
-│  /dev/fs           /dev/fs           │
-│  /dev/shell        /dev/shell        │
+│  Read Grep         Read              │
+│  Bash              Write             │
 ├──────────────────────────────────────┤
 │      VFS 设备层                       │
 │  /dev/fs  /dev/shell  /dev/llm/...   │

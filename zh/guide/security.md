@@ -15,7 +15,7 @@ Rnix 实现了一套自适应免疫安全系统，持续监控智能体行为、
 immune:
   enabled: true               # 默认: true
   warn_only: false            # 默认: true — 设为 false 启用自动挂起
-  deviation_threshold: 2.0    # 距离基线的标准差（默认：2.0）
+  deviation_threshold: 3.0    # 距离基线的标准差（默认：3.0）
   min_samples: 5              # 异常检测激活前的最小样本数
 ```
 
@@ -25,7 +25,7 @@ immune:
 |------|------|--------|------|
 | `enabled` | `bool` | `true` | 启用或禁用免疫系统 |
 | `warn_only` | `bool` | `true` | 观测模式：检测并记录异常，但不挂起进程 |
-| `deviation_threshold` | `float` | `2.0` | 触发异常的标准差阈值 |
+| `deviation_threshold` | `float` | `3.0` | 触发异常的标准差阈值 |
 | `min_samples` | `int` | `5` | 检测开始前的最小行为样本数 |
 | `min_migration_similarity` | `float` | `0.5` | 能力迁移的最小相似度阈值 |
 
@@ -92,10 +92,10 @@ Mode: warn-only
 
 **权限继承是单调的。** 子进程的 `AllowedDevices` 始终是父进程的子集——spawn 一个子进程永远无法**获得**父进程所不具备的能力。这堵死了「派生一个助手去获取被拒设备」的提权路径。
 
-**递归有深度上界。** 既然子进程无法通过被 spawn 而获得新权限，那么一个不断派生子进程去「获取」缺失设备的 LLM 本会无限递归下去。内核将 LLM 可达的进程树深度上限设为 **`MaxSpawnDepth`（8）**。超过该上限的 `spawn` 会被确定性地拒绝：
+**递归有深度上界。** 既然子进程无法通过被 spawn 而获得新权限，那么一个不断派生子进程去「获取」缺失设备的 LLM 本会无限递归下去。内核将 LLM 可达的进程树深度上限设为 **`MaxSpawnDepth`（4）**。超过该上限的 `spawn` 会被确定性地拒绝：
 
 ```
-spawn rejected: maximum spawn depth 8 reached (current depth 8).
+spawn rejected: maximum spawn depth 4 reached (current depth 4).
 Child processes inherit your device restrictions and cannot gain new
 permissions by spawning deeper. Use complete to report your results
 with the devices you have.

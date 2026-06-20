@@ -41,6 +41,7 @@ mcp:
 | `name` | string | Unique identifier |
 | `description` | string | Human-readable description |
 | `planning` | bool | Planning capability: `true` (default) or `false` |
+| `project_doc` | bool | Inject project-root `AGENTS.md` into the system prompt: `true` (default) or `false` to disable |
 | `models.provider` | string | LLM provider name |
 | `models.preferred` | string | Preferred model |
 | `models.fallback` | string | Fallback model/provider |
@@ -51,6 +52,18 @@ mcp:
 ### instructions.md
 
 Plain Markdown file with the agent's role definition, injected as part of the LLM system prompt.
+
+### AGENTS.md Injection
+
+At spawn, Rnix also reads the nearest project-root `AGENTS.md` and injects it as a `project_doc` cached section of the system prompt, positioned **after `agent_instructions` and before `memory`**. This aligns with the cross-tool AGENTS.md convention.
+
+- **Nearest-wins lookup** — walks up from the working directory, with the project root as the boundary (never escapes the project).
+- **Only `AGENTS.md`** is recognized — it never falls back to reading `CLAUDE.md`.
+- **64 KiB cap** — larger files are UTF-8-safe truncated with a trailing marker.
+- **Eager frozen snapshot** — read once at spawn and not re-read on `specialize`, protecting prompt-cache hit rate.
+- **Opt-out** — set `project_doc: false` in `agent.yaml` (default is enabled). Direct spawns without an agent default to enabled.
+
+Implemented in `kernel/sections.go` and `internal/config/agentsmd.go`.
 
 ---
 
@@ -77,7 +90,7 @@ name: code-analysis
 description: >
   Analyze code quality, identify bugs, performance issues
   and security vulnerabilities.
-allowed-tools: /dev/fs /dev/shell
+allowed-tools: Read Write Edit Glob Grep Bash
 metadata:
   author: rnix
   version: "1.0"
@@ -94,8 +107,8 @@ synergy:
 Use this skill when asked to review, analyze, or audit code.
 
 ## Workflow
-1. Read source files via /dev/fs
-2. Run analysis tools via /dev/shell
+1. Read source files with Read / Glob / Grep
+2. Run analysis tools with Bash
 3. Generate structured report
 ```
 
@@ -103,22 +116,26 @@ Use this skill when asked to review, analyze, or audit code.
 |-------------------|------|-------------|
 | `name` | string | Unique identifier |
 | `description` | string | Short description (~100 tokens) |
-| `allowed-tools` | string | Space-separated VFS device paths |
+| `allowed-tools` | string | Space-separated semantic tool names (Claude Code canonical form, e.g. `Read Write Bash`) |
 | `metadata` | map | Arbitrary key-value pairs |
 | `synergy` | map | Synergy declarations for Skill combinations |
 
 ### allowed-tools (Permission Model)
 
-The `allowed-tools` field is the core security boundary. An agent can only access VFS devices listed across its loaded skills:
+The `allowed-tools` field is the core security boundary. Since Epic 54 / Decision 45, it lists **semantic tool names** (PascalCase, the Claude Code canonical form) rather than VFS device paths. Enforcement is **tool-level**: an agent can only invoke the tools listed across its loaded skills, and grants are per-tool (e.g. `Read` does not authorize `Write`). This is implemented via `proc.AllowedTools` in `kernel/process.go`.
 
 ```
 Agent loads: [code-analysis, security-scan]
-  code-analysis: /dev/fs /dev/shell
-  security-scan: /dev/fs
-  → AllowedDevices = [/dev/fs, /dev/shell]  (union)
+  code-analysis: Read Grep Bash
+  security-scan: Read
+  → AllowedTools = [Read, Grep, Bash]  (union)
 ```
 
-Empty `allowed-tools` means no restrictions (all devices accessible).
+Empty `allowed-tools` means no restrictions (all tools accessible).
+
+::: tip Backward compatibility
+The legacy device-path form (`/dev/fs /dev/shell`) is still accepted and normalized for older skills, but new skills should use semantic tool names.
+:::
 
 ---
 
@@ -135,8 +152,8 @@ Empty `allowed-tools` means no restrictions (all devices accessible).
 ├──────────────────────────────────────┤
 │     Skill A          Skill B         │
 │  allowed-tools:    allowed-tools:    │
-│  /dev/fs           /dev/fs           │
-│  /dev/shell        /dev/shell        │
+│  Read Grep         Read              │
+│  Bash              Write             │
 ├──────────────────────────────────────┤
 │      VFS Device Layer                │
 │  /dev/fs  /dev/shell  /dev/llm/...   │

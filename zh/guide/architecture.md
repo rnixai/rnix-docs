@@ -563,6 +563,7 @@ MaxSize 限制 Messages 切片长度（消息数量）。当前 MVP 不限制单
 1. **系统提示词构建**（Spawn 阶段）：
    - `Agent.SystemPrompt()` = instructions.md 内容 + 所有激活 Skill 的 body 注入
    - 如果 SpawnOpts 也提供了 SystemPrompt，拼接：`opts.SystemPrompt + "\n\n" + agentPrompt`
+   - **`AGENTS.md` 注入** — Spawn 读取最近的项目根 `AGENTS.md`，作为 `project_doc` cached section 注入，位置在 **`agent_instructions` 之后、`memory` 之前**。查找采用 nearest-wins，从工作目录向上遍历，以项目根为边界。只认 `AGENTS.md`（绝不回退读 `CLAUDE.md`）；超过 64 KiB 的内容按 UTF-8 边界安全截断。该快照在 spawn 时 eager 捕获并冻结（`specialize` 不重读），以保护 prompt 缓存命中率。在 `agent.yaml` 中设 `project_doc: false` 可按 agent 禁用。详见 [AGENTS.md 注入](/zh/guide/agents-and-skills)。（`kernel/sections.go`、`internal/config/agentsmd.go`）
 
 2. **消息历史累积**（reasonStep 循环）：
    - 初始：AppendMessage(user, intent)

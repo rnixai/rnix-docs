@@ -38,12 +38,23 @@ Signature: Spawn(intent string, agent *agents.AgentInfo, opts SpawnOpts) (PID, e
 
 **SpawnOpts Fields:**
 
+This is not an exhaustive list; for the full definition see `kernel/kernel.go` (`SpawnOpts`).
+
 | Field | Type | Default | Description |
 |------|------|--------|------|
 | `Model` | `string` | `""` | LLM model name (priority: CLI > Agent manifest > driver default) |
+| `Provider` | `string` | `""` | LLM provider override (CLI `--provider`); `""` = Agent manifest or default `claude` |
+| `ReasoningEffort` | `string` | `""` | Per-spawn reasoning effort override; passed through verbatim; `""` = driver snapshot |
+| `FallbackModel` | `string` | `""` | CLI `--fallback-model` override; `""` = Agent manifest fallback |
+| `FallbackProvider` | `string` | `""` | CLI `--fallback-provider` override; `""` = same-provider fallback |
 | `SystemPrompt` | `string` | `""` | System prompt (when non-empty, appended after Agent instructions) |
 | `MaxTurns` | `int` | `0` | Maximum reasoning steps (`0` = use default `DefaultMaxSteps=10`) |
-| `MaxTokens` | `int` | `0` | Maximum total tokens (`0` = unlimited) |
+| `MaxTokens` | `int64` | `0` | Per-process token budget (`0` = unlimited; `>0` = **suspend** when exhausted) |
+| `ContextBudget` | `int` | `0` | Context-window guard (`0` = no limit; `>0` = terminate when `TokensUsed >= ContextBudget`) |
+| `CtxSize` | `int` | `0` | Context message slot limit (`0` = `DefaultCtxSize`) |
+| `Depth` | `int` | `0` | Process-tree depth for the spawn-recursion guard (`0` = top-level) |
+| `AllowedTools` | `[]string` | `nil` | Authoritative tool-name whitelist; `nil` = derive from `AllowedDevices` / no constraint |
+| `StartStep` | `int` | `0` | Resume: start the reasoning loop from this step (`0` = normal start from 1) |
 | `TimeoutMs` | `int64` | `0` | Timeout in milliseconds |
 | `ParentPID` | `PID` | `0` | Parent process PID (`0` = top-level CLI spawn) |
 
@@ -101,7 +112,7 @@ Signature: Kill(pid PID, signal Signal) error
 | Error Code | Trigger Condition |
 |--------|---------|
 | `NOT_FOUND` | Process does not exist |
-| `INVALID` | Invalid signal value (not SIGTERM or SIGKILL) |
+| `INVALID` | Signal value outside the valid range `SIGTERM(1)`..`SIGRESUME(5)` |
 
 **Idempotency:** Killing a process already in Zombie or Dead state is a no-op and does not return an error.
 

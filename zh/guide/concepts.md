@@ -80,8 +80,8 @@ Rnix 将 Dead 视为冻结状态而非终态。进程退出后，观测数据保
 
 这使以下功能成为可能：
 
-- **`rnix resume <uuid>`** — 继续运行已死亡的进程，保持 UUID 不变
-- **`rnix resume --fork <uuid>`** — 从历史节点分叉探索，生成新 UUID
+- **`rnix resume <pid|uuid>`** — 继续运行已死亡的进程，保持 UUID 不变
+- **`rnix resume --fork <pid|uuid>`** — 从历史节点分叉探索，生成新 UUID
 - **Daemon 崩溃恢复** — 暂停的进程在 daemon 重启后自动恢复
 
 详见 [Process Resume](/guide/process-resume) 了解完整的 resume 工作流。
@@ -287,10 +287,10 @@ name: code-analysis
 description: >
   Analyze code quality, identify bugs, performance issues and security
   vulnerabilities.
-allowed-tools: /dev/fs /dev/shell
+allowed-tools: Read Write Edit Glob Grep Bash
 ```
 
-`allowed-tools` 字段定义了该 Skill 可以访问的 VFS 设备路径——这是 Rnix 的权限模型核心。
+`allowed-tools` 字段列出该 Skill 可使用的**语义工具名**（PascalCase，Claude Code 规范形态）——这是 Rnix 的权限模型核心。自 Epic 54 / Decision 45 起改用工具名而非 VFS 设备路径；旧的设备路径写法仍因向后兼容被接受。
 
 ### Unix 类比
 
@@ -316,8 +316,8 @@ allowed-tools: /dev/fs /dev/shell
 │     Skill A          Skill B         │
 │  "如何分析代码"     "如何写测试"        │
 │  allowed-tools:    allowed-tools:    │
-│  /dev/fs           /dev/fs           │
-│  /dev/shell        /dev/shell        │
+│  Read Grep         Read              │
+│  Bash              Write             │
 ├──────────────────────────────────────┤
 │          VFS 设备层（实际能力）          │
 │  /dev/fs  /dev/shell  /dev/llm/...  │
@@ -328,8 +328,8 @@ Spawn 时的处理流程：
 
 1. CLI `--agent=code-analyst` → AgentLoader 加载 `agent.yaml` + `instructions.md`
 2. AgentLoader 解析 `skills` 列表 → SkillLoader 加载每个 `SKILL.md`
-3. `AllowedTools()` 聚合所有 Skill 的 `allowed-tools` → 设置进程的 AllowedDevices 白名单
-4. `SystemPrompt()` = Agent instructions + Skill body 拼接 → 作为 LLM 系统提示词
+3. `AllowedTools()` 聚合所有 Skill 的 `allowed-tools` → 设置进程的工具白名单（`proc.AllowedTools`，按工具粒度 enforcement）
+4. `SystemPrompt()` = Agent instructions + Skill body，再加上注入为 `project_doc` cached section 的最近项目根 `AGENTS.md`（位于 `agent_instructions` 之后、`memory` 之前）→ 作为 LLM 系统提示词
 
 ### Agent vs Skill 职责分离
 
@@ -338,7 +338,7 @@ Spawn 时的处理流程：
 | 定义 | "我是谁"——身份与角色 | "如何做 X"——程序性知识 |
 | 模型偏好 | 有（provider/preferred/fallback） | 无 |
 | 上下文预算 | 有（context_budget） | 无 |
-| 设备权限 | 无（由 Skill 聚合决定） | 有（allowed-tools） |
+| 工具权限 | 无（由 Skill 聚合决定） | 有（allowed-tools） |
 | 复用性 | 特定角色 | 跨 Agent 共享 |
 
 ### 渐进式加载策略

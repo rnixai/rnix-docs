@@ -67,7 +67,8 @@ providers:
 | `claude-cli` | Invokes Claude Code CLI (`claude -p`) | Anthropic Claude |
 | `cursor-cli` | Invokes Cursor CLI (`agent --print`) | Cursor |
 | `openai-compat` | Calls OpenAI-compatible HTTP API endpoint | Ollama, Groq, DeepSeek, any OpenAI-compatible server |
-| `qwen-cli` | Invokes Qwen Code CLI (`qwen --chat`) | Qwen Code |
+| `qwen-cli` | Invokes Qwen Code CLI (`qwen --output-format json …`) | Qwen Code |
+| `codex-cli` | Invokes OpenAI Codex CLI | OpenAI Codex |
 | `openai` | Official OpenAI SDK (`github.com/openai/openai-go/v3`) | OpenAI GPT-4, GPT-4o |
 | `gemini` | Native Gemini API (`google.golang.org/genai`) | Google Gemini |
 | `anthropic` | Official Anthropic SDK (`anthropic-sdk-go`) | Claude (via API, not CLI) |
@@ -129,7 +130,11 @@ deepseek     http    offline   deepseek-chat      timeout
 | `max_tokens` | `int` | `0` | Maximum output tokens per LLM call; `0` uses the API default |
 | `cost_per_token` | `float64` | `0` | Per-token cost in USD for budget tracking; `0` disables cost tracking |
 | `thinking_budget` | `int` | `0` | Thinking budget in tokens (`gemini`, `anthropic`, and `openai-compat` drivers); `0` disables thinking |
-| `extra_args` | `string[]` | `[]` | Additional CLI arguments passed to the binary (`claude-cli`, `cursor-cli`, `qwen-cli` only) |
+| `reasoning_effort` | `string` | `""` | Discrete reasoning strength passed through to the provider (see below); empty uses the provider's native default |
+| `extra_args` | `string[]` | `[]` | Additional CLI arguments passed to the binary (`claude-cli`, `qwen-cli`, `codex-cli` only) |
+| `timeout_sec` | `int` | `0` | Per-request timeout in seconds; `0` = driver default (5 min for CLI drivers) |
+| `grace_sec` | `int` | `0` | CLI grace period between `SIGTERM` and `SIGKILL`; `0` = driver default (20s) |
+| `models` | `map` | `{}` | Per-model metadata keyed by model name: `<model>: {context_window: N}`. Used to derive `context_budget` |
 
 **Example** — Gemini with thinking budget:
 
@@ -151,6 +156,48 @@ deepseek     http    offline   deepseek-chat      timeout
   default_model: deepseek-reasoner
   thinking_budget: 16384
 ```
+
+### Reasoning Effort
+
+Newer models from OpenAI, Anthropic, and Gemini express reasoning strength as a discrete **effort level** rather than a token budget. The `reasoning_effort` field is passed through to each provider verbatim — Rnix does not validate, map, or rename the value, so new vendor levels keep working without a Rnix update.
+
+```yaml
+- name: gpt-high
+  driver: openai
+  api_key_env: OPENAI_API_KEY
+  default_model: gpt-5.1
+  reasoning_effort: high      # OpenAI / Anthropic levels are lowercase
+
+- name: gemini-high
+  driver: gemini
+  api_key_env: GOOGLE_API_KEY
+  default_model: gemini-3-pro
+  reasoning_effort: HIGH      # Gemini levels are UPPERCASE
+```
+
+::: warning Case matters
+Effort is passed through without case normalization. Gemini expects uppercase (`HIGH`), while OpenAI and Anthropic expect lowercase (`high`). An incorrectly-cased value is rejected by the provider, not by Rnix.
+:::
+
+**Driver support** — `openai`, `openai-compat`, `anthropic`, `gemini`, `claude-cli`, and `codex-cli` forward the value to their native surface. `cursor-cli` and `qwen-cli` have no effort parameter; a configured value is ignored with a warning.
+
+**Per-spawn override.** Effort can also be set per process, resolved through a four-tier fallback (highest non-empty wins):
+
+1. Per-spawn — CLI `--reasoning-effort`, `compose.yaml`, or AgentShell `spawn --effort`
+2. Agent manifest — `models.reasoning_effort` in `agent.yaml`
+3. Provider — `reasoning_effort` in `providers.yaml`
+4. The provider's native default
+
+```bash
+# Override effort for a single run
+rnix "audit this module for races" --reasoning-effort high
+```
+
+::: tip
+Once `reasoning_effort` is set on a provider it becomes that provider's effective floor — tiers 1 and 2 can raise or change it, but if nothing else specifies a value, the provider value applies rather than the API's native default.
+:::
+
+See [Reasoning Effort](/guide/configuration#reasoning-effort) notes in the configuration guide for the relationship with the legacy `thinking_budget`.
 
 ---
 

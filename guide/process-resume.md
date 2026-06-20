@@ -29,20 +29,23 @@ This design addresses a recurring pain point: daemon crashes, manual kills, or n
 Signals for process suspension and resumption:
 
 ```bash
-# Pause a running process (and optionally its subtree)
-rnix pause <pid>              # Single process
-rnix pause --subtree <pid>    # Process + all descendants
+# Suspend a running process
+rnix suspend <pid>            # Single process (SIGPAUSE)
 
-# Resume a paused process
-rnix resume <uuid>            # From persisted state
-rnix resume --fork <uuid>     # New UUID, linked to original
+# Resume a suspended or historical process
+rnix resume <pid|uuid>        # From persisted state
+rnix resume --fork <pid|uuid> # New UUID, linked to original
 ```
+
+::: tip Subtree suspension
+There is **no top-level `rnix pause --subtree` CLI command**. Suspending an entire process subtree is available **only from within the Dashboard** (which drives it over IPC). The top-level CLI exposes single-process `rnix suspend <pid>` only.
+:::
 
 When paused, the reasoning loop blocks at the next I/O boundary — the process remains in `Running` state with `IsPaused = true`. The elapsed time counter freezes. Heartbeat monitoring skips paused processes (they intentionally stop sending heartbeats).
 
 ### Subtree Operations
 
-The `SubtreeManager` provides unified pause/resume across process trees:
+The `SubtreeManager` provides unified suspend/resume across process trees. This is exposed **through the Dashboard only** (driven over IPC) — there is no top-level CLI flag for it:
 
 ```
 PID 1 orchestrator (Running)
@@ -50,9 +53,9 @@ PID 1 orchestrator (Running)
 ├── PID 3 reviewer (Running)
 └── PID 4 researcher (Suspended)
 
-$ rnix pause --subtree 1
-# Pauses PID 1, 2, 3. PID 4 already suspended.
-# Tree state: all members paused, ancestors aware of suspension reason.
+# (Dashboard subtree-suspend on PID 1)
+# Suspends PID 1, 2, 3. PID 4 already suspended.
+# Tree state: all members suspended, ancestors aware of suspension reason.
 ```
 
 Resume propagates upward: resuming a descendant wakes the ancestor chain so the orchestrator can continue managing its subtree.
@@ -63,9 +66,9 @@ Resume propagates upward: resuming a descendant wakes the ancestor chain so the 
 
 | Mode | Command | UUID | Use Case |
 |------|---------|------|----------|
-| **Continue** | `rnix resume <uuid>` | Preserved | Recovery after daemon crash |
-| **Fork** | `rnix resume --fork <uuid>` | New UUID + `origin_uuid` | Git-style exploration |
-| **Truncated Fork** | `rnix resume --fork --from-step N <uuid>` | New UUID | Retry from mid-history |
+| **Continue** | `rnix resume <pid\|uuid>` | Preserved | Recovery after daemon crash |
+| **Fork** | `rnix resume --fork <pid\|uuid>` | New UUID + `origin_uuid` | Git-style exploration |
+| **Truncated Fork** | `rnix resume --fork --from-step N <pid\|uuid>` | New UUID | Retry from mid-history |
 | **Compose Node** | `rnix compose resume --node <name>` | Reuses above | DAG node recovery |
 
 ### Continue Mode
@@ -152,7 +155,7 @@ $ rnix ps
 PID  STATE       AGENT
 3    Suspended   coder          # Rehydrated from disk, PID reseeded
 
-$ rnix resume <uuid>
+$ rnix resume <pid|uuid>
 # Resumes from checkpoint, inherits rehydrated PID
 ```
 
@@ -164,10 +167,14 @@ Long-lived data needs cleanup. Configure in `~/.config/rnix/config.yaml`:
 
 ```yaml
 gc:
-  retention_days: 30      # Delete entries older than 30 days; 0 = disabled
-  max_entries: 500        # Keep at most 500 history entries; 0 = disabled
+  retention_days: 30      # Example value, NOT the default. Delete entries older than N days
+  max_entries: 500        # Example value, NOT the default. Keep at most N history entries
   interval_seconds: 3600  # Background scan interval (min 60, default 1h)
 ```
+
+::: warning Defaults
+`retention_days` and `max_entries` both **default to `0` (GC disabled)** — see `kernel/gc_config.go`. The `30` / `500` above are illustrative; you must set them explicitly to enable garbage collection.
+:::
 
 ### GC Rules
 
@@ -192,13 +199,12 @@ rnix gc --json             # JSON output (implies --force)
 
 | Command | Description |
 |---------|-------------|
-| `rnix pause <pid>` | Suspend a process (SIGPAUSE) |
-| `rnix pause --subtree <pid>` | Suspend process + descendants |
-| `rnix resume <uuid>` | Resume from persisted state |
-| `rnix resume --fork <uuid>` | Resume with new UUID |
-| `rnix resume --fork --from-step N <uuid>` | Resume from step N |
+| `rnix suspend <pid>` | Suspend a process (SIGPAUSE) |
+| `rnix resume <pid\|uuid>` | Resume from persisted state |
+| `rnix resume --fork <pid\|uuid>` | Resume with new UUID |
+| `rnix resume --fork --from-step N <pid\|uuid>` | Resume from step N |
 | `rnix compose resume --node <name>` | Resume a compose DAG node |
-| `rnix list-resumable` | List all resumable processes |
+| `rnix ps -a` | List all processes, including resumable Dead/Suspended ones |
 | `rnix gc` | Garbage collect old process data |
 
 ---

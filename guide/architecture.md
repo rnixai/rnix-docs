@@ -563,6 +563,7 @@ MaxSize limits the Messages slice length (number of messages). The current MVP d
 1. **System prompt construction** (Spawn phase):
    - `Agent.SystemPrompt()` = instructions.md content + all activated Skill bodies injected
    - If SpawnOpts also provides SystemPrompt, concatenate: `opts.SystemPrompt + "\n\n" + agentPrompt`
+   - **`AGENTS.md` injection** — Spawn reads the nearest project-root `AGENTS.md` and injects it as a `project_doc` cached section, placed **after `agent_instructions` and before `memory`**. Lookup is nearest-wins, walking up from the working directory with the project root as the boundary. Only `AGENTS.md` is recognized (it never falls back to `CLAUDE.md`); content over 64 KiB is UTF-8-safe truncated. The snapshot is captured eagerly at spawn and frozen (not re-read on `specialize`) to protect prompt-cache hit rate. Disable per-agent with `project_doc: false` in `agent.yaml`. See [AGENTS.md injection](/guide/agents-and-skills). (`kernel/sections.go`, `internal/config/agentsmd.go`)
 
 2. **Message history accumulation** (reasonStep loop):
    - Initial: AppendMessage(user, intent)

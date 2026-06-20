@@ -8,17 +8,31 @@ The `AgentManifest` structure defines the Agent's configuration manifest:
 |------|------|---------|------|
 | `name` | `string` | Required | Agent name (unique identifier) |
 | `description` | `string` | Optional | Agent description |
-| `models` | `AgentModels` | Optional | LLM model preferences |
-| `context_budget` | `int` | Optional | Context budget (token count) |
+| `models` | `AgentModels` | Optional | LLM model preferences (see [3.2](#32-agentmodels-sub-structure)) |
 | `skills` | `[]string` | Optional | Referenced Skill name list |
+| `tools` | `[]string` | Optional | Agent-level tool whitelist, unioned with skill `allowed-tools` |
+| `mcp` | `[]string` | Optional | MCP server references |
+| `planning` | `bool` | Optional | Enable the planning capability (unset = `true`) |
+| `max_steps` | `int` | Optional | Max reasoning steps (`0` = use default) |
+| `max_tokens` | `int64` | Optional | Per-process token budget (`0` = unlimited) |
+| `max_cost` | `float64` | Optional | Per-process cost budget in USD (`0` = unlimited) |
+| `context_budget` | `int` | Optional | Context budget (token count) |
+| `ctx_size` | `int` | Optional | Context message slot limit (`0` = default) |
+| `step_timeout` | `string` | Optional | Per-step heartbeat timeout (e.g. `"10m"`; default `"5m"`; `"0"` = disabled) |
+| `language` | `string` | Optional | Preferred response language (e.g. `Chinese`, `English`) |
+| `project_doc` | `bool` | Optional | Inject project-root `AGENTS.md` into the system prompt (unset = enabled) |
+
+> Not an exhaustive list — for the full definition (including `deferred_skills`, `sla`, `alternatives`) see `agents/types.go` (`AgentManifest`).
 
 ### 3.2 AgentModels Sub-structure
 
 | Field | Type | Description |
 |------|------|------|
-| `provider` | `string` | LLM provider (`claude` (default) or `cursor`) |
+| `provider` | `string` | LLM provider — references a provider instance name defined in `providers.yaml` |
 | `preferred` | `string` | Preferred model (e.g., `deepseek-v4-flash`) |
 | `fallback` | `string` | Fallback model (e.g., `deepseek-v4-pro`) |
+| `fallback_provider` | `string` | Cross-provider fallback; empty = same provider |
+| `reasoning_effort` | `string` | Agent-level reasoning effort default; passed through verbatim (empty = defer to driver snapshot) |
 
 **Model Selection Priority:** CLI `--model` flag > Agent manifest `preferred` > driver default
 

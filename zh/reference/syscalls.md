@@ -38,12 +38,23 @@ Rnix 的内核接口按多个功能分类组织，共定义 46 个 syscall：
 
 **SpawnOpts 字段：**
 
+此处非完整列表；完整定义见 `kernel/kernel.go`（`SpawnOpts`）。
+
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `Model` | `string` | `""` | LLM 模型名称（优先级：CLI > Agent manifest > 驱动默认） |
+| `Provider` | `string` | `""` | LLM provider 覆盖（CLI `--provider`）；`""` = Agent manifest 或默认 `claude` |
+| `ReasoningEffort` | `string` | `""` | 单次 spawn 的 reasoning effort 覆盖；原样透传；`""` = 驱动快照 |
+| `FallbackModel` | `string` | `""` | CLI `--fallback-model` 覆盖；`""` = Agent manifest fallback |
+| `FallbackProvider` | `string` | `""` | CLI `--fallback-provider` 覆盖；`""` = 同 provider fallback |
 | `SystemPrompt` | `string` | `""` | 系统提示词（非空时追加到 Agent instructions 之后） |
 | `MaxTurns` | `int` | `0` | 最大推理步数（`0` = 使用默认值 `DefaultMaxSteps=10`） |
-| `MaxTokens` | `int` | `0` | 最大总 token 数（`0` = 不限制） |
+| `MaxTokens` | `int64` | `0` | 单进程 token 预算（`0` = 不限制；`>0` = 耗尽时**挂起（suspend）**） |
+| `ContextBudget` | `int` | `0` | 上下文窗口护栏（`0` = 不限制；`>0` = `TokensUsed >= ContextBudget` 时终止） |
+| `CtxSize` | `int` | `0` | 上下文消息槽位上限（`0` = `DefaultCtxSize`） |
+| `Depth` | `int` | `0` | spawn 递归护栏的进程树深度（`0` = 顶层） |
+| `AllowedTools` | `[]string` | `nil` | 权威工具名白名单；`nil` = 从 `AllowedDevices` 派生 / 无约束 |
+| `StartStep` | `int` | `0` | Resume：从该步开始推理循环（`0` = 从 1 正常开始） |
 | `TimeoutMs` | `int64` | `0` | 超时毫秒数 |
 | `ParentPID` | `PID` | `0` | 父进程 PID（`0` = 顶层 CLI 级 spawn） |
 
@@ -101,7 +112,7 @@ pid, err := kern.Spawn("分析代码", agentInfo, kernel.SpawnOpts{
 | 错误码 | 触发条件 |
 |--------|---------|
 | `NOT_FOUND` | 进程不存在 |
-| `INVALID` | 无效信号值（非 SIGTERM 或 SIGKILL） |
+| `INVALID` | 信号值不在合法范围 `SIGTERM(1)`..`SIGRESUME(5)` 内 |
 
 **幂等性：** Kill 已处于 Zombie 或 Dead 状态的进程为 no-op，不返回错误。
 

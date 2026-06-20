@@ -7,37 +7,53 @@
 | `--json` | — | `bool` | JSON format output |
 | `--verbose` | `-v` | `bool` | Verbose output |
 | `--quiet` | `-q` | `bool` | Quiet output |
+| `--model` | `-m` | `string` | LLM model to use (e.g. `sonnet`/`opus`/`haiku`) |
+| `--provider` | — | `string` | LLM provider override (see `providers.yaml`) |
+| `--fallback-model` | — | `string` | Override agent fallback model (empty = use agent manifest) |
+| `--fallback-provider` | — | `string` | Override agent fallback provider (empty = same as primary) |
+| `--reasoning-effort` | — | `string` | Reasoning effort passed through to the provider (e.g. `low`/`medium`/`high`); empty uses the provider default. See [LLM Providers › Reasoning Effort](/guide/llm-providers#reasoning-effort) |
 
 **Output Mode Priority:** `--json` > `--quiet` > `--verbose` > default
 
-These three flags are registered via `PersistentFlags` and apply to all subcommands.
+These flags are registered via `PersistentFlags` and apply to all subcommands.
 
-### 4.2 rnix [intent] — Root Command
+### 4.2 rnix -i \<intent\> — Root Command
 
 ```
-Usage: rnix [intent]
-Arguments: [intent] — arbitrary-length intent string (multiple arguments joined with spaces)
+Usage: rnix -i <intent> [flags]
 ```
+
+The intent is passed via the `-i`/`--intent` flag, **not** as a positional argument — the root command rejects positional arguments. Without `-i`, `rnix` prints help.
 
 **Private Flags:**
 
 | Flag | Short | Type | Default | Description |
 |------|--------|------|--------|------|
-| `--model` | `-m` | `string` | `""` | LLM model (`deepseek-v4-flash`/`deepseek-v4-pro`/`sonnet`) |
+| `--intent` | `-i` | `string` | `""` | Intent string to spawn an agent |
 | `--max-steps` | — | `int` | `0` | Maximum reasoning steps (`0` = default 10) |
 | `--agent` | — | `string` | `""` | Agent definition name |
-| `--provider` | — | `string` | `""` | LLM provider (`deepseek`/`claude`/`cursor`) |
+| `--dashboard` | — | `bool` | `false` | Open dashboard after spawning the agent |
+
+The global `--model`/`--provider`/`--reasoning-effort` flags (see §4.1) also apply to the root command.
 
 **Default Output Example:**
 
 ```
-[kernel] spawning PID 1 (deepseek/deepseek-v4-flash)...
+[kernel] spawning PID 1 (claude/sonnet)...
 [agent/1] reasoning step 1...
 [agent/1] reasoning step 2...
 ══ Result ══════════════════════════════════════════════════════════════════════
   Analysis result content...
 ════════════════════════════════════════════════════════════════════════════════
-[kernel] PID 1 exited(0) | deepseek/deepseek-v4-flash | tokens: 1234 | elapsed: 6.2s
+[kernel] PID 1 exited(0) | claude/sonnet | tokens: 1234 | elapsed: 6.2s
+```
+
+**Examples:**
+
+```bash
+rnix -i "analyze ./README.md"
+rnix -i "refactor error handling in main.go"
+rnix -i "analyze project structure" --json
 ```
 
 **JSON Success Response:**
@@ -57,6 +73,7 @@ Arguments: [intent] — arbitrary-length intent string (multiple arguments joine
 ```
 Usage: rnix daemon [command]
 Subcommands:
+  start     Start the daemon if it is not already running
   status    Show daemon status (running state, version, socket path, process count)
   stop      Stop the running daemon
 ```
@@ -69,6 +86,16 @@ version: 0.1.0
 socket:  /run/user/1000/rnix/rnix.sock
 procs:   1 active / 3 total
 ```
+
+**`rnix daemon start` Output Example:**
+
+```
+daemon started
+status:  running
+...
+```
+
+When the daemon is already running, `start` prints `daemon is already running` and reports its current status.
 
 **`rnix daemon stop` Output Example:**
 
@@ -209,6 +236,20 @@ Arguments: <pid> — Process ID (exactly 1 argument)
 {"timestamp_ms": 13, "pid": 1, "syscall": "Open", "args": {"flags": 2, "path": "/dev/llm/claude"}, "result": 3, "duration_ms": 1.0}
 ```
 
+**--raw — Raw LLM Request/Response Capture:**
+
+Replays the raw request and response recorded for each LLM call of the process — the HTTP request/response for API-based providers, or the full command invocation and output for CLI-based providers. Useful for verifying exactly what was sent to a model (prompt, parameters, reasoning effort). Add a step number to inspect a single call. Credentials are redacted in the capture.
+
+```bash
+rnix strace <pid> --raw                  # all captured LLM calls
+rnix strace <pid> --raw --step 3         # a single reasoning step
+rnix strace <pid> --raw --uuid <uuid>    # locate an already-reaped process
+```
+
+The `--uuid <uuid>` flag overrides PID resolution with an explicit process UUID, letting `--raw` locate processes that have already been reaped (PID no longer in the table).
+
+Works for both live and already-finished processes (captures are persisted with the process history). See [Debugging › Raw LLM I/O](/guide/debugging#raw-llm-io).
+
 **SIGINT Behavior:** Only detaches the trace; does not affect the traced process.
 
 ### 4.6 rnix version — Version Information
@@ -270,6 +311,10 @@ Initialize global configuration (`~/.config/rnix/`) and project configuration (`
 Usage: rnix init
 Arguments: None
 ```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--with-mcp-examples` | `bool` | `false` | Generate an `mcp.yaml` containing a Playwright MCP example server |
 
 **Behavior:**
 
@@ -672,6 +717,8 @@ Arguments: One or more skill names (minimum 1)
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--force` | `bool` | `false` | Force install even if already installed |
+| `--global` / `-g` | `bool` | `false` | Install to user scope (`~/.config/rnix/skills/` or `~/.agents/skills/`) regardless of cwd |
+| `--shared` | `bool` | `false` | Install to the agents namespace (`.agents/skills/`) for cross-tool interop with the agentskills.io ecosystem |
 
 **Subcommand: `rnix skill search [keyword]`**
 
@@ -699,6 +746,13 @@ List all locally available skills, including system built-in skills and communit
 Usage: rnix skill list
 Arguments: None (cobra.NoArgs)
 ```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--global` / `-g` | `bool` | `false` | Only show skills under user scope (`~/.config/rnix/skills/` + `~/.agents/skills/`) |
+| `--project` / `-p` | `bool` | `false` | Only show skills under project scope (`<projectDir>/.rnix/skills/` + `<projectDir>/.agents/skills/`) |
+
+`--global` and `--project` are mutually exclusive.
 
 **Examples:**
 
@@ -1024,6 +1078,7 @@ Subcommands:
   list           List active MCP server mounts on the daemon
   test <name>    Probe a configured server (connect → tools/list → resources/list → prompts/list)
   logs <name>    Show captured stderr of a mounted MCP server
+  reload         Re-read mcp.yaml and refresh the daemon's MCP registry
 ```
 
 **Subcommand: `rnix mcp list`**
@@ -1053,6 +1108,15 @@ Usage: rnix mcp logs <name>
 Arguments: <name> — Mounted MCP server name (exactly 1 argument)
 ```
 
+**Subcommand: `rnix mcp reload`**
+
+Re-parse `mcp.yaml` and swap the daemon's MCP server registry without a restart. Run this after editing `mcp.yaml` (adding / removing / re-configuring a server) so `mcp test` and future mounts see the change immediately. It refreshes the lookup table only — already-mounted servers are left untouched. Like `mcp test`, this **requires the daemon to be running**, so daemon-down exits `1`. A bad `mcp.yaml` leaves the previous registry intact and reports the parse error.
+
+```
+Usage: rnix mcp reload
+Arguments: None (cobra.NoArgs)
+```
+
 ---
 
 ### 4.35 rnix check — Subsystem Diagnostics {#rnix-check}
@@ -1072,6 +1136,56 @@ Check that the host has the binaries needed to run the MCP servers declared in `
 ```
 Usage: rnix check mcp
 Arguments: None (cobra.NoArgs)
+```
+
+---
+
+### 4.36 rnix doctor — LLM Provider Health Diagnostics {#rnix-doctor}
+
+Run environment health checks across rnix configuration and each configured LLM provider. This is the LLM-provider counterpart to [`rnix check`](#rnix-check) (which focuses on subsystem prerequisites like MCP). It reports cwd, command resolvability, auth mode, and — with `--probe` — a live `"Respond with hello."` probe per provider. Reports a `pass` / `warn` / `fail` status.
+
+```
+Usage: rnix doctor [--probe] [--provider <name>] [--json]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--probe` | `bool` | `false` | Run a live hello probe per provider (small token usage; billed) |
+| `--provider` | `string` | `""` | Only check the named provider (matches `providers.yaml`) |
+| `--json` | `bool` | `false` | Machine-readable output |
+
+**Examples:**
+
+```bash
+rnix doctor                    # static checks only
+rnix doctor --probe            # include live hello probe (billed)
+rnix doctor --provider claude  # check a single provider
+rnix doctor --json             # machine-readable output
+```
+
+---
+
+### 4.37 rnix gc — Garbage-Collect Process Data {#rnix-gc}
+
+Remove terminated process data under `.rnix/data/steps/<uuid>/` that exceeds the active retention policy (`gc.retention_days` / `gc.max_entries` in `~/.config/rnix/config.yaml`). Running and Suspended processes are **never** eligible — gc cannot kill live work. Bulk operations (more than 100 candidates) prompt for confirmation unless `--force` or `--json` is provided.
+
+```
+Usage: rnix gc [--dry-run] [--force] [--json]
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | `false` | Preview candidates without deleting |
+| `--force` | `bool` | `false` | Skip confirmation for bulk deletes (>100 entries) |
+| `--json` | `bool` | `false` | Emit JSON output (implies `--force`) |
+
+**Examples:**
+
+```bash
+rnix gc --dry-run        # Preview candidates without deleting
+rnix gc                  # Interactive cleanup
+rnix gc --force          # Skip confirmation
+rnix gc --json           # Machine-readable output (implies --force)
 ```
 
 ---
@@ -1125,7 +1239,8 @@ Subcommands: `break`, `continue`, `step`, `inspect`, `set`, `detach`
 ### 9.6 rnix record / replay — Time-Travel Debugging
 
 ```
-Usage: rnix record <pid>
+Usage: rnix record start|stop <pid>
+      rnix record list
       rnix replay <record-id>
 ```
 
@@ -1151,7 +1266,7 @@ Analyzes context usage: active/warm/cold/leaked classification, top consumer ide
 ### 9.9 rnix agtest — Reasoning Regression Testing
 
 ```
-Usage: rnix agtest <test-file> [--case <name>] [--json] [--verbose]
+Usage: rnix agtest <file-or-dir> [--dry-run] [--timeout <ms>] [--json] [--verbose]
 ```
 
 Declarative YAML test cases with three assertion types (reasoning/syscall/quality), supporting batch execution and CI integration.
@@ -1167,12 +1282,11 @@ Multi-pane TUI: agent tree, trace timeline, context heatmap. Supports offline re
 ### 9.11 rnix intent — Declarative Intent
 
 ```
-Usage: rnix intent apply "<description>"
-      rnix intent status
-      rnix intent reset <node-id>
+Usage: rnix intent status
+      rnix intent list
 ```
 
-LLM-driven intent decomposition with Reconciler for continuous reconciliation. Supports incremental updates.
+LLM-driven intent decomposition with Reconciler for continuous reconciliation. `status` / `list` inspect intent state. To declare a new intent use the top-level `rnix apply "<description>"` (see §4.22).
 
 ### 9.12 rnix serve — LLM Gateway
 

@@ -67,7 +67,8 @@ providers:
 | `claude-cli` | 调用 Claude Code CLI（`claude -p`） | Anthropic Claude |
 | `cursor-cli` | 调用 Cursor CLI（`agent --print`） | Cursor |
 | `openai-compat` | 调用 OpenAI 兼容的 HTTP API 端点 | Ollama、Groq、DeepSeek 及任何 OpenAI 兼容服务 |
-| `qwen-cli` | 调用通义千问 Code CLI（`qwen --chat`） | Qwen Code |
+| `qwen-cli` | 调用通义千问 Code CLI（`qwen --output-format json …`） | Qwen Code |
+| `codex-cli` | 调用 OpenAI Codex CLI | OpenAI Codex |
 | `openai` | OpenAI 官方 SDK（`github.com/openai/openai-go/v3`） | OpenAI GPT-4、GPT-4o |
 | `gemini` | 原生 Gemini API（`google.golang.org/genai`） | Google Gemini |
 | `anthropic` | Anthropic 官方 SDK（`anthropic-sdk-go`） | Claude（通过 API，非 CLI） |
@@ -129,7 +130,11 @@ deepseek     http    offline   deepseek-chat      timeout
 | `max_tokens` | `int` | `0` | 每次 LLM 调用的最大输出 token 数；`0` 使用 API 默认值 |
 | `cost_per_token` | `float64` | `0` | 每 token 成本（美元），用于预算追踪；`0` 禁用成本追踪 |
 | `thinking_budget` | `int` | `0` | 思考预算 token 数（`gemini`、`anthropic` 和 `openai-compat` 驱动）；`0` 禁用 |
-| `extra_args` | `string[]` | `[]` | 传递给 CLI 的额外参数（仅 `claude-cli`、`cursor-cli`、`qwen-cli`） |
+| `reasoning_effort` | `string` | `""` | 透传给提供商的离散推理强度（见下文）；为空时使用提供商原生默认 |
+| `extra_args` | `string[]` | `[]` | 传递给 CLI 的额外参数（仅 `claude-cli`、`qwen-cli`、`codex-cli`） |
+| `timeout_sec` | `int` | `0` | 每请求超时（秒）；`0` = 驱动默认值（CLI 驱动为 5 分钟） |
+| `grace_sec` | `int` | `0` | CLI 在 `SIGTERM` 与 `SIGKILL` 之间的宽限期；`0` = 驱动默认值（20 秒） |
+| `models` | `map` | `{}` | 按模型名分键的元数据：`<model>: {context_window: N}`，用于推导 `context_budget` |
 
 **示例** — 带思考预算的 Gemini：
 
@@ -151,6 +156,48 @@ deepseek     http    offline   deepseek-chat      timeout
   default_model: deepseek-reasoner
   thinking_budget: 16384
 ```
+
+### 推理强度（Reasoning Effort） {#reasoning-effort}
+
+OpenAI、Anthropic 和 Gemini 的较新模型用离散的**强度等级**而非 token 预算表达推理强度。`reasoning_effort` 字段会原样透传给提供商——Rnix 不校验、不映射、不改名，因此厂商新增的等级无需更新 Rnix 即可使用。
+
+```yaml
+- name: gpt-high
+  driver: openai
+  api_key_env: OPENAI_API_KEY
+  default_model: gpt-5.1
+  reasoning_effort: high      # OpenAI / Anthropic 等级为小写
+
+- name: gemini-high
+  driver: gemini
+  api_key_env: GOOGLE_API_KEY
+  default_model: gemini-3-pro
+  reasoning_effort: HIGH      # Gemini 等级为大写
+```
+
+::: warning 大小写敏感
+该值透传时不做大小写归一化。Gemini 要求大写（`HIGH`），OpenAI 和 Anthropic 要求小写（`high`）。写错大小写时由提供商报错，而非 Rnix。
+:::
+
+**驱动支持** — `openai`、`openai-compat`、`anthropic`、`gemini`、`claude-cli`、`codex-cli` 会将该值转发到各自的原生接口。`cursor-cli` 和 `qwen-cli` 没有 effort 参数；配置了也会被忽略并记录警告。
+
+**按 spawn 覆盖。** effort 也可在每次进程级设置，通过四级兜底解析（最高非空者胜出）：
+
+1. 按 spawn —— CLI `--reasoning-effort`、`compose.yaml` 或 AgentShell `spawn --effort`
+2. Agent 清单 —— `agent.yaml` 的 `models.reasoning_effort`
+3. 提供商 —— `providers.yaml` 的 `reasoning_effort`
+4. 提供商原生默认
+
+```bash
+# 为单次运行覆盖 effort
+rnix "审计这个模块的竞态" --reasoning-effort high
+```
+
+::: tip
+一旦在提供商上设置了 `reasoning_effort`，它就成为该提供商的事实地板——第 1、2 级可以抬高或改变它，但若都未指定，最终生效的是提供商值而非 API 原生默认。
+:::
+
+与旧版 `thinking_budget` 的关系见配置指南的 [推理强度](/zh/guide/configuration#reasoning-effort) 说明。
 
 ---
 

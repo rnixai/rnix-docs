@@ -30,6 +30,25 @@ $ rnix strace <pid>
 
 ---
 
+## Raw LLM I/O {#raw-llm-io}
+
+`strace` shows that an LLM call happened; `--raw` shows exactly what was sent and received. For every LLM call, Rnix can record the raw request and response and let you replay it afterward:
+
+- **API-based providers** — the HTTP request (URL, headers, body) and response, with parameters such as `reasoning_effort` and `thinking_budget` visible exactly as transmitted.
+- **CLI-based providers** — the full command invocation (arguments and stdin) plus stdout, stderr, and exit code.
+
+```bash
+$ rnix strace <pid> --raw            # every captured LLM call
+$ rnix strace <pid> --raw --step 3   # a single reasoning step
+```
+
+**Key points:**
+- Credentials (authorization headers, API keys, tokens) are automatically redacted before anything is written.
+- Capture is enabled by default, bounded by a size limit, and subject to the same retention policy as other process history — so it works for both live and already-finished processes.
+- The same captures are available from the Dashboard inspector's **Raw I/O** view and over IPC, sharing one backend.
+
+---
+
 ## gdb — Interactive Debugger
 
 Attach to a running agent for interactive debugging with breakpoints, stepping, and runtime inspection.

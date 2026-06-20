@@ -29,20 +29,23 @@ Rnix 通过一等暂停/恢复原语和"Dead 即冻结"的恢复哲学重新定�
 用于进程暂停和恢复的信号：
 
 ```bash
-# 暂停运行中的进程（以及可选的子树）
-rnix pause <pid>              # 单进程
-rnix pause --subtree <pid>    # 进程 + 所有后代
+# 挂起运行中的进程
+rnix suspend <pid>            # 单进程（SIGPAUSE）
 
-# 恢复已暂停的进程
-rnix resume <uuid>            # 从持久化状态恢复
-rnix resume --fork <uuid>     # 新 UUID，链接到原进程
+# 恢复已挂起或历史进程
+rnix resume <pid|uuid>        # 从持久化状态恢复
+rnix resume --fork <pid|uuid> # 新 UUID，链接到原进程
 ```
+
+::: tip 子树挂起
+**没有顶层 `rnix pause --subtree` CLI 命令**。挂起整个进程子树**仅在 Dashboard 内可用**（由其通过 IPC 驱动）。顶层 CLI 只暴露单进程的 `rnix suspend <pid>`。
+:::
 
 暂停时，推理循环在下一个 I/O 边界处阻塞——进程保持 `Running` 状态且 `IsPaused = true`。耗时计时器冻结。心跳监控跳过已暂停的进程（它们有意停止发送心跳）。
 
 ### 子树操作
 
-`SubtreeManager` 提供跨进程树的统一暂停/恢复：
+`SubtreeManager` 提供跨进程树的统一挂起/恢复。该能力**仅通过 Dashboard 暴露**（由其通过 IPC 驱动）——没有对应的顶层 CLI 标志：
 
 ```
 PID 1 orchestrator (Running)
@@ -50,9 +53,9 @@ PID 1 orchestrator (Running)
 ├── PID 3 reviewer (Running)
 └── PID 4 researcher (Suspended)
 
-$ rnix pause --subtree 1
-# 暂停 PID 1、2、3。PID 4 已经处于暂停状态。
-# 树状态：所有成员已暂停，祖先节点知晓暂停原因。
+# （Dashboard 对 PID 1 执行子树挂起）
+# 挂起 PID 1、2、3。PID 4 已经处于挂起状态。
+# 树状态：所有成员已挂起，祖先节点知晓挂起原因。
 ```
 
 恢复向上传播：恢复一个后代进程会唤醒其祖先链，以便 orchestrator 可以继续管理其子树。
@@ -63,9 +66,9 @@ $ rnix pause --subtree 1
 
 | 模式 | 命令 | UUID | 使用场景 |
 |------|------|------|----------|
-| **接续** | `rnix resume <uuid>` | 保持不变 | daemon 崩溃后的恢复 |
-| **分叉** | `rnix resume --fork <uuid>` | 新 UUID + `origin_uuid` | Git 式探索 |
-| **截断分叉** | `rnix resume --fork --from-step N <uuid>` | 新 UUID | 从历史中途重试 |
+| **接续** | `rnix resume <pid\|uuid>` | 保持不变 | daemon 崩溃后的恢复 |
+| **分叉** | `rnix resume --fork <pid\|uuid>` | 新 UUID + `origin_uuid` | Git 式探索 |
+| **截断分叉** | `rnix resume --fork --from-step N <pid\|uuid>` | 新 UUID | 从历史中途重试 |
 | **Compose 节点** | `rnix compose resume --node <name>` | 复用上述模式 | DAG 节点恢复 |
 
 ### 接续模式
@@ -152,7 +155,7 @@ $ rnix ps
 PID  STATE       AGENT
 3    Suspended   coder          # 从磁盘还原，PID 重新种子化
 
-$ rnix resume <uuid>
+$ rnix resume <pid|uuid>
 # 从检查点恢复，继承还原后的 PID
 ```
 
@@ -164,10 +167,14 @@ $ rnix resume <uuid>
 
 ```yaml
 gc:
-  retention_days: 30      # 删除超过 30 天的条目；0 = 禁用
-  max_entries: 500        # 最多保留 500 条历史记录；0 = 禁用
+  retention_days: 30      # 示例值，非默认值。删除超过 N 天的条目
+  max_entries: 500        # 示例值，非默认值。最多保留 N 条历史记录
   interval_seconds: 3600  # 后台扫描间隔（最小 60，默认 1 小时）
 ```
+
+::: warning 默认值
+`retention_days` 和 `max_entries` **均默认为 `0`（GC 关闭）**——见 `kernel/gc_config.go`。上面的 `30` / `500` 仅为示例，必须显式设置才能启用垃圾回收。
+:::
 
 ### GC 规则
 
@@ -192,13 +199,12 @@ rnix gc --json             # JSON 输出（隐含 --force）
 
 | 命令 | 说明 |
 |------|------|
-| `rnix pause <pid>` | 暂停进程（SIGPAUSE） |
-| `rnix pause --subtree <pid>` | 暂停进程及其后代 |
-| `rnix resume <uuid>` | 从持久化状态恢复 |
-| `rnix resume --fork <uuid>` | 以新 UUID 恢复 |
-| `rnix resume --fork --from-step N <uuid>` | 从第 N 步恢复 |
+| `rnix suspend <pid>` | 挂起进程（SIGPAUSE） |
+| `rnix resume <pid\|uuid>` | 从持久化状态恢复 |
+| `rnix resume --fork <pid\|uuid>` | 以新 UUID 恢复 |
+| `rnix resume --fork --from-step N <pid\|uuid>` | 从第 N 步恢复 |
 | `rnix compose resume --node <name>` | 恢复 Compose DAG 节点 |
-| `rnix list-resumable` | 列出所有可恢复的进程 |
+| `rnix ps -a` | 列出所有进程，包括可恢复的 Dead/Suspended 进程 |
 | `rnix gc` | 垃圾回收旧进程数据 |
 
 ---
