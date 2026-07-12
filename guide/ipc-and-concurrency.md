@@ -91,6 +91,20 @@ Used by the dashboard `p` key for tree-wide pause/resume toggle. The IPC method 
 
 ---
 
+## Synchronous Wait
+
+`rnix wait <pid>` blocks until a process reaches a terminal state and then propagates its exit code, giving external tooling a Unix `waitpid`-style join point for any process — not only ones it spawned. An already-finished process returns immediately from history. A `--timeout` bounds the wait (exiting with code 124 if it elapses), and `--json` emits a machine-readable result.
+
+See the [CLI Reference](/reference/cli) for full flags and output format.
+
+## Attaching External Processes to the Tree
+
+A process started from **outside** a running Rnix process — for example a shell script that shells out to `rnix` — has no parent in the process tree by default. The `--parent <pid>` spawn option (also settable via the `RNIX_PARENT_PID` environment variable) attaches such a process to the correct place in the tree, so the Dashboard shows accurate parent/child relationships and spawn-depth limits still apply.
+
+This complements `rnix wait`: an outer script can spawn work with `--parent`, then `rnix wait` on the returned PID to join it synchronously.
+
+---
+
 ## Three-Level Concurrency Model
 
 | Level | Primitive | Scheduling | Isolation | Use Case |

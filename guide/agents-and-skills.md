@@ -60,10 +60,11 @@ At spawn, Rnix also reads the nearest project-root `AGENTS.md` and injects it as
 - **Nearest-wins lookup** — walks up from the working directory, with the project root as the boundary (never escapes the project).
 - **Only `AGENTS.md`** is recognized — it never falls back to reading `CLAUDE.md`.
 - **64 KiB cap** — larger files are UTF-8-safe truncated with a trailing marker.
-- **Eager frozen snapshot** — read once at spawn and not re-read on `specialize`, protecting prompt-cache hit rate.
+- **Eager frozen snapshot** — read once at spawn and not re-read on `specialize` (which invalidates and rebuilds the prompt), protecting prompt-cache hit rate.
 - **Opt-out** — set `project_doc: false` in `agent.yaml` (default is enabled). Direct spawns without an agent default to enabled.
+- **Graceful degradation** — no `AGENTS.md`, a read failure, or a process without project context yields an empty section; the spawn completes normally without error.
 
-Implemented in `kernel/sections.go` and `internal/config/agentsmd.go`.
+The injected body is visible in `process-meta.json` under `system_prompt` as a `# Project Instructions (AGENTS.md)` block. Implemented in `kernel/sections.go` and `internal/config/agentsmd.go`; see [docs/agents-md-injection.md](https://github.com/rnixai/rnix/blob/main/docs/agents-md-injection.md) for the full behavior spec.
 
 ---
 

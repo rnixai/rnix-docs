@@ -199,6 +199,27 @@ rnix "审计这个模块的竞态" --reasoning-effort high
 
 与旧版 `thinking_budget` 的关系见配置指南的 [推理强度](/zh/guide/configuration#reasoning-effort) 说明。
 
+### Codex 沙箱模式（Sandbox Mode）
+
+`codex-cli` 驱动在沙箱中执行 shell 命令，其强度由 `sandbox_mode` 字段显式选择。驱动会下发 `codex exec --sandbox <mode>`，取代此前硬编码的 `--full-auto` 标志——后者在某些工作区布局下会 fail-closed（例如 worktree 内 `.agents` 等受保护的元数据符号链接）。
+
+```yaml
+- name: codex
+  driver: codex-cli
+  default_model: gpt-5.1-codex
+  sandbox_mode: workspace-write   # read-only | workspace-write | danger-full-access
+```
+
+| 取值 | 行为 |
+|------|------|
+| `read-only` | Codex 可读取工作区但不可写入 |
+| `workspace-write` | 在工作区内读写（`sandbox_mode` 为空时的**默认值**） |
+| `danger-full-access` | 完全禁用沙箱——构建期会记录一条警告；仅用于可信的项目/worktree |
+
+::: warning 仅限 codex-cli
+`sandbox_mode` **仅**对 `codex-cli` 驱动生效。在其他任何 provider 上设置都会被忽略并记录警告——它绝不会被映射为 Claude 的 `permission_mode`。对于无需沙箱的 worktree，优先使用 `sandbox_mode: danger-full-access`，而非裸的 `extra_args: [--yolo]`（后者可能与 `--sandbox` 冲突）。
+:::
+
 ---
 
 ## CLI 驱动能力探测

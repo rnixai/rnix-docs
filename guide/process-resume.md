@@ -69,6 +69,7 @@ Resume propagates upward: resuming a descendant wakes the ancestor chain so the 
 | **Continue** | `rnix resume <pid\|uuid>` | Preserved | Recovery after daemon crash |
 | **Fork** | `rnix resume --fork <pid\|uuid>` | New UUID + `origin_uuid` | Git-style exploration |
 | **Truncated Fork** | `rnix resume --fork --from-step N <pid\|uuid>` | New UUID | Retry from mid-history |
+| **Steered Resume** | `rnix resume --new-input <text> <pid\|uuid>` | Preserved (or new, with `--fork`) | Continue with fresh input |
 | **Compose Node** | `rnix compose resume --node <name>` | Reuses above | DAG node recovery |
 
 ### Continue Mode
@@ -110,6 +111,21 @@ $ rnix resume --fork --from-step 5 abc123
 ```
 
 > **Note**: `--from-step` requires the history path. Conflicts with checkpoints — `ErrInvalid` if both apply.
+
+### Steered Resume (`--new-input`)
+
+_Added in 0.11.0._ Inject a new user message into the resumed conversation. After the historical context is restored, the text is appended as the next user turn before reasoning continues — so you steer the process with fresh instructions while keeping its full prior context:
+
+```bash
+$ rnix resume --new-input "focus only on the auth module now" abc123
+# Restores abc123's context, appends the new user turn, then continues reasoning
+```
+
+Combine with `--fork` to explore a new direction without mutating the original run:
+
+```bash
+$ rnix resume --fork --new-input "try a different approach" abc123
+```
 
 ---
 
@@ -203,6 +219,7 @@ rnix gc --json             # JSON output (implies --force)
 | `rnix resume <pid\|uuid>` | Resume from persisted state |
 | `rnix resume --fork <pid\|uuid>` | Resume with new UUID |
 | `rnix resume --fork --from-step N <pid\|uuid>` | Resume from step N |
+| `rnix resume --new-input <text> <pid\|uuid>` | Resume, appending a new user turn |
 | `rnix compose resume --node <name>` | Resume a compose DAG node |
 | `rnix ps -a` | List all processes, including resumable Dead/Suspended ones |
 | `rnix gc` | Garbage collect old process data |

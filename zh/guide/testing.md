@@ -144,6 +144,48 @@ rnix agtest tests/code-review.yaml --verbose
 
 ---
 
+## 智能体行为回归（agtest） {#agent-behavior-regression-agtest}
+
+_0.11.0 新增。_ 在临时用例集之外，Rnix 还内置了一套两层回归框架，其目标是闭合反馈回路：**每次 agent 出丑，测试集就增长**。两层之间在确定性与保真度上各有取舍。
+
+### Tier1——离线回放门禁（`make agtest`）
+
+Tier1 用例（`tests/agtest/tier1/`）是**确定性、离线、快速（< 5 分钟）**的 PR 级门禁。它们绝不碰真实 provider 或 API key：LLM 响应由**回放驱动（replay driver）**脚本化，因此相同输入总能得到相同的运行。每个用例是一份 `NN-slug.yaml`，配一份 `scripts/NN-slug.responses.yaml` 响应脚本。
+
+```bash
+make agtest        # Tier1，隔离 daemon，几秒到十几秒
+```
+
+`make agtest` 在**完全隔离的 daemon** 上运行套件：它临时开辟 `XDG_RUNTIME_DIR` / `RNIX_DATA_DIR` / `XDG_CONFIG_HOME` 三个目录，把 `replay` provider 声明写入这份隔离配置，启动一个用完即弃的 daemon，跑 `rnix agtest tests/agtest/tier1/ --tier1`，并在退出时（无论成败）全部清理——因此绝不会撞上你常驻的 daemon。它**不属于 `make all`**：它跑的是真实的 spawn/daemon/VFS 全链路，与 `go test` 是不同的失败面，在 CI 中作为独立 job 运行。`--tier1` 标志会强制执行 Tier1 纪律（断言非空、只允许 `output` / `syscalls` 断言——禁止 `quality`——且使用 `replay` provider）。
+
+### Tier2——advisory 活体套件（`make agtest-live`）
+
+Tier2 用例（`tests/agtest/tier2/`）打**真实 LLM**，属于 **advisory**——不阻塞任何 CI 门禁。由于它们依赖真正非确定性的模型行为，因此可以使用 `quality`（LLM 裁判）断言；它们失败可能只是模型漂移、限流或网络抖动，而非代码回归。
+
+```bash
+make agtest-live   # Tier2，你的常驻 daemon + 真实 providers.yaml / API key
+```
+
+**经验法则**：能用脚本化响应复现的行为，就归 Tier1。Tier2 只留给"真实模型在这个 prompt 下大概率会做对某件事"这类本质上非确定性的问题。
+
+### 失败 → 用例工作流
+
+回归回路闭环的核心：用 `rnix agtest import` 把一次生产失败转成永久回归用例。
+
+```
+1. rnix ps -a --uuid          找到出问题进程的 UUID（或 ~xxxxxx 短 ID）
+2. rnix agtest import <uuid>  生成用例骨架 + 响应脚本到 tests/agtest/imported/
+3. 人工 review               填入真实 assert:，核对 warning 注释
+4. 移入 tests/agtest/tier1/    重命名为下一个 NN-slug（用例 + scripts/）
+5. make agtest               验证新用例通过、且不破坏任何既有用例
+```
+
+`rnix agtest import` **直接从磁盘读取**进程的 `steps.jsonl` / `proc-info.json` / `events.jsonl`（无需 daemon），生成一份用例文件加一份回放响应脚本骨架。骨架**故意不可直接运行**：它只带注释形式的断言建议，因此 `agtest.ValidateTier1` 会一直拒绝它，直到人工读懂这次运行并写入真实断言。每一处"尽力重建"（无法解析的工具输入、猜测的工具名、legacy 字段回退）都会在文件顶部的 warning 注释里标出。输出落在 `tests/agtest/imported/`（已被 git 忽略），因此不会被误提交。
+
+完整的标志/子命令参考见 [CLI 参考 › rnix agtest](/zh/reference/cli#rnix-agtest)。
+
+---
+
 ## 相关文档
 
 - [调试](/zh/guide/debugging) — 使用 gdb 进行交互式调试

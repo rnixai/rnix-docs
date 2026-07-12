@@ -182,6 +182,10 @@ features:
 RNIX_FEATURE_PROFILE=baseline rnix "analyze this code"
 ```
 
+::: warning daemon 启动时读取一次
+`RNIX_FEATURE_PROFILE` 只在 daemon 进程启动时经其自身环境读取**一次**。在 shell 里 export 它对**已在运行的 daemon 无效**——CLI 检测到不匹配会向 stderr 打印警告。要更改活跃 daemon 的档案，需运行 `rnix daemon stop`，让下一条命令重启 daemon（CLI 自启动的 daemon 会继承该变量并生效）。
+:::
+
 **Custom 模式：**
 
 当 `profile: custom` 时，仅应用 `custom:` 下显式列出的 flag。未列出的 flag 默认为 `true`——custom 模式用于精准消融，而非全面禁用。
@@ -216,6 +220,31 @@ rnix gc --json             # JSON 输出（隐含 --force）
 ```
 
 详见 [进程恢复](/zh/guide/process-resume#垃圾回收)。
+
+### 原始请求记录（Raw Capture） {#raw-capture}
+
+Rnix 会记录每次 LLM 调用的原始请求与响应——API 驱动记 HTTP body，CLI 驱动记完整命令调用及输出——以便核实究竟发送了什么（prompt、`reasoning_effort`、`thinking_budget`、temperature……）。该功能**默认开启**。
+
+```yaml
+raw_capture:
+  enabled: true            # 默认 true；设 false 则全局关闭原始记录
+  max_output_bytes: 4194304  # 单条记录截断上限（默认 4 MB）
+```
+
+| 字段 | 默认值 | 说明 |
+|------|--------|------|
+| `enabled` | `true` | 总开关；`false` 则所有进程不再写 `raw.jsonl` |
+| `max_output_bytes` | `4194304`（4 MB） | 单条 request/response 字段超过此字节数会被就地截断（按记录截断，非按字段）；该记录标记 `truncated: true` |
+
+行为：
+
+- 每次成功的 `reasonStep` 会向 `<data-dir>/.../steps/<uuid>/raw.jsonl` 追加一行 NDJSON，与 `steps.jsonl` / `events.jsonl` 同目录。文件采用 lazy 创建——某驱动从未产生 capture 时不会留下空文件。
+- **失败调用同样会被记录**，带 `outcome: "error"` 及错误文本，因此失败的那次请求仍可取回。
+- 写盘前**凭据自动脱敏**——authorization header、API key 及匹配的 argv flag 会被替换为不可逆的 `redacted(len=…,prefix=…,sha256=…)` 指纹；reasoning-effort 与 model 等 flag 保留真实值。
+- `raw.jsonl` 落在进程的 step 目录内，受同一套 [GC](#垃圾回收gc) `retention_days` / `max_entries` 策略清理；Running 与 Suspended 进程豁免。
+- Raw capture 是**正交的 kernel 级配置**——独立于 `features` 档案，因此 `baseline` 档案不会关闭它。
+
+落盘后可通过 `rnix strace <pid> --raw`、Dashboard inspector 的 **Raw I/O** 视图，以及 `get_raw_capture` IPC 方法事后查询。详见 [调试 › 原始 LLM I/O](/zh/guide/debugging#raw-llm-io)。
 
 ---
 

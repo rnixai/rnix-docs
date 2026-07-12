@@ -182,6 +182,10 @@ Set `RNIX_FEATURE_PROFILE` to override the config file setting. Valid values: `b
 RNIX_FEATURE_PROFILE=baseline rnix "analyze this code"
 ```
 
+::: warning Read once at daemon startup
+`RNIX_FEATURE_PROFILE` is read **once**, when the daemon process starts, via its own environment. Exporting it in your shell has **no effect on an already-running daemon** — the CLI detects the mismatch and prints a warning to stderr. To change the profile of a live daemon, run `rnix daemon stop` and let the next command restart it (a CLI-autostarted daemon inherits the variable and picks it up).
+:::
+
 **Custom Mode:**
 
 When `profile: custom`, only the flags explicitly listed under `custom:` are applied. Unlisted flags default to `true` — custom mode is for surgical ablation, not wholesale disabling.
@@ -206,6 +210,31 @@ gc:
 - Running and Suspended processes are permanently exempt
 
 See [Process Resume](/guide/process-resume#garbage-collection) for GC CLI usage.
+
+### Raw Capture
+
+Rnix records the raw request and response of every LLM call — the HTTP body for API drivers, and the full command invocation plus output for CLI drivers — so you can verify exactly what was sent (prompts, `reasoning_effort`, `thinking_budget`, temperature, …). Captures are **enabled by default**.
+
+```yaml
+raw_capture:
+  enabled: true            # default true; set false to disable raw logging globally
+  max_output_bytes: 4194304  # per-record truncation limit (default 4 MB)
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `enabled` | `true` | Master switch; `false` stops all processes from writing `raw.jsonl` |
+| `max_output_bytes` | `4194304` (4 MB) | Any single request/response field larger than this is truncated in place (per-record, not per-field); the record is marked `truncated: true` |
+
+Behavior:
+
+- Each successful `reasonStep` appends one NDJSON line to `<data-dir>/.../steps/<uuid>/raw.jsonl`, alongside `steps.jsonl` / `events.jsonl`. The file is created lazily — a driver that never produces a capture leaves no empty file.
+- **Failed calls are captured too**, tagged with `outcome: "error"` and the error text, so the request that failed is still recoverable.
+- **Credentials are automatically redacted** before writing — authorization headers, API keys, and matching argv flags become non-reversible `redacted(len=…,prefix=…,sha256=…)` fingerprints. Reasoning-effort and model flags keep their real values.
+- `raw.jsonl` lives in the process's step directory and is cleaned up by the same [GC](#garbage-collection) `retention_days` / `max_entries` policy; Running and Suspended processes are exempt.
+- Raw capture is an **orthogonal kernel-level setting** — independent of the `features` profile, so a `baseline` profile does not turn it off.
+
+Captures are queryable after the fact via `rnix strace <pid> --raw`, the Dashboard inspector's **Raw I/O** view, and the `get_raw_capture` IPC method. See [Debugging › Raw LLM I/O](/guide/debugging#raw-llm-io).
 
 ---
 

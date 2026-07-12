@@ -106,6 +106,20 @@ When a process completes, the `Writeback` component asynchronously extracts usef
 
 ---
 
+## MEMORY.md as a Recall Source
+
+Each scope's entries are persisted to a `MEMORY.md` file (project: `.rnix/memory/MEMORY.md`, global: `~/.config/rnix/memory/MEMORY.md`). This file is not just storage — it is a **first-class source for `/dev/memory/recall`**, indexed alongside historical conversations:
+
+- **Real-time injection on commit** — every write through `/dev/memory/commit` (or `/dev/memory/profile`) re-indexes that scope's entries into the shared `RecallIndex` immediately (`IndexMemorySource`), so a fact committed in one process becomes recallable by later processes without a restart.
+- **Rebuild on daemon startup** — when the daemon starts, it reads each `MEMORY.md` from disk and rebuilds the index (`IndexMemoryFile`), so committed knowledge survives daemon restarts and is searchable again from a cold start.
+- **Recall coverage** — a `recall` query matches both extracted conversation knowledge and the entries in `MEMORY.md`, so hand-curated memories rank alongside auto-extracted ones.
+
+::: tip
+The process that performs a commit works from a frozen prompt snapshot for the remainder of its current step, so it does not see its own just-committed entry until a later step or a subsequent process. The entry is still injected into the shared index immediately for **other** processes.
+:::
+
+---
+
 ## Configuration
 
 Memory settings are configured in `memory.yaml`:

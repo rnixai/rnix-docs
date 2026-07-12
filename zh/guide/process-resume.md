@@ -69,6 +69,7 @@ PID 1 orchestrator (Running)
 | **接续** | `rnix resume <pid\|uuid>` | 保持不变 | daemon 崩溃后的恢复 |
 | **分叉** | `rnix resume --fork <pid\|uuid>` | 新 UUID + `origin_uuid` | Git 式探索 |
 | **截断分叉** | `rnix resume --fork --from-step N <pid\|uuid>` | 新 UUID | 从历史中途重试 |
+| **引导恢复** | `rnix resume --new-input <text> <pid\|uuid>` | 保持不变（配 `--fork` 则为新 UUID） | 带新输入继续 |
 | **Compose 节点** | `rnix compose resume --node <name>` | 复用上述模式 | DAG 节点恢复 |
 
 ### 接续模式
@@ -110,6 +111,21 @@ $ rnix resume --fork --from-step 5 abc123
 ```
 
 > **注意**：`--from-step` 需要历史路径。与检查点存在冲突时——`ErrInvalid` 如果两者同时适用。
+
+### 引导恢复（`--new-input`）
+
+_0.11.0 新增。_ 向被恢复的对话注入一段新的用户消息。历史上下文恢复完成后，这段文本会作为下一轮用户输入追加进去，然后再继续推理——从而在保留完整既往上下文的同时，用新的指令引导进程：
+
+```bash
+$ rnix resume --new-input "现在只聚焦 auth 模块" abc123
+# 恢复 abc123 的上下文，追加新的一轮用户输入，然后继续推理
+```
+
+配合 `--fork` 即可在不修改原始运行的前提下探索新方向：
+
+```bash
+$ rnix resume --fork --new-input "换个思路试试" abc123
+```
 
 ---
 
@@ -203,6 +219,7 @@ rnix gc --json             # JSON 输出（隐含 --force）
 | `rnix resume <pid\|uuid>` | 从持久化状态恢复 |
 | `rnix resume --fork <pid\|uuid>` | 以新 UUID 恢复 |
 | `rnix resume --fork --from-step N <pid\|uuid>` | 从第 N 步恢复 |
+| `rnix resume --new-input <text> <pid\|uuid>` | 恢复时追加一轮新的用户输入 |
 | `rnix compose resume --node <name>` | 恢复 Compose DAG 节点 |
 | `rnix ps -a` | 列出所有进程，包括可恢复的 Dead/Suspended 进程 |
 | `rnix gc` | 垃圾回收旧进程数据 |

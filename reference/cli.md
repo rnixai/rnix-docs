@@ -33,8 +33,11 @@ The intent is passed via the `-i`/`--intent` flag, **not** as a positional argum
 | `--max-steps` | — | `int` | `0` | Maximum reasoning steps (`0` = default 10) |
 | `--agent` | — | `string` | `""` | Agent definition name |
 | `--dashboard` | — | `bool` | `false` | Open dashboard after spawning the agent |
+| `--parent` | — | `uint` | `0` | Attach the spawned process under this parent PID (defaults to `$RNIX_PARENT_PID` when set). _Added in 0.11.0._ |
 
 The global `--model`/`--provider`/`--reasoning-effort` flags (see §4.1) also apply to the root command.
+
+**`--parent` / `RNIX_PARENT_PID` — Attach an externally spawned process to the tree.** By default a process spawned from outside a running Rnix process becomes a root of the process tree. Passing `--parent <pid>` (or exporting `RNIX_PARENT_PID=<pid>` for tools that shell out to `rnix`) attaches it under the given parent PID instead, so the Dashboard shows accurate parent/child relationships and spawn-depth limits still apply. The flag takes precedence over the environment variable.
 
 **Default Output Example:**
 
@@ -198,6 +201,46 @@ Signal: Always sends SIGTERM(1)
 
 ```
 [kernel] PID 1: signal sent (SIGTERM)
+```
+
+### rnix wait \<pid\> — Block Until Process Exit {#rnix-wait}
+
+_Added in 0.11.0._
+
+Block until the target process reaches a terminal state (`Zombie` / `Dead`), then propagate its exit code as this command's own exit code. This enables spawn-then-poll orchestration over the shell channel without parsing `rnix ps` output. Already-finished processes (including reaped ones found in history) return immediately.
+
+```
+Usage: rnix wait <pid> [--timeout <duration>] [--json]
+Arguments: <pid> — Process ID (a positive integer, exactly 1 argument)
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--timeout` | `string` | `""` | Bound the wait (Go duration, e.g. `30s`, `2m`). On expiry the command exits `124` (GNU `timeout` convention) and the target process is left untouched, so the same PID can be waited again to keep polling. Must be positive; omit to wait forever. |
+| `--json` | `bool` | `false` | Emit structured JSON (`pid` / `exit_code` / `exit_reason` / `timed_out`). |
+
+**Exit codes:** the target's exit code (terminal state) / `124` (timeout) / `1` (bad arguments, NOT_FOUND, or daemon down).
+
+Unlike most commands, `wait` does **not** auto-start the daemon: a freshly started daemon has no process to wait for, so a daemon-down state is a hard failure. A suspended process does not complete a wait (Unix `wait(2)` semantics: the wait blocks across suspend/resume); use `--timeout` to bound that case.
+
+**Success Output:**
+
+```
+PID 1 exited with code 0 (completed)
+```
+
+**JSON Output:**
+
+```json
+{"ok": true, "data": {"pid": 1, "exit_code": 0, "exit_reason": "completed", "timed_out": false}}
+```
+
+**Examples:**
+
+```bash
+rnix wait 1                  # block until PID 1 exits, propagate its code
+rnix wait 1 --timeout 30s    # give up after 30s (exit 124), leave PID 1 running
+rnix wait 1 --json           # machine-readable result
 ```
 
 ### 4.5 rnix strace \<pid\> — Syscall Tracing
@@ -621,7 +664,7 @@ Arguments: <pid> — Process ID (exactly 1 argument)
 Resume a process from a checkpoint (`Suspended`) **or** from history (`Dead` / `Zombie` / `context_full` / circuit-broken). This is checkpoint/history-based resume — it is *not* the same as unpausing a SIGPAUSE-paused process; for that use SIGRESUME (via dashboard `p` key or `rnix kill <pid>` with signal 5).
 
 ```
-Usage: rnix resume [--fork] [--from-step N] <pid|uuid>
+Usage: rnix resume [--fork] [--from-step N] [--new-input <text>] <pid|uuid>
 Arguments: <pid|uuid> — Process ID or UUID (exactly 1 argument)
 ```
 
@@ -629,6 +672,7 @@ Arguments: <pid|uuid> — Process ID or UUID (exactly 1 argument)
 |------|-------------|
 | `--fork` | Resume into a **new** UUID instead of inheriting the original. The forked process records an `origin_uuid` lineage link, so the original UUID stays independently resumable (Git-style exploration). |
 | `--from-step N` | Truncate history replay at step `N` before resuming (a *truncated fork*). Requires the history path and conflicts with checkpoints — returns `ErrInvalid` if both apply. `0` = no truncation. |
+| `--new-input <text>` | Append this text as a new user turn after the historical context is restored, before reasoning continues — steer the resumed process with fresh input while keeping its full prior context. _Added in 0.11.0._ |
 
 Accepts both a PID (for a running daemon process) and a UUID (for resuming from persisted checkpoints or history). See [Process Resume](/guide/process-resume) for the full resume / fork model and the Dashboard Lineage view.
 
@@ -813,7 +857,7 @@ $ rnix serve --port 3000
 Serving 2 providers on http://127.0.0.1:3000
 ```
 
-### 4.27 rnix agtest \[file-or-dir\] — Agent Behavior Testing
+### 4.27 rnix agtest \[file-or-dir\] — Agent Behavior Testing {#rnix-agtest}
 
 Run declarative agent behavior regression tests defined in YAML files.
 
@@ -828,6 +872,7 @@ Arguments: <file-or-dir> — Single YAML file or directory containing *.yaml fil
 |------|------|---------|-------------|
 | `--dry-run` | `bool` | `false` | Parse and validate only, do not execute tests |
 | `--timeout` | `int64` | `60000` | Global timeout per test case in milliseconds |
+| `--tier1` | `bool` | `false` | Enforce the Tier1 discipline (`agtest.ValidateTier1`): non-empty assertions, only `output` / `syscalls` assertions (no `quality`), and the `replay` provider. A violating suite is rejected before execution. _Added in 0.11.0._ |
 
 **Output (text mode):**
 
@@ -848,7 +893,31 @@ Arguments: <file-or-dir> — Single YAML file or directory containing *.yaml fil
 $ rnix agtest tests/
 $ rnix agtest test.yaml --dry-run
 $ rnix agtest tests/ --timeout 120000 --json
+$ rnix agtest tests/agtest/tier1/ --tier1        # PR-gate discipline
 ```
+
+**Subcommand: `rnix agtest import <uuid>`** _(Added in 0.11.0)_
+
+Turn a persisted process run into a Tier1 regression-case skeleton — the "failure → case" workflow that closes the regression loop. Reads the process's `steps.jsonl` / `proc-info.json` / `events.jsonl` **directly from disk** (no daemon required) and writes a case-file + replay response-script pair for manual review.
+
+```
+Usage: rnix agtest import <uuid> [--out <dir>]
+Arguments: <uuid> — Full UUID, last-6 short id (dashboard `~xxxxxx` convention), or a unique prefix (exactly 1 argument)
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--out` | `string` | `tests/agtest/imported` | Output directory for the generated case + response script |
+
+The generated files are intentionally **not** wired into the Tier1 suite: the case has no live `assert:` block (only commented-out suggestions), so `agtest.ValidateTier1` rejects it until a human fills in real assertions. Ambiguous short-id / prefix matches are reported with the candidate list rather than silently picking the first. Review the output, then move both files into `tests/agtest/tier1/` under the next `NN-slug` ordinal.
+
+```bash
+$ rnix agtest import a1b2c3                                  # last-6 short id
+$ rnix agtest import a1b2c3d4-e5f6-4789-a012-3456789abcde    # full uuid
+$ rnix agtest import a1b2c3 --out /tmp/imported              # override output dir
+```
+
+See [Testing › Agent Behavior Regression (agtest)](/guide/testing#agent-behavior-regression-agtest) for the full two-tier framework and failure-to-case workflow.
 
 ### 4.28 rnix reputation \[agent\] — Agent Reputation Scores
 

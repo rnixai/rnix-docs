@@ -199,6 +199,27 @@ Once `reasoning_effort` is set on a provider it becomes that provider's effectiv
 
 See [Reasoning Effort](/guide/configuration#reasoning-effort) notes in the configuration guide for the relationship with the legacy `thinking_budget`.
 
+### Codex Sandbox Mode
+
+The `codex-cli` driver runs shell commands inside a sandbox whose strength is selected explicitly with the `sandbox_mode` field. The driver emits `codex exec --sandbox <mode>`, replacing the previously hardcoded `--full-auto` flag that could fail closed in some workspace layouts (e.g. protected metadata symlinks such as `.agents` inside a worktree).
+
+```yaml
+- name: codex
+  driver: codex-cli
+  default_model: gpt-5.1-codex
+  sandbox_mode: workspace-write   # read-only | workspace-write | danger-full-access
+```
+
+| Value | Behavior |
+|-------|----------|
+| `read-only` | Codex may read the workspace but cannot write |
+| `workspace-write` | Read/write within the workspace (**default** when `sandbox_mode` is empty) |
+| `danger-full-access` | Sandboxing fully disabled — logs a construction-time warning; use only for trusted projects/worktrees |
+
+::: warning codex-cli only
+`sandbox_mode` applies **only** to the `codex-cli` driver. Setting it on any other provider is ignored with a warning — it is never mapped to Claude's `permission_mode`. For a worktree that needs no sandbox, prefer `sandbox_mode: danger-full-access` over a raw `extra_args: [--yolo]`, which can conflict with `--sandbox`.
+:::
+
 ---
 
 ## CLI Driver Capabilities

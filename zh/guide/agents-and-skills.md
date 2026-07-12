@@ -60,10 +60,11 @@ Spawn 时，Rnix 还会读取最近的项目根 `AGENTS.md`，作为系统提示
 - **nearest-wins 查找** —— 从工作目录向上遍历，以项目根为边界（绝不越出项目）。
 - **只认 `AGENTS.md`** —— 绝不回退读 `CLAUDE.md`。
 - **64 KiB 上限** —— 超出的文件按 UTF-8 边界安全截断并附尾部标记。
-- **eager 冻结快照** —— spawn 时读盘一次，`specialize` 不重读，以保护 prompt 缓存命中率。
+- **eager 冻结快照** —— spawn 时读盘一次，`specialize`（会失效并重建 prompt）也不重读，以保护 prompt 缓存命中率。
 - **可禁用** —— 在 `agent.yaml` 中设 `project_doc: false`（默认开启）。无 agent 的直接 spawn 默认开启。
+- **优雅降级** —— 无 `AGENTS.md`、读取失败或进程无项目上下文时该段为空；spawn 正常完成，不报错。
 
-实现见 `kernel/sections.go` 和 `internal/config/agentsmd.go`。
+注入的正文可在 `process-meta.json` 的 `system_prompt` 字段中以 `# Project Instructions (AGENTS.md)` 块的形式看到。实现见 `kernel/sections.go` 和 `internal/config/agentsmd.go`；完整行为规范见 [docs/agents-md-injection.md](https://github.com/rnixai/rnix/blob/main/docs/agents-md-injection.md)。
 
 ---
 

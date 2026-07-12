@@ -171,6 +171,16 @@ The Agent Tree pane shows **all** processes — running, completed, failed, and 
   - **Heatmap** — context snapshot from `ctx-profile.json`
   - **Steps/LLM** — reasoning steps from `steps.jsonl` + system prompt from `process-meta.json`
 
+### Process-List Pagination
+
+For sessions with large process histories, the Dashboard loads processes **page by page** in most-recent-first order rather than fetching everything at once, so it stays responsive as history grows. Historical processes already loaded are **preserved** as new pages arrive, keeping the process tree intact while you scroll further back.
+
+### Identity & Health Display
+
+- **Real-time health counts** distinguish the **active process set** from historical entries and fold in recently-failed processes, so a fast Running → Dead transition is no longer missed or misreported in the summary bar.
+- **UUID display** identifies each process by its **distinguishing trailing characters** rather than a shared leading prefix (short IDs are the last 6 characters of the UUID).
+- **Timestamps** show **time-only for today's entries** and a date prefix for older ones.
+
 ### Resumable Process Listing
 
 Press `R` (Shift+R) to filter the tree to show only resumable processes — Suspended, Zombie, and Dead processes with persisted data on disk. From this view, press `Enter` on a process to resume it.

@@ -45,7 +45,21 @@ $ rnix strace <pid> --raw --step 3   # a single reasoning step
 **Key points:**
 - Credentials (authorization headers, API keys, tokens) are automatically redacted before anything is written.
 - Capture is enabled by default, bounded by a size limit, and subject to the same retention policy as other process history — so it works for both live and already-finished processes.
+- **Failed calls are recorded too** — a call that errors out is captured with an `outcome: error` marker and the error text, rendered as a `⚠ outcome: error — <error>` line above the response. Failure is exactly when you most want the real request back, so a primary failure followed by a successful fallback leaves two records for the same step.
 - The same captures are available from the Dashboard inspector's **Raw I/O** view and over IPC, sharing one backend.
+
+See [Configuration › Raw Capture](/guide/configuration#raw-capture) for the `raw_capture` config keys.
+
+---
+
+## Orchestration Exit Codes
+
+When a process orchestrates sub-tasks, its exit code reflects **genuine** failure, not incidental noise. As of 0.11.0:
+
+- A process that completes successfully **no longer reports a failed exit code merely because of a handled, non-fatal tool error**. A tool call that erred but was recovered from does not, by itself, fail the parent.
+- Failure is driven by real signals instead: a genuine child-task failure, or **repeated** tool errors that trip the cumulative tool-error breaker.
+
+This makes a non-zero exit code a reliable signal that something actually went wrong, so `rnix wait` and CI gates can trust it.
 
 ---
 

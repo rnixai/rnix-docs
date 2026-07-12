@@ -33,8 +33,11 @@
 | `--max-steps` | — | `int` | `0` | 最大推理步数（`0` = 默认 10） |
 | `--agent` | — | `string` | `""` | Agent 定义名称 |
 | `--dashboard` | — | `bool` | `false` | spawn 智能体后打开 dashboard |
+| `--parent` | — | `uint` | `0` | 将 spawn 出的进程挂到该父 PID 之下（未指定时回退到 `$RNIX_PARENT_PID`）。_0.11.0 新增。_ |
 
 全局 `--model`/`--provider`/`--reasoning-effort` flag（见 §4.1）同样适用于根命令。
+
+**`--parent` / `RNIX_PARENT_PID`——把外部 spawn 的进程挂到进程树上。** 默认情况下，从运行中的 Rnix 进程之外 spawn 的进程会成为进程树的一个根节点。传入 `--parent <pid>`（或为会 shell 调用 `rnix` 的工具导出 `RNIX_PARENT_PID=<pid>`）可将其改挂到指定父 PID 之下，从而让 Dashboard 展示正确的父子血缘，spawn 深度限制也照常生效。该 flag 的优先级高于环境变量。
 
 **默认输出示例：**
 
@@ -198,6 +201,46 @@ $ rnix ps -a
 
 ```
 [kernel] PID 1: signal sent (SIGTERM)
+```
+
+### rnix wait \<pid\> — 阻塞至进程退出 {#rnix-wait}
+
+_0.11.0 新增。_
+
+阻塞直到目标进程进入终态（`Zombie` / `Dead`），然后把它的退出码作为本命令自身的退出码传出。这让"先 spawn 再轮询"式的编排可以直接走 shell 通道，而无需解析 `rnix ps` 输出。已结束的进程（含从历史中找到的、已被 reap 的进程）会立即返回。
+
+```
+用法: rnix wait <pid> [--timeout <duration>] [--json]
+参数: <pid> — 进程 ID（正整数，恰好 1 个参数）
+```
+
+| Flag | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--timeout` | `string` | `""` | 限定等待时长（Go duration，如 `30s`、`2m`）。超时后命令以 `124` 退出（沿用 GNU `timeout` 惯例），目标进程保持原样不受影响，因此同一个 PID 可以反复 wait 以持续轮询。必须为正值；省略即永久等待。 |
+| `--json` | `bool` | `false` | 输出结构化 JSON（`pid` / `exit_code` / `exit_reason` / `timed_out`）。 |
+
+**退出码：** 目标进程的退出码（终态）／ `124`（超时）／ `1`（参数错误、NOT_FOUND 或 daemon 未运行）。
+
+与多数命令不同，`wait` **不会**自动启动 daemon：新启动的 daemon 里没有可等待的进程，因此 daemon 未运行时直接判为硬失败。被挂起（Suspended）的进程不会让 wait 完成（遵循 Unix `wait(2)` 语义：wait 会跨 suspend/resume 持续阻塞）；这种情况用 `--timeout` 来兜底。
+
+**成功输出：**
+
+```
+PID 1 exited with code 0 (completed)
+```
+
+**JSON 输出：**
+
+```json
+{"ok": true, "data": {"pid": 1, "exit_code": 0, "exit_reason": "completed", "timed_out": false}}
+```
+
+**示例：**
+
+```bash
+rnix wait 1                  # 阻塞至 PID 1 退出，并传出其退出码
+rnix wait 1 --timeout 30s    # 30s 后放弃（退出 124），保留 PID 1 继续运行
+rnix wait 1 --json           # 机器可读结果
 ```
 
 ### 4.5 rnix strace \<pid\> — Syscall 追踪
@@ -621,7 +664,7 @@ $ rnix compose down -f my-workflow.yaml --json
 从检查点（`Suspended`）**或**历史（`Dead` / `Zombie` / `context_full` / 熔断）恢复一个进程。这是基于检查点/历史的恢复——与恢复 SIGPAUSE 暂停的进程**不同**；后者请使用 SIGRESUME（通过 Dashboard `p` 键或 `rnix kill <pid>` 发送信号 5）。
 
 ```
-用法：rnix resume [--fork] [--from-step N] <pid|uuid>
+用法：rnix resume [--fork] [--from-step N] [--new-input <text>] <pid|uuid>
 参数：<pid|uuid> — 进程 ID 或 UUID（恰好 1 个参数）
 ```
 
@@ -629,6 +672,7 @@ $ rnix compose down -f my-workflow.yaml --json
 |------|------|
 | `--fork` | 恢复为一个**新** UUID，而非继承原 UUID。分叉进程会记录 `origin_uuid` 血缘链接，因此原 UUID 仍可独立恢复（Git 式探索）。 |
 | `--from-step N` | 在恢复前将历史回放截断到第 `N` 步（*截断分叉*）。需要历史路径，且与检查点互斥——两者同时满足时返回 `ErrInvalid`。`0` 表示不截断。 |
+| `--new-input <text>` | 在历史上下文恢复完成、继续推理之前，把这段文本作为新的一轮用户输入追加进去——在保留完整既往上下文的同时，用新的输入引导被恢复的进程。_0.11.0 新增。_ |
 
 同时支持 PID（运行中的 daemon 进程）和 UUID（从持久化的检查点或历史恢复）。完整的恢复/分叉模型与 Dashboard 血缘视图详见[进程恢复](/zh/guide/process-resume)。
 
@@ -813,7 +857,7 @@ $ rnix serve --port 3000
 Serving 2 providers on http://127.0.0.1:3000
 ```
 
-### 4.27 rnix agtest \[file-or-dir\] — 智能体行为测试
+### 4.27 rnix agtest \[file-or-dir\] — 智能体行为测试 {#rnix-agtest}
 
 运行以 YAML 文件定义的声明式智能体行为回归测试。
 
@@ -828,6 +872,7 @@ Serving 2 providers on http://127.0.0.1:3000
 |------|------|--------|------|
 | `--dry-run` | `bool` | `false` | 仅解析和验证，不执行测试 |
 | `--timeout` | `int64` | `60000` | 每个测试用例的全局超时时间（毫秒） |
+| `--tier1` | `bool` | `false` | 强制执行 Tier1 纪律（`agtest.ValidateTier1`）：断言非空、只允许 `output` / `syscalls` 断言（禁止 `quality`）、且使用 `replay` provider。违反纪律的用例集会在执行前被拒绝。_0.11.0 新增。_ |
 
 **输出（文本模式）：**
 
@@ -848,7 +893,31 @@ Serving 2 providers on http://127.0.0.1:3000
 $ rnix agtest tests/
 $ rnix agtest test.yaml --dry-run
 $ rnix agtest tests/ --timeout 120000 --json
+$ rnix agtest tests/agtest/tier1/ --tier1        # PR 门禁纪律
 ```
+
+**子命令：`rnix agtest import <uuid>`** _（0.11.0 新增）_
+
+把一次已落盘的进程运行转成 Tier1 回归用例骨架——这是"失败 → 用例"工作流，用来闭合回归回路。它**直接从磁盘读取**进程的 `steps.jsonl` / `proc-info.json` / `events.jsonl`（无需 daemon），生成一对"用例文件 + 回放响应脚本"供人工 review。
+
+```
+用法: rnix agtest import <uuid> [--out <dir>]
+参数: <uuid> — 完整 UUID、后 6 位短 ID（dashboard 的 `~xxxxxx` 惯例）或唯一前缀（恰好 1 个参数）
+```
+
+| 标志 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `--out` | `string` | `tests/agtest/imported` | 生成的用例 + 响应脚本的输出目录 |
+
+生成的文件**故意不接入** Tier1 套件：用例里没有存活的 `assert:` 块（只有注释形式的建议），因此 `agtest.ValidateTier1` 会一直拒绝它，直到人工填入真实断言。短 ID / 前缀出现歧义匹配时会报错并列出候选，绝不静默取第一个。Review 通过后，把两个文件移入 `tests/agtest/tier1/` 并按下一个 `NN-slug` 序号重命名。
+
+```bash
+$ rnix agtest import a1b2c3                                  # 后 6 位短 ID
+$ rnix agtest import a1b2c3d4-e5f6-4789-a012-3456789abcde    # 完整 UUID
+$ rnix agtest import a1b2c3 --out /tmp/imported              # 覆盖输出目录
+```
+
+完整的两层框架与"失败转用例"工作流见 [测试 › 智能体行为回归（agtest）](/zh/guide/testing#agent-behavior-regression-agtest)。
 
 ### 4.28 rnix reputation \[agent\] — 智能体信誉评分
 
